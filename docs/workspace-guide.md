@@ -20,7 +20,7 @@ Inspect a public dataset or import local files. Open an episode to play its came
 
 ## Real to sim
 
-Open **Real to sim** under **Data**. Choose a dataset, agent model and power, then start a job. Codex can inspect episodes across the full dataset. Open the saved job for environment images, a recorded-episode replay video and the scene bundle. Physical calibration remains a separate validation step.
+Open **Real to sim** under **Data**. Choose a dataset, agent model and power, then start a job. Codex can inspect episodes across the full dataset. Open the saved job for environment images, a recorded-episode replay video and the scene bundle. Use **Retry simulation** to create a new job from the saved scene and evidence without repeating model work. Physical calibration remains a separate validation step.
 
 ## Augmentation
 

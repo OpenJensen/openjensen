@@ -31,6 +31,9 @@ class SceneRequest(Strict):
     scope: Literal["dataset"] = "dataset"
     request_id: str = Field(pattern=r"^[a-f0-9]{32}$")
     source_job_id: str = Field(min_length=1, max_length=64)
+    source_scene_id: str | None = Field(
+        default=None, pattern=r"^[a-f0-9]{32}$", exclude_if=lambda value: value is None
+    )
     episode_index: int | None = Field(default=None, ge=0, le=99999, strict=True)
     camera_key: str = Field(default="observation.images.front", min_length=1, max_length=128)
     max_attempts: int = Field(default=2, ge=1, le=3, strict=True)
