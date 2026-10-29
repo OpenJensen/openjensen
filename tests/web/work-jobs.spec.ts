@@ -191,7 +191,18 @@ test('shared job filters remain usable at a narrow viewport', async ({ page }) =
   await page.setViewportSize({ width: 390, height: 844 });
   await fixture(page);
   await page.goto('/jobs/');
+  await expect(page.getByRole('button', { name: 'Current project', exact: true })).toHaveAttribute(
+    'data-project-id',
+    'project',
+  );
+  await expect(page.locator('[data-job-id="core:failed"]')).toBeVisible();
+  const filtered = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return url.pathname === '/api/v1/projects/project/work-jobs' && url.searchParams.get('q') === 'reconstruction';
+  });
   await page.getByLabel('Search jobs').fill('reconstruction');
+  await filtered;
+  await expect(page.getByLabel('Search jobs')).toHaveValue('reconstruction');
   await expect(page.locator('[data-job-id="core:failed"]')).toHaveCount(0);
   await expect(page.locator('[data-job-id="scene:old"]')).toBeVisible();
   expect(
@@ -337,4 +348,44 @@ test('a scene result from another job cannot expose its media in shared results'
     page.getByRole('region', { name: 'Job details', exact: true }).locator('.notice[role="alert"]'),
   ).toContainText('Simulation results unavailable');
   await expect(page.getByRole('img', { name: 'Other job environment', exact: true })).toHaveCount(0);
+});
+
+test('job filters wait for project context and submit the query after it becomes ready', async ({ page }) => {
+  await fixture(page);
+  let release: () => void = () => {};
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route('**/api/v1/projects', async (route) => {
+    await pending;
+    return route.fulfill({ json: [{ id: 'project', name: 'Workspace', created_at: created }] });
+  });
+  await page.goto('/jobs/');
+  const search = page.getByRole('textbox', { name: 'Search jobs', exact: true });
+  try {
+    await expect(search).toBeDisabled();
+    await expect(page.getByRole('combobox', { name: 'Module', exact: true })).toBeDisabled();
+    await expect(page.getByRole('combobox', { name: 'Status', exact: true })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'New job', exact: true })).toBeDisabled();
+    await expect(search).toHaveValue('');
+  } finally {
+    release();
+  }
+  await expect(page.getByRole('button', { name: 'Current project', exact: true })).toHaveAttribute(
+    'data-project-id',
+    'project',
+  );
+  await expect(page.locator('[data-job-id="core:failed"]')).toBeVisible();
+  await expect(search).toBeEnabled();
+  await expect(page.getByRole('combobox', { name: 'Module', exact: true })).toBeEnabled();
+  await expect(page.getByRole('combobox', { name: 'Status', exact: true })).toBeEnabled();
+  const filtered = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return url.pathname === '/api/v1/projects/project/work-jobs' && url.searchParams.get('q') === 'reconstruction';
+  });
+  await search.fill('reconstruction');
+  await filtered;
+  await expect(search).toHaveValue('reconstruction');
+  await expect(page.locator('[data-job-id="core:failed"]')).toHaveCount(0);
+  await expect(page.locator('[data-job-id="scene:old"]')).toBeVisible();
 });
