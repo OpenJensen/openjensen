@@ -2,6 +2,7 @@ import { fulfillApplicationUpdateRead } from './application-update-controls';
 import { expect, test, type Page } from '@playwright/test';
 import type { LocalWorkerDiscovery, PolicyOptions } from '../../apps/web/src/lib/api';
 import { installedModules } from './module-fixtures';
+import type { ComputeTargetList } from '../../apps/web/src/lib/compute-targets';
 
 type Provider = 'gcp';
 type Connection = {
@@ -25,6 +26,12 @@ type ComputeStatus = {
   message: string;
   setup_commands: string[];
 };
+const emptyComputeTargets = {
+  schema_version: 1,
+  targets: [],
+  runtime_options: [],
+  connection_refs: [],
+} satisfies ComputeTargetList;
 const projectId = 'cloud-fixture';
 const timestamp = '2026-09-26T12:00:00Z';
 const cloudGpus = [
@@ -304,6 +311,7 @@ async function mockWorkspace(
           message: null,
         },
         '/api/v1/cloud-connections': { providers: Object.values(providers) },
+        '/api/v1/compute-targets': emptyComputeTargets,
         '/api/v1/compute-settings': computeResponse(),
         '/api/v1/compute-settings/local/setup': setupStatus,
         '/api/v1/policy-options': {
@@ -583,7 +591,8 @@ test('local discovery and registration are explicit, preserve preferences, and s
   const local = page.getByRole('region', { name: 'Local runs', exact: true });
   await expect(local.getByRole('button', { name: 'Check this machine', exact: true })).toBeVisible();
   await expect(page.getByText('Existing GPU workers', { exact: true })).toHaveCount(0);
-  await expect(page.getByText(/FIREBIRD_RUNTIME_CONFIG|Local worker setup/)).toHaveCount(0);
+  await expect(page.getByText(/FIREBIRD_RUNTIME_CONFIG/)).toHaveCount(0);
+  await expect(page.getByText('Local worker setup', { exact: true })).toBeVisible();
   expect(mutations).toEqual([]);
   await local.getByRole('textbox', { name: 'Machine label', exact: true }).fill('My robotics workstation');
   await local.getByRole('button', { name: 'Check this machine', exact: true }).focus();
@@ -936,6 +945,7 @@ async function integrationFixture(page: Page, installed: string[]) {
         checked_at: null,
         message: null,
       },
+      '/api/v1/compute-targets': emptyComputeTargets,
       '/api/v1/compute-settings': {
         local: { enabled: false, label: 'Local machine' },
         gcp: { enabled: false, default_gpu: 'A100', disk_size_gb: 200, idle_minutes: 10 },

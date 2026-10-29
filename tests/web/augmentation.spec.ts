@@ -527,7 +527,9 @@ test('style dialog remains keyboard usable without horizontal overflow at 320px'
   await expect(dialog).not.toBeVisible();
   await page.getByText('Prompt & source provenance', { exact: true }).focus();
   await page.keyboard.press('Enter');
-  await expect(page.getByText(revision, { exact: true }).last()).toBeVisible();
+  await expect(
+    page.locator('details.augmentation-provenance[open]').getByText(revision, { exact: true }),
+  ).toBeVisible();
   await noOverflow(page);
   expect(submitted).toHaveLength(1);
   expect(unexpected).toEqual([]);
