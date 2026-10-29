@@ -118,6 +118,40 @@
         "title": "AdviceResult",
         "type": "object"
       },
+      "AgentSettings": {
+        "additionalProperties": false,
+        "properties": {
+          "harness": {
+            "const": "codex_cli",
+            "default": "codex_cli",
+            "title": "Harness",
+            "type": "string"
+          },
+          "model": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+            "title": "Model",
+            "type": "string"
+          },
+          "reasoning_effort": {
+            "default": "medium",
+            "enum": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max",
+              "ultra"
+            ],
+            "title": "Reasoning Effort",
+            "type": "string"
+          }
+        },
+        "required": [
+          "model"
+        ],
+        "title": "AgentSettings",
+        "type": "object"
+      },
       "ApiConnectionStatus": {
         "properties": {
           "configured": {
@@ -5974,6 +6008,31 @@
             "title": "Max Attempts",
             "type": "integer"
           },
+          "model": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "reasoning_effort": {
+            "default": "medium",
+            "enum": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max",
+              "ultra"
+            ],
+            "title": "Reasoning Effort",
+            "type": "string"
+          },
           "request_id": {
             "pattern": "^[a-f0-9]{32}$",
             "title": "Request Id",
@@ -5996,6 +6055,16 @@
       "SceneRun": {
         "additionalProperties": false,
         "properties": {
+          "agent": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AgentSettings"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "artifacts": {
             "items": {
               "type": "string"

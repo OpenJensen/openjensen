@@ -14,6 +14,7 @@ from vla_platform.datasets.inspect import profile
 from vla_platform.scenes import service
 from vla_platform.scenes.agent import SceneError, command
 from vla_platform.scenes.contracts import Proposal, Review, SceneRequest, SceneRun
+from vla_platform.scenes.models import catalog
 from vla_platform.settings import Settings
 
 
@@ -72,7 +73,9 @@ def proposal():
 
 def setup(tmp_path, monkeypatch):
     scenes = service.Scenes(tmp_path)
-    monkeypatch.setattr(scenes, "options", lambda: {"configured": True})
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path / "codex-home"))
+    monkeypatch.delenv("JENSEN_SCENE_MODEL", raising=False)
+    monkeypatch.setattr(scenes, "options", lambda: {"configured": True, **catalog()})
     monkeypatch.setenv("JENSEN_SCENE_PYTHON", "fixture-python")
     calls = []
 
@@ -85,7 +88,7 @@ def setup(tmp_path, monkeypatch):
         run.gates["source_evidence"] = True
         return [frame], {}
 
-    async def role(work, name, schema, *args):
+    async def role(work, name, schema, *args, **kwargs):
         calls.append(name)
         result = (
             proposal()
@@ -131,7 +134,9 @@ def test_bundle_never_claims_runtime_or_visual_acceptance(tmp_path, monkeypatch)
 
         with zipfile.ZipFile(scenes.artifact(result.id, "scene-bundle.zip")) as archive:
             assert not any("auth" in name for name in archive.namelist())
-            assert json.loads(archive.read("acceptance.json"))["status"] == "needs_simulation"
+            acceptance = json.loads(archive.read("acceptance.json"))
+            assert acceptance["status"] == "needs_simulation"
+            assert acceptance["agent"] == terminal.agent.model_dump()
         duplicate = await scenes.create("project", body(), source(), None)
         assert duplicate.id == result.id and calls == ["proposal", "review"]
         with pytest.raises(SceneError):
@@ -195,7 +200,7 @@ def test_mismatched_dataset_and_cross_project_rejected(tmp_path, monkeypatch):
 def test_agent_review_rejection_is_bounded_and_retained(tmp_path, monkeypatch):
     scenes, calls = setup(tmp_path, monkeypatch)
 
-    async def role(work, name, schema, *args):
+    async def role(work, name, schema, *args, **kwargs):
         calls.append(name)
         result = (
             proposal()
@@ -288,3 +293,136 @@ def test_api_options_and_empty_project_runs(tmp_path):
         assert client.get("/api/v1/scenes/not-a-run").status_code == 404
         missing = client.post(f"/api/v1/projects/{project}/scenes", json=body().model_dump())
         assert missing.status_code == 404
+
+
+def test_model_catalog_filters_non_image_hidden_and_unsupported_entries(tmp_path, monkeypatch):
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path))
+
+    def entry(slug, **updates):
+        return dict(
+            slug=slug,
+            display_name=slug,
+            visibility="list",
+            supported_in_api=True,
+            input_modalities=["text", "image"],
+            supported_reasoning_levels=[{"effort": "high"}],
+            **updates,
+        )
+
+    values = [
+        entry("fixture-vision"),
+        entry("fixture-text"),
+        entry("fixture-hidden"),
+        entry("fixture-no-api"),
+    ]
+    values[1]["input_modalities"] = ["text"]
+    values[2]["visibility"] = "hide"
+    values[3]["supported_in_api"] = False
+    (tmp_path / "models_cache.json").write_text(json.dumps({"models": values}))
+    options = catalog()
+    assert options["model_catalog_source"] == "codex_catalog"
+    assert options["models"] == [
+        {
+            "id": "fixture-vision",
+            "label": "fixture-vision",
+            "reasoning_efforts": ["high"],
+            "default_reasoning_effort": "high",
+        }
+    ]
+    (tmp_path / "models_cache.json").write_text("invalid catalog")
+    assert catalog()["model_catalog_source"] == "bundled"
+
+
+def test_model_and_power_pin_both_roles_and_survive_default_changes(tmp_path, monkeypatch):
+    scenes, _ = setup(tmp_path, monkeypatch)
+    seen = []
+    original = service.run_role
+
+    async def role(*args, **kwargs):
+        seen.append(kwargs.copy())
+        return await original(*args, **kwargs)
+
+    monkeypatch.setattr(service, "run_role", role)
+
+    async def run():
+        request = body(model="gpt-6-luna", reasoning_effort="high")
+        result = await scenes.create("project", request, source(), None)
+        monkeypatch.setenv("JENSEN_SCENE_MODEL", "gpt-6-astra")
+        await scenes.tasks[result.id]
+        terminal = scenes.get(result.id)
+        assert terminal.status == "needs_simulation"
+        assert terminal.agent.model == "gpt-6-luna"
+        assert terminal.agent.reasoning_effort == "high"
+        assert seen == [{"model": "gpt-6-luna", "reasoning_effort": "high"}] * 2
+        assert (await scenes.create("project", request, source(), None)).agent == terminal.agent
+        with pytest.raises(SceneError, match="different scene request"):
+            await scenes.create(
+                "project", body(model="gpt-6-astra", reasoning_effort="high"), source(), None
+            )
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize(
+    "changes", [{"model": "unknown-model"}, {"model": "gpt-6-luna", "reasoning_effort": "ultra"}]
+)
+def test_unsupported_model_or_power_rejected_before_work(tmp_path, monkeypatch, changes):
+    scenes, calls = setup(tmp_path, monkeypatch)
+
+    async def run():
+        with pytest.raises(ValueError):
+            await scenes.create("project", body(**changes), source(), None)
+        assert not scenes.directory.exists() and not calls
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize(
+    "changes", [{"model": "--model"}, {"model": "model\n--flag"}, {"reasoning_effort": "infinite"}]
+)
+def test_agent_choice_contract_rejects_invalid_values(changes):
+    with pytest.raises(ValidationError):
+        body(**changes)
+
+
+def test_agent_command_uses_explicit_model_and_power_and_removes_auth(tmp_path, monkeypatch):
+    from vla_platform.scenes import agent
+
+    observed = []
+    monkeypatch.setattr(agent.ApiConnections, "key", lambda *args: "private-test-credential")
+
+    async def fake(args, **kwargs):
+        observed.extend(map(str, args))
+        assert kwargs["env"]["CODEX_API_KEY"] == "private-test-credential"
+        (tmp_path / "review.json").write_text(
+            json.dumps(
+                {
+                    "supported": True,
+                    "consistent_with_images": True,
+                    "issues": [],
+                    "uncertainties": ["No runtime proof"],
+                }
+            )
+        )
+        return b'{"type":"turn.completed","usage":{"output_tokens":3}}'
+
+    monkeypatch.setattr(agent, "command", fake)
+
+    async def run():
+        result, usage = await agent.run_role(
+            tmp_path,
+            "review",
+            Review,
+            "fixture",
+            [],
+            tmp_path,
+            model="gpt-6-astra",
+            reasoning_effort="xhigh",
+        )
+        assert result.supported and usage["output_tokens"] == 3
+
+    asyncio.run(run())
+    assert observed[observed.index("--model") + 1] == "gpt-6-astra"
+    assert 'model_reasoning_effort="xhigh"' in observed
+    assert "private-test-credential" not in " ".join(observed)
+    assert not (tmp_path / ".codex-runtime/auth.json").exists()

@@ -64,7 +64,7 @@ async def command(args, *, cwd, prompt=None, env=None, timeout=180, limit=2 * 10
         await process.wait()
 
 
-async def run_role(directory, role, schema, prompt, frames, data_dir):
+async def run_role(directory, role, schema, prompt, frames, data_dir, *, model, reasoning_effort):
     schema_path = directory / f"{role}.schema.json"
     answer = directory / f"{role}.json"
     schema_path.write_text(json.dumps(schema.model_json_schema()))
@@ -113,15 +113,14 @@ async def run_role(directory, role, schema, prompt, frames, data_dir):
         "--skip-git-repo-check",
         "--json",
         "-c",
-        'model_reasoning_effort="medium"',
+        f"model_reasoning_effort={json.dumps(reasoning_effort)}",
+        "--model",
+        model,
         "--output-schema",
         schema_path,
         "--output-last-message",
         answer,
     ]
-    model = os.environ.get("JENSEN_SCENE_MODEL")
-    if model:
-        args += ["--model", model]
     for frame in frames:
         args += ["--image", frame]
     args += ["-"]
