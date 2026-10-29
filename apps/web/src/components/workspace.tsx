@@ -238,14 +238,16 @@ function Workbench({ children }: { children: ReactNode }) {
               </button>
             </div>
           )}
-        {showingJobs && activeStage === 'simulation' && state.context?.run?.origin === 'recovery' && (
-          <section className="panel" aria-label="Pending run request">
-            <p>A previous run request needs review before another request in that workflow.</p>
-            <button className="secondary-button" onClick={() => setModuleJobView('workspace')}>
-              Review pending run
-            </button>
-          </section>
-        )}
+        {showingJobs &&
+          activeStage === 'simulation' &&
+          (state.context?.run?.origin === 'recovery' || state.recoveryError) && (
+            <section className="panel" aria-label="Pending run request">
+              <p>A previous run request needs review before another request in that workflow.</p>
+              <button className="secondary-button" onClick={() => setModuleJobView('workspace')}>
+                Review pending run
+              </button>
+            </section>
+          )}
         {showingJobs && moduleInstalled(activeStage as Parameters<typeof moduleInstalled>[0]) && (
           <WorkJobs
             key={`${workflowProjectId}:${activeStage}`}

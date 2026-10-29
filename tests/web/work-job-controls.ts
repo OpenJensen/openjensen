@@ -61,6 +61,7 @@ export async function fulfillCoreWorkJobRead(route: Route, records: Record<strin
     'policy.quantize': 'quantization',
     'policy.evaluate': 'evaluation',
     'policy.run': 'simulation',
+    'scene.generate': 'real-to-sim',
   };
   const items = records
     .filter((item) => item.project_id === match[1] && operations[item.kind])

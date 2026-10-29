@@ -1188,7 +1188,9 @@ test('unreadable request recovery pauses automatic selection without clearing st
   await reloadProject(page);
   await page.getByRole('link', { name: 'Run', exact: true }).click();
   await openModuleTask(page);
-  await expect(page.getByRole('region', { name: 'Workflow selection status' })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Workflow selection status' })).toContainText(
+    'Saved request recovery could not be read',
+  );
   await expect(page.getByRole('button', { name: 'Replay observations', exact: true })).toHaveAttribute(
     'aria-pressed',
     'false',
@@ -1409,6 +1411,7 @@ for (const mode of ['distillation', 'quantization', 'replay'] as const)
       await openSavedAct(page);
       await selectQuantizationModel(page, teacher.id);
     } else {
+      await openModuleTask(page);
       await page.getByRole('button', { name: 'Replay observations', exact: true }).click();
       await policyChoices(page, 'Packed ACT policy').locator('input[value="manual-packed"]').check();
       await page
@@ -1529,11 +1532,14 @@ for (const mode of ['quantize', 'replay'] as const)
     if (mode === 'quantize') {
       await openTransformationJob(page, 'quantization', saved.id);
       await expect(page.getByRole('region', { name: 'Native ACT quantization', exact: true })).toBeVisible();
-    } else
+    } else {
+      await page.locator('[data-job-id="core:' + saved.id + '"]').click();
+      await page.getByRole('button', { name: 'View run', exact: true }).click();
       await expect(page.getByRole('button', { name: 'Replay observations', exact: true })).toHaveAttribute(
         'aria-pressed',
         'true',
       );
+    }
     await expect(
       page.getByRole('article', {
         name: mode === 'quantize' ? 'ACT quantization job details' : 'Observation replay details',

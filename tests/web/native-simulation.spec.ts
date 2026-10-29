@@ -1,4 +1,4 @@
-import { openModuleTask } from './work-job-controls';
+import { fulfillCoreWorkJobRead, openModuleTask } from './work-job-controls';
 import { fulfillApplicationUpdateRead } from './application-update-controls';
 import { selectProject } from './project-controls';
 import { createServer } from 'node:http';
@@ -93,6 +93,7 @@ async function fixture(page: Page) {
     tasks: { isaac: 'RUNNING', vla: 'STARTING' },
   };
   await page.route('**/api/v1/**', async (route) => {
+    if (await fulfillCoreWorkJobRead(route, state.jobs)) return;
     if (await fulfillApplicationUpdateRead(route)) return;
     const req = route.request(),
       url = new URL(req.url()),
@@ -770,7 +771,15 @@ async function openNativeAgain(page: Page, reload = false) {
     await expect(page.getByLabel('Current project')).toHaveAttribute('data-project-id', 'alpha');
   } else await page.getByRole('link', { name: 'Datasets', exact: true }).click();
   await page.getByRole('link', { name: 'Run', exact: true }).click();
-  await openModuleTask(page);
+  const review = page.getByRole('button', { name: 'Review pending run', exact: true });
+  await expect
+    .poll(
+      async () =>
+        (await review.isVisible()) || (await page.getByRole('button', { name: 'New run', exact: true }).isVisible()),
+    )
+    .toBe(true);
+  if (await review.isVisible()) await review.click();
+  else await openModuleTask(page);
   await page.getByRole('button', { name: '3D simulation', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Native Isaac simulation', exact: true })).toBeVisible();
 }
@@ -1039,6 +1048,7 @@ for (const failure of ['pending-write', 'receipt-write', 'cleanup'] as const)
     expect(state.posts).toHaveLength(failure === 'pending-write' ? 0 : 1);
     await openNativeAgain(page);
     if (failure !== 'pending-write') {
+      await page.getByRole('button', { name: 'View acknowledged job', exact: true }).click();
       await expect(page.getByRole('article', { name: 'Native simulation job details' })).toHaveAttribute(
         'data-job-id',
         'submitted',
@@ -1171,7 +1181,7 @@ for (const both of [false, true])
     await page.reload();
     await expect(page.getByLabel('Current project')).toHaveAttribute('data-project-id', 'alpha');
     await page.getByRole('link', { name: 'Run', exact: true }).click();
-    await openModuleTask(page);
+    await page.getByRole('button', { name: 'Review pending run', exact: true }).click();
     const nativeMode = page.getByRole('button', { name: '3D simulation', exact: true });
     if (both) {
       await expect(page.getByRole('region', { name: 'Workflow selection status' })).toContainText(
@@ -1189,7 +1199,7 @@ for (const both of [false, true])
     await openModuleTask(page);
     await expect(page.getByRole('button', { name: 'Check inference', exact: true })).toHaveAttribute(
       'aria-pressed',
-      'true',
+      'false',
     );
     expect(
       await page.evaluate(() => sessionStorage.getItem('firebird:job-attempt:policy.run.simulation:alpha')),
@@ -1254,6 +1264,9 @@ async function sceneFixture(page: Page) {
     }),
   );
   await page.route('**/api/v1/projects/alpha/jobs', (route) => route.fulfill({ json: state.jobs }));
+  await page.route('**/api/v1/projects/alpha/work-jobs**', async (route) => {
+    if (!(await fulfillCoreWorkJobRead(route, state.jobs))) await route.fallback();
+  });
   await page.route('**/api/v1/scenes/*', (route) => {
     const id = new URL(route.request().url()).pathname.split('/').at(-1)!;
     return state.runs[id]
@@ -1280,8 +1293,6 @@ test('scene jobs expose missing setup without starting agents or a GPU job', asy
   await expect(page.getByRole('heading', { name: 'Real to sim', level: 1, exact: true })).toBeVisible();
   await openModuleTask(page);
   const scene = page.getByRole('region', { name: 'Scene generation', exact: true });
-  await expect(scene.getByRole('region', { name: 'Real to sim jobs', exact: true })).toBeVisible();
-  await scene.getByRole('button', { name: 'New job', exact: true }).click();
   await expect(scene.getByRole('button', { name: 'Start job', exact: true })).toBeDisabled();
   await expect(scene).toContainText('Scene setup required');
   await expect(scene.getByLabel('Scene episode', { exact: true })).toHaveCount(0);
@@ -1303,6 +1314,7 @@ test('legacy scenes stay readable without presenting source frames as simulation
   await page.getByRole('link', { name: 'Real to sim', exact: true }).click();
   await openModuleTask(page);
   const scene = page.getByRole('region', { name: 'Scene generation', exact: true });
+  await scene.getByRole('button', { name: '← Back to jobs', exact: true }).click();
   await scene.getByText('Saved scenes (1)', { exact: true }).click();
   await scene.getByRole('button', { name: 'SO101 real episodes · Episode 3', exact: true }).click();
   await expect(scene.getByRole('link', { name: 'Download scene', exact: true })).toHaveAttribute(
@@ -1337,7 +1349,6 @@ test('scene jobs use the full dataset and pin model and power through a lost rec
   await page.getByRole('link', { name: 'Real to sim', exact: true }).click();
   await openModuleTask(page);
   const scene = page.getByRole('region', { name: 'Scene generation', exact: true });
-  await scene.getByRole('button', { name: 'New job', exact: true }).click();
   await expect(scene).toContainText('All 30 episodes');
   await expect(scene.getByLabel('Scene episode', { exact: true })).toHaveCount(0);
   const model = scene.getByLabel('Scene agent model', { exact: true });
@@ -1372,8 +1383,7 @@ test('scene jobs use the full dataset and pin model and power through a lost rec
   expect(state.jobs).toHaveLength(1);
   await page.reload();
   await openModuleTask(page);
-  await expect(scene.locator('[data-job-id="scene-job"]')).toBeVisible();
-  await scene.getByRole('button', { name: 'New job', exact: true }).click();
+  await expect(scene.getByRole('button', { name: 'Start job', exact: true })).toBeVisible();
   await expect(power).toHaveValue('high');
   await expect(model).toBeEnabled();
   rejectNext = true;
@@ -1421,9 +1431,9 @@ test('historical scene jobs reopen their environment images and episode replay',
     },
   });
   await page.getByRole('link', { name: 'Real to sim', exact: true }).click();
-  await openModuleTask(page);
+  await page.locator('[data-job-id="core:older-scene-job"]').click();
+  await page.getByRole('button', { name: 'Review scene', exact: true }).click();
   const scene = page.getByRole('region', { name: 'Scene generation', exact: true });
-  await scene.locator('[data-job-id="older-scene-job"]').click();
   const images = scene.getByRole('region', { name: 'Environment images', exact: true });
   await expect(images.getByRole('img')).toHaveCount(2);
   await expect(images.getByRole('img', { name: 'Front environment', exact: true })).toHaveAttribute(
@@ -1474,9 +1484,9 @@ test('active scene jobs cancel through the shared job endpoint', async ({ page }
     return route.fulfill({ json: state.jobs[0] });
   });
   await page.getByRole('link', { name: 'Real to sim', exact: true }).click();
-  await openModuleTask(page);
+  await page.locator('[data-job-id="core:running-scene-job"]').click();
+  await page.getByRole('button', { name: 'Review scene', exact: true }).click();
   const scene = page.getByRole('region', { name: 'Scene generation', exact: true });
-  await scene.locator('[data-job-id="running-scene-job"]').click();
   await expect(scene.getByRole('progressbar', { name: 'Scene job in progress' })).toBeVisible();
   await expect(scene.getByRole('status').filter({ hasText: 'rendering' })).toBeVisible();
   await expect(scene).toContainText('Simulation media pending');
@@ -1506,9 +1516,9 @@ test('scene job terminal updates fetch partial media without claiming a successf
     stage: 'simulating',
   });
   await page.getByRole('link', { name: 'Real to sim', exact: true }).click();
-  await openModuleTask(page);
+  await page.locator('[data-job-id="core:partial-scene-job"]').click();
+  await page.getByRole('button', { name: 'Review scene', exact: true }).click();
   const scene = page.getByRole('region', { name: 'Scene generation', exact: true });
-  await scene.locator('[data-job-id="partial-scene-job"]').click();
   await expect(scene).toContainText('Simulation media pending');
   state.runs[request.request_id] = sceneRun(request.request_id, request, {
     job_id: 'partial-scene-job',
@@ -1548,7 +1558,6 @@ test('switching projects during scene submission keeps its receipt with the orig
   await page.getByRole('link', { name: 'Real to sim', exact: true }).click();
   await openModuleTask(page);
   const scene = page.getByRole('region', { name: 'Scene generation', exact: true });
-  await scene.getByRole('button', { name: 'New job', exact: true }).click();
   await scene.getByRole('button', { name: 'Start job', exact: true }).click();
   await expect.poll(() => original).toBeTruthy();
   await selectProject(page, 'beta');
@@ -1559,11 +1568,11 @@ test('switching projects during scene submission keeps its receipt with the orig
     'data-project-id',
     'beta',
   );
-  await expect(scene.getByRole('region', { name: 'Real to sim jobs', exact: true })).toBeVisible();
   await expect(scene.locator('[data-job-id="late-alpha-job"]')).toHaveCount(0);
   expect(await page.evaluate(() => localStorage.getItem('jensen-scene-request:beta'))).toBeNull();
   await selectProject(page, 'alpha');
   await openModuleTask(page);
+  await scene.getByRole('button', { name: '← Back to jobs', exact: true }).click();
   await expect(scene.locator('[data-job-id="late-alpha-job"]')).toBeVisible();
 });
 
@@ -1580,7 +1589,6 @@ test('a mismatched scene job receipt keeps the original request recoverable', as
   await page.getByRole('link', { name: 'Real to sim', exact: true }).click();
   await openModuleTask(page);
   const scene = page.getByRole('region', { name: 'Scene generation', exact: true });
-  await scene.getByRole('button', { name: 'New job', exact: true }).click();
   await scene.getByLabel('Scene agent power', { exact: true }).selectOption('high');
   await scene.getByRole('button', { name: 'Start job', exact: true }).click();
   await expect(scene.getByRole('alert')).toContainText('Job receipt could not be verified');
@@ -1640,9 +1648,9 @@ test('retrying simulation creates a new job and retains its scene lineage throug
     return route.fulfill({ status: 202, json: state.jobs[0] });
   });
   await page.getByRole('link', { name: 'Real to sim', exact: true }).click();
-  await openModuleTask(page);
+  await page.locator('[data-job-id="core:failed-scene-job"]').click();
+  await page.getByRole('button', { name: 'Review scene', exact: true }).click();
   const scene = page.getByRole('region', { name: 'Scene generation', exact: true });
-  await scene.locator('[data-job-id="failed-scene-job"]').click();
   await scene.getByRole('button', { name: 'Retry simulation', exact: true }).click();
   await expect(scene.getByRole('alert').filter({ hasText: 'Reply unavailable' })).toBeVisible();
   await expect(scene.getByRole('button', { name: 'Check request', exact: true })).toBeEnabled();
