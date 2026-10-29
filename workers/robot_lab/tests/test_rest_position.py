@@ -61,8 +61,10 @@ class RestTests(unittest.TestCase):
             with patch("motion.time.monotonic", return_value=now):
                 self.lab._tick()
             for joint in JOINTS:
+                # The ramp rounds raw goals, then upstream normalization truncates
+                # on the way back to ticks: allow both quantization steps.
                 self.assertLessEqual(
-                    abs(bus.raw[joint] - previous[joint]), rest.rates[joint] * 0.05 + 1
+                    abs(bus.raw[joint] - previous[joint]), rest.rates[joint] * 0.05 + 2
                 )
             previous = dict(bus.raw)
             if self.lab.rest_motion is None:
