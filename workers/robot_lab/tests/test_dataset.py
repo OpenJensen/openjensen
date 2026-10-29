@@ -168,6 +168,64 @@ class DatasetTests(unittest.TestCase):
         writer.abandon_empty()
         self.assertTrue(writer.abandoned)
 
+    def test_background_image_error_keeps_episode_unsaved_and_discard_recovers(self):
+        import numpy as np
+
+        writer = DatasetWriter(self.root, "failed-image", "Reach", 5, (2, 3, 3))
+        self.addCleanup(lambda: writer.image_writer.stop(ignore_error=True))
+        writer.start_episode()
+        with patch.object(writer.image_writer, "write", side_effect=OSError("disk full")):
+            writer.add_frame(
+                dict.fromkeys(JOINTS, 1.0), {}, np.zeros((2, 3, 3), dtype=np.uint8), captured_at=0
+            )
+            writer.image_writer.wait_until_done(ignore_error=True)
+            with self.assertRaisesRegex(ValueError, "disk full"):
+                writer.save_episode()
+        self.assertEqual(writer.frames, 1)
+        self.assertEqual(writer.episodes, [])
+        self.assertTrue((writer.pending / "frames.jsonl").is_file())
+        writer.discard_episode()
+        writer.start_episode()
+        for index in range(2):
+            writer.add_frame(
+                dict.fromkeys(JOINTS, 2.0),
+                {},
+                np.ones((2, 3, 3), dtype=np.uint8),
+                captured_at=index / 5,
+            )
+        writer.save_episode()
+        writer.finalize()
+        self.assertEqual(writer.total_frames, 2)
+
+    def test_save_metadata_failure_preserves_a_retryable_pending_episode(self):
+        writer = DatasetWriter(self.root, "retry-save", "Reach", 5)
+        writer.start_episode()
+        for index in range(2):
+            writer.add_frame(dict.fromkeys(JOINTS, 1.0), {}, captured_at=index / 5)
+        with patch.object(writer, "write_metadata", side_effect=OSError("metadata unavailable")):
+            with self.assertRaisesRegex(OSError, "metadata unavailable"):
+                writer.save_episode()
+        self.assertEqual((writer.frames, writer.total_frames, writer.episodes), (2, 0, []))
+        self.assertTrue((writer.pending / "frames.jsonl").is_file())
+        writer.save_episode()
+        writer.finalize()
+        self.assertEqual(writer.total_frames, 2)
+        self.assertEqual(len(writer.episodes), 1)
+
+    def test_finalize_metadata_failure_does_not_publish_a_false_finalized_state(self):
+        writer = DatasetWriter(self.root, "retry-finish", "Reach", 5)
+        writer.start_episode()
+        for index in range(2):
+            writer.add_frame(dict.fromkeys(JOINTS, 1.0), {}, captured_at=index / 5)
+        writer.save_episode()
+        with patch.object(writer, "write_metadata", side_effect=OSError("metadata unavailable")):
+            with self.assertRaises(OSError):
+                writer.finalize()
+        self.assertFalse(writer.finalized)
+        self.assertTrue(writer.pending.is_dir())
+        writer.finalize()
+        self.assertTrue(writer.finalized)
+
     def test_unsafe_export_paths_and_symlinks_rejected(self):
         writer = self.record(False)
         for relative in (

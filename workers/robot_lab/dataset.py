@@ -17,6 +17,7 @@ from collections import deque
 from pathlib import Path, PurePosixPath
 
 from hardware import JOINTS
+from image_writer import AsyncImageWriter
 
 SLUG = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$")
 
@@ -106,6 +107,7 @@ class DatasetWriter:
         self.task = task
         self.fps = fps
         self.image_shape = image_shape
+        self.image_writer = None
         self.features = {
             "observation.state": {
                 "dtype": "float32",
@@ -143,6 +145,8 @@ class DatasetWriter:
         self.pending = self.root / ".pending"
         self.pending.mkdir()
         self.write_metadata()
+        if image_shape is not None:
+            self.image_writer = AsyncImageWriter()
 
     def summary(self):
         return {
@@ -157,6 +161,7 @@ class DatasetWriter:
             "abandoned": self.abandoned,
             "pending_frames": self.frames if self.abandoned else 0,
             "measured_fps": self.episode_capture_fps,
+            "image_write_error": self.image_writer.error if self.image_writer else None,
         }
 
     def write_metadata(self):
@@ -240,8 +245,6 @@ class DatasetWriter:
         self.actual_fps = None
 
     def add_frame(self, positions: dict, action: dict, image=None, captured_at=None):
-        from PIL import Image
-
         if not self.episode_active:
             return
         if self.frames >= self.fps * 300:
@@ -273,7 +276,7 @@ class DatasetWriter:
         if self.image_shape is not None:
             if image is None or tuple(image.shape) != tuple(self.image_shape):
                 raise ValueError("Camera image missing or changed size; episode stopped")
-            Image.fromarray(image).save(self.pending / f"{self.frames:06d}.png")
+            self.image_writer.save_image(image, self.pending / f"{self.frames:06d}.png")
         row = {
             "observation.state": state,
             "action": target,
@@ -322,6 +325,8 @@ class DatasetWriter:
         from PIL import Image
 
         self.episode_active = False
+        if self.image_writer:
+            self.image_writer.wait_until_done()
         if self.frames < 2:
             raise ValueError("Record at least two frames before saving an episode")
         if not len(self.episodes) < 1000:
@@ -379,13 +384,22 @@ class DatasetWriter:
         self.episode_capture_fps.append(self.actual_fps)
         self.all_stats.append(stats)
         self.total_frames += self.frames
-        self.write_metadata()
+        try:
+            self.write_metadata()
+        except Exception:
+            self.episodes.pop()
+            self.episode_capture_fps.pop()
+            self.all_stats.pop()
+            self.total_frames -= self.frames
+            raise
         self.discard_episode()
 
     def discard_episode(self):
         if self.abandoned:
             raise ValueError("This unsaved recording was closed; its files are preserved")
         self.episode_active = False
+        if self.image_writer:
+            self.image_writer.wait_until_done(ignore_error=True)
         # Only this writer's own private pending directory is retired.
         for path in self.pending.iterdir():
             if path.is_file() and (
@@ -393,6 +407,8 @@ class DatasetWriter:
             ):
                 path.unlink()
         self.frames = 0
+        if self.image_writer:
+            self.image_writer.clear_error()
 
     def abandon_empty(self):
         """Retire an explicitly closed unsaved recording without deleting files.
@@ -405,11 +421,15 @@ class DatasetWriter:
         if self.finalized or self.abandoned or self.episodes or self.total_frames:
             raise ValueError("Only a recording with no saved episodes can be closed this way")
         self.episode_active = False
+        if self.image_writer:
+            self.image_writer.wait_until_done(ignore_error=True)
         metadata_path = self.root / "openjensen.json"
         metadata = json.loads(metadata_path.read_text())
         metadata.update(abandoned=True, pending_frames=self.frames)
         atomic_json(metadata_path, metadata)
         self.abandoned = True
+        if self.image_writer:
+            self.image_writer.stop(ignore_error=True)
 
     def finalize(self):
         if self.abandoned:
@@ -418,9 +438,20 @@ class DatasetWriter:
             raise ValueError("Save or discard the current episode before finalizing")
         if not self.episodes:
             raise ValueError("Save at least one episode before finalizing")
+        if self.image_writer:
+            self.image_writer.wait_until_done()
         self.finalized = True
-        self.write_metadata()
+        try:
+            self.write_metadata()
+        except Exception:
+            self.finalized = False
+            raise
         self.pending.rmdir()
+        self.close()
+
+    def close(self):
+        if self.image_writer:
+            self.image_writer.stop()
 
 
 def list_datasets(root):

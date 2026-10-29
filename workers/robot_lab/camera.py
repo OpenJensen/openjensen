@@ -22,8 +22,12 @@ class CameraPool:
         self.handles = {}
         self.last_used = {}
         self.last_frames = {}
+        self.frame_lock = threading.RLock()
+        self.frame_times = {}
+        self.readers = {}
+        self.reader_errors = {}
 
-    def read(self, index=0, width=640, height=480):
+    def read(self, index=0, width=640, height=480, *, _background=False, _stop=None):
         import cv2
 
         if (
@@ -33,6 +37,8 @@ class CameraPool:
         ):
             raise ValueError(f"Camera index must be an integer from 0 to {MAX_CAMERA_INDEX}")
         with self.lock:
+            if _stop is not None and _stop.is_set():
+                raise RuntimeError("Camera reader stopped")
             if index not in self.handles:
 
                 def open_capture():
@@ -68,14 +74,73 @@ class CameraPool:
                 else:
                     capture = open_capture()
                 self.handles[index] = capture
-            self.last_used[index] = time.monotonic()
+            if not _background:
+                self.last_used[index] = time.monotonic()
             ok, frame = self.handles[index].read()
             if not ok or frame is None:
-                self.close(index)
+                if not _background:
+                    self.close(index)
                 raise RuntimeError(
                     "Camera opened but did not return a frame; close other camera apps and retry"
                 )
-            self.last_frames[index] = frame
+            if _stop is not None and _stop.is_set():
+                raise RuntimeError("Camera reader stopped")
+            with self.frame_lock:
+                self.last_frames[index] = frame
+                self.frame_times[index] = time.monotonic()
+            return frame
+
+    def start_reader(self, index=0):
+        """Keep a recent frame ready, as LeRobot OpenCVCamera.read_latest does."""
+        if type(index) is not int or not 0 <= index <= MAX_CAMERA_INDEX:
+            raise ValueError("Invalid camera index")
+        with self.frame_lock:
+            current = self.readers.get(index)
+            if current and current[0].is_alive():
+                if current[1].is_set():
+                    raise RuntimeError("Camera is stopping; retry recording")
+                return
+            stop = threading.Event()
+            thread = threading.Thread(
+                target=self._read_loop,
+                args=(index, stop),
+                name=f"robot-lab-camera-{index}",
+                daemon=True,
+            )
+            self.reader_errors.pop(index, None)
+            self.readers[index] = (thread, stop)
+            thread.start()
+
+    def _read_loop(self, index, stop):
+        failures = 0
+        while not stop.is_set():
+            try:
+                self.read(index, _background=True, _stop=stop)
+                failures = 0
+                stop.wait(0.001)
+            except Exception as error:
+                failures += 1
+                if failures >= 10:
+                    with self.frame_lock:
+                        self.reader_errors[index] = str(error)
+                    return
+                stop.wait(0.01)
+
+    def read_latest(self, index=0, max_age=0.5):
+        # Never acquire the device lock or wait on VideoCapture.read here.
+        with self.frame_lock:
+            reader = self.readers.get(index)
+            error = self.reader_errors.get(index)
+            frame, captured = self.last_frames.get(index), self.frame_times.get(index)
+            if error:
+                raise RuntimeError("Camera capture failed: " + error)
+            if not reader or not reader[0].is_alive():
+                raise RuntimeError("Camera background reader is not running")
+            if frame is None or captured is None:
+                raise RuntimeError("Camera has not captured a frame yet")
+            if time.monotonic() - captured > max_age:
+                raise TimeoutError("Camera frame is stale; recording paused")
+            self.last_used[index] = time.monotonic()
             return frame
 
     def jpeg(self, index=0):
@@ -184,13 +249,24 @@ class CameraPool:
             return encoded.tobytes()
 
     def close(self, index=None):
+        with self.frame_lock:
+            selected = list(set(self.handles) | set(self.readers)) if index is None else [index]
+            readers = [self.readers.pop(key) for key in selected if key in self.readers]
+            for _, stop in readers:
+                stop.set()
         with self.lock:
-            for key in list(self.handles) if index is None else [index]:
+            for key in selected:
                 capture = self.handles.pop(key, None)
                 if capture is not None:
                     capture.release()
                 self.last_used.pop(key, None)
-                self.last_frames.pop(key, None)
+                with self.frame_lock:
+                    self.last_frames.pop(key, None)
+                    self.frame_times.pop(key, None)
+                    self.reader_errors.pop(key, None)
+        for thread, _ in readers:
+            if thread is not threading.current_thread():
+                thread.join(timeout=0.5)
 
     def close_idle(self, max_age=30):
         with self.lock:

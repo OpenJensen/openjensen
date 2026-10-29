@@ -517,6 +517,7 @@ class RobotLab:
                 "persistent_diagnostics": True,
                 "gripper_load_tolerance": True,
                 "lerobot_observation_ranges": True,
+                "background_recording_io": True,
                 "agent_control": hardware,
                 "move_to_middle": hardware,
                 "middle_tolerance": hardware,
@@ -1586,6 +1587,8 @@ class RobotLab:
             if camera_index is not None:
                 integer(camera_index, 0, MAX_CAMERA_INDEX, "Camera index")
                 image_shape = tuple(self.camera.read(camera_index).shape)
+                if hasattr(self.camera, "start_reader"):
+                    self.camera.start_reader(camera_index)
             if shutil.disk_usage(self.datasets_dir).free < 1024**3:
                 raise RequestError(
                     "Less than 1 GiB disk space remains; free space before recording"
@@ -1766,21 +1769,39 @@ class RobotLab:
                 self.action = dict(positions)
         writer = self.writer
         if writer and writer.episode_active and time.monotonic() >= self.next_record:
-            image = None
-            if self.camera_index is not None:
-                image = self.camera.read(self.camera_index)[:, :, ::-1].copy()  # OpenCV BGR -> RGB
-            with self.lock:
-                if (
-                    generation == self.generation
-                    and writer is self.writer
-                    and writer.episode_active
-                ):
-                    captured_at = time.monotonic()
-                    writer.add_frame(dict(self.positions), dict(self.action), image, captured_at)
-                    self.next_record += 1.0 / writer.fps
+            try:
+                image = None
+                if self.camera_index is not None:
+                    read_image = getattr(self.camera, "read_latest", self.camera.read)
+                    image = read_image(self.camera_index)[:, :, ::-1].copy()
+                with self.lock:
+                    if (
+                        generation == self.generation
+                        and writer is self.writer
+                        and writer.episode_active
+                    ):
+                        captured_at = time.monotonic()
+                        writer.add_frame(
+                            dict(self.positions), dict(self.action), image, captured_at
+                        )
+                        self.next_record += 1.0 / writer.fps
+            except Exception as error:
+                # A recorder failure pauses collection, without conflating it
+                # with motor feedback or bypassing the independent Stop/watchdog.
+                with self.lifecycle_lock:
+                    if generation != self.generation or writer is not self.writer:
+                        return
+                    writer.episode_active = False
+                    self.recording_error = "Recording paused: " + str(error)
+                self.diagnostics.emit(
+                    "recording_paused",
+                    reason=self.recording_error,
+                    context=self._diagnostic_context(),
+                )
 
     def _loop(self):
-        while not self.finished.wait(0.025):
+        while not self.finished.is_set():
+            cycle_started = time.monotonic()
             generation, mode = self.generation, self.mode
             try:
                 self._tick()
@@ -1800,6 +1821,10 @@ class RobotLab:
                     )
                 except RequestError:
                     pass  # An intervening takeover owns its independent lifecycle.
+            # LeRobot CycleTimer pacing: account for work already done, without
+            # bursting missed commands after a slow read or camera operation.
+            if self.finished.wait(max(0.0, 0.025 - (time.monotonic() - cycle_started))):
+                break
 
     def _watchdog(self):
         while not self.finished.wait(0.1):
@@ -1828,6 +1853,11 @@ class RobotLab:
         self.finished.set()
         self.stop("Companion shutting down")
         self.camera.close()
+        if self.writer and hasattr(self.writer, "close"):
+            try:
+                self.writer.close()
+            except Exception as error:
+                self.diagnostics.emit("recording_write_error", reason=str(error))
         for thread in self.threads:
             thread.join(timeout=1)
         self.diagnostics.close()

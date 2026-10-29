@@ -282,4 +282,8 @@ PROFILE = {
     "goal_velocity": 0,
     "gripper_load_response": "continue_with_motor_protection",
     "observation_range_policy": "lerobot_normalization",
+    "body_position_units": "degrees",
+    "gripper_position_units": "percent",
+    "recording_camera": "latest_frame",
+    "recording_images": "background_writer",
 }
