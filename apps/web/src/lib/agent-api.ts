@@ -7,6 +7,16 @@ export type AgentEvent = components['schemas']['Event'];
 export type AgentSessionRequest = components['schemas']['SessionCreate'];
 export type AgentProviderRequest = components['schemas']['ProviderInput'];
 
+export class AgentRequestError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number,
+  ) {
+    super(message);
+    this.name = 'AgentRequestError';
+  }
+}
+
 /** Mutations are never retried: reconcile the saved session after an uncertain response. */
 export async function agentRequest<T>(
   path: string,
@@ -27,7 +37,10 @@ export async function agentRequest<T>(
     });
     const value = await response.json();
     if (!response.ok)
-      throw new Error(typeof value.detail === 'string' ? value.detail : 'Agent Control request could not be verified.');
+      throw new AgentRequestError(
+        typeof value.detail === 'string' ? value.detail : 'Agent Control request could not be verified.',
+        response.status,
+      );
     return value as T;
   } catch (error) {
     if (controller.signal.aborted)

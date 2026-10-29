@@ -29,6 +29,7 @@ ModuleId = Literal[
     "robot-lab",
     "teaching",
     "augmentation",
+    "real-to-sim",
     "training",
     "distillation",
     "quantization",
@@ -86,6 +87,13 @@ CATALOG = (
         "Data",
         "Install and configure Google Cloud or Gemini.",
         "/cloud-apis/",
+    ),
+    (
+        "real-to-sim",
+        "Real to sim",
+        "Data",
+        "Configure Codex, an OpenAI connection and the scene builder.",
+        "/guide/#real-to-sim",
     ),
     (
         "training",
@@ -401,6 +409,14 @@ def runtime_feature_readiness(catalog, settings: Settings | None = None) -> dict
     return result
 
 
+def _scene_configured(settings, credentials):
+    from vla_platform.scenes.service import Scenes
+
+    home = Path(os.environ.get("CODEX_HOME", str(Path.home() / ".codex")))
+    authenticated = bool(credentials.get("openai")) or (home / "auth.json").is_file()
+    return authenticated and Scenes(settings.data_dir).options()["configured"]
+
+
 def _configured(settings: Settings, robot_lab_config: Path, runtimes: dict, credentials=None):
     if credentials is None:
         from vla_platform.api_connections import ApiConnections
@@ -419,6 +435,7 @@ def _configured(settings: Settings, robot_lab_config: Path, runtimes: dict, cred
             or _teaching_configured(settings)
             or _agent_configured(settings.data_dir),
             "augmentation": cloud or gemini,
+            "real-to-sim": _scene_configured(settings, credentials),
             "decision-lab": _decision_configured(),
             "cloud-runs": (settings.cloud_runs_dir is not None and settings.cloud_runs_dir.is_dir())
             or (settings.data_dir / "cloud-runs").is_dir(),
