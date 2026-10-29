@@ -148,25 +148,46 @@ class JobObservability:
     def __init__(self, data_dir: Path, policy: ObservabilityPolicy | None = None):
         self.data_dir = Path(data_dir)
         self.path = self.data_dir / "job-observability.sqlite3"
-        self.policy = policy or self._policy()
+        self._policy_error = None
+        self._configured_policy = None
+        try:
+            self._configured_policy = policy or self._load_policy()
+        except ObservabilityError as exc:
+            # A diagnostic configuration error must not disable workspace access.
+            # Strict operations remain unavailable until the operator repairs it.
+            self._policy_error = str(exc)
         self._lock = threading.RLock()
         self._last_warning = False
         self._next_expiry_check = 0.0
         self._private_key_streams = set()
 
-    def _policy(self):
+    @property
+    def policy(self):
+        if self._policy_error is not None:
+            raise ObservabilityError(self._policy_error)
+        return self._configured_policy
+
+    def _load_policy(self):
         path = self.data_dir / "job-observability-settings.json"
-        if not path.exists():
-            return ObservabilityPolicy()
-        if path.is_symlink() or not path.is_file() or path.stat().st_size > 16384:
-            raise ObservabilityError("Diagnostic retention settings need administrator attention")
         try:
+            if path.is_symlink():
+                raise ObservabilityError(
+                    "Diagnostic retention settings need administrator attention"
+                )
+            if not path.exists():
+                return ObservabilityPolicy()
+            if not path.is_file() or path.stat().st_size > 16384:
+                raise ObservabilityError(
+                    "Diagnostic retention settings need administrator attention"
+                )
             return ObservabilityPolicy.model_validate_json(path.read_bytes())
         except (OSError, ValueError) as exc:
             raise ObservabilityError("Diagnostic retention settings are invalid") from exc
 
     @contextmanager
     def _connect(self):
+        if self._policy_error is not None:
+            raise ObservabilityError(self._policy_error)
         if self.data_dir.is_symlink() or self.path.is_symlink():
             raise ObservabilityError("Diagnostic storage must not be a symbolic link")
         self.data_dir.mkdir(parents=True, exist_ok=True)

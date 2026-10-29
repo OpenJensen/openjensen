@@ -307,7 +307,12 @@ class ComputeTargets:
             or not re.fullmatch(r"[a-z][a-z0-9-]{4,28}[a-z0-9]", project)
         ):
             raise TargetError("The compute connection billing project is invalid")
-        return {**value, "sky_api_endpoint": endpoint.rstrip("/"), "workspace": workspace}
+        resolved = {**value, "sky_api_endpoint": endpoint.rstrip("/")}
+        # A missing workspace is resolved by the selected infrastructure at admission.
+        # In particular, cloud billing projects can require a project-specific workspace.
+        if "workspace" in value:
+            resolved["workspace"] = workspace
+        return resolved
 
     def get(self, ident):
         value = next((target for target in self._read().targets if target.id == ident), None)

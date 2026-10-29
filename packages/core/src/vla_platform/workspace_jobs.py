@@ -11,7 +11,9 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 from vla_platform.compute.contracts import ExecutionBinding
 from vla_platform.contracts import TERMINAL, IntakeRequest
+from vla_platform.job_observability import redact
 from vla_platform.lifecycle.contracts import LifecycleResult
+from vla_platform.scenes.contracts import SceneJobResult
 
 
 class WorkRecord(BaseModel):
@@ -119,6 +121,17 @@ def core_job(job):
             )
             for artifact in job.result.artifacts
         ]
+    elif isinstance(job.result, SceneJobResult):
+        links = [
+            JobLink(
+                label=name,
+                url=(
+                    f"/api/v1/jobs/{quote(job.id, safe='')}/scene/artifact?"
+                    f"name={quote(name, safe='')}"
+                ),
+            )
+            for name in job.result.scene_artifacts
+        ]
     elif job.kind == "dataset.augment" and job.status == "succeeded":
         links = [
             JobLink(
@@ -144,7 +157,7 @@ def core_job(job):
         created_at=job.created_at,
         updated_at=job.updated_at,
         stage=job.stage,
-        message=job.error,
+        message=redact(job.error) if job.error else None,
         execution=job.execution,
         inputs=request,
         result=job.result.model_dump(mode="json") if job.result else None,
@@ -298,7 +311,12 @@ def legacy_dataset_job(record):
 
 async def list_jobs(state, project_id):
     rows = [core_job(job) for job in await state.execution.list(project_id)]
-    rows.extend(scene_job(run) for run in state.scenes.list(project_id))
+    core_ids = {job.source_id for job in rows}
+    rows.extend(
+        scene_job(run)
+        for run in state.scenes.list(project_id)
+        if not run.job_id or run.job_id not in core_ids
+    )
     rows.extend(agent_job(session) for session in await state.agent_control.list(project_id))
     dataset_operations = state.dataset_library.operation_records(project_id)
     rows.extend(dataset_job(record) for record in dataset_operations)

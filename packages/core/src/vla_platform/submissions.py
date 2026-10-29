@@ -12,6 +12,7 @@ from vla_platform.augmentation.contracts import AugmentationRequest
 from vla_platform.contracts import IntakeRequest, Job
 from vla_platform.decision_contracts import DecisionRequest
 from vla_platform.lifecycle.contracts import PolicyRequest
+from vla_platform.scenes.contracts import SceneRequest
 from vla_platform.storage import Storage, job_submissions, jobs
 from vla_platform.teaching_sessions.contracts import TeachingCaptureRequest
 
@@ -23,6 +24,7 @@ SubmissionOperation = Literal[
     "teaching.capture",
     "dataset.inspect",
     "dataset.augment",
+    "scene.generate",
     "policy.finetune",
     "policy.distill",
     "policy.quantize",
@@ -33,7 +35,12 @@ SubmissionOperation = Literal[
     "policy.import",
 ]
 SubmissionRequest = (
-    IntakeRequest | PolicyRequest | AugmentationRequest | TeachingCaptureRequest | DecisionRequest
+    IntakeRequest
+    | PolicyRequest
+    | AugmentationRequest
+    | TeachingCaptureRequest
+    | DecisionRequest
+    | SceneRequest
 )
 MAX_REQUEST_BYTES = 1024 * 1024
 
@@ -116,6 +123,8 @@ async def lookup(
             model = (
                 DecisionRequest
                 if operation_name == "decision.score"
+                else SceneRequest
+                if operation_name == "scene.generate"
                 else TeachingCaptureRequest
                 if operation_name == "teaching.capture"
                 else IntakeRequest

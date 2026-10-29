@@ -27,9 +27,11 @@ class AgentSettings(Strict):
 
 
 class SceneRequest(Strict):
+    operation: Literal["scene.generate"] = "scene.generate"
+    scope: Literal["dataset"] = "dataset"
     request_id: str = Field(pattern=r"^[a-f0-9]{32}$")
     source_job_id: str = Field(min_length=1, max_length=64)
-    episode_index: int = Field(default=3, ge=0, le=99999, strict=True)
+    episode_index: int | None = Field(default=None, ge=0, le=99999, strict=True)
     camera_key: str = Field(default="observation.images.front", min_length=1, max_length=128)
     max_attempts: int = Field(default=2, ge=1, le=3, strict=True)
     model: Model | None = None
@@ -98,8 +100,46 @@ class Review(Strict):
     uncertainties: list[Note] = Field(min_length=1, max_length=20)
 
 
+class SceneMedia(Strict):
+    role: Literal["environment_image", "episode_replay", "source_image", "source_video"]
+    path: str = Field(min_length=1, max_length=256)
+    label: str = Field(min_length=1, max_length=128)
+    episode_index: int | None = None
+
+
+class SceneJobResult(Strict):
+    kind: Literal["scene_generation"] = "scene_generation"
+    scene_id: str
+    validation_status: str
+    scene_artifacts: list[str] = Field(default_factory=list)
+
+
+class ClipRequest(Strict):
+    episode_index: int = Field(ge=0, le=99999, strict=True)
+    camera_key: str = Field(min_length=1, max_length=128)
+    start_fraction: float = Field(ge=0, lt=1)
+    end_fraction: float = Field(gt=0, le=1)
+    reason: Note
+
+    @model_validator(mode="after")
+    def interval(self):
+        if self.end_fraction <= self.start_fraction:
+            raise ValueError("Clip end must follow its start")
+        return self
+
+
+class Investigation(Strict):
+    ready: bool
+    clips: list[ClipRequest] = Field(max_length=4)
+    replay_episode: int = Field(ge=0, le=99999, strict=True)
+    observations: list[Note] = Field(max_length=20)
+    uncertainties: list[Note] = Field(min_length=1, max_length=20)
+
+
 class SceneRun(Strict):
     id: str
+    job_id: str | None = None
+    media: list[SceneMedia] = Field(default_factory=list)
     project_id: str
     request: SceneRequest
     status: Literal[

@@ -360,3 +360,23 @@ def test_disabled_targets_still_explain_failed_configuration_checks(tmp_path):
     state = asyncio.run(registry.check(entry.id, catalog()))
     assert state.status == "disabled" and not state.launchable
     assert "Register the selected worker" in state.message
+
+
+def test_omitted_connection_workspace_remains_unresolved_for_admission(tmp_path):
+    registry = ComputeTargets(tmp_path)
+    registry.connection_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "connections": {
+                    "cloud": {
+                        "sky_api_endpoint": "https://compute.example.invalid",
+                        "project_id": "sample-project",
+                    }
+                },
+            }
+        )
+    )
+    resolved = registry.connection(remote(connection_ref="cloud"))
+    assert resolved["project_id"] == "sample-project"
+    assert "workspace" not in resolved

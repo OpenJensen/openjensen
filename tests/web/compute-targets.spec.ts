@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
-import type { ComputeTarget, PublicComputeTarget } from '../../apps/web/src/lib/compute-targets';
+import type { PolicyOptions } from '../../apps/web/src/lib/api';
+import type { ComputeTarget, ComputeTargetList, PublicComputeTarget } from '../../apps/web/src/lib/compute-targets';
 import { installedModules } from './module-fixtures';
 import { fulfillApplicationUpdateRead } from './application-update-controls';
 
@@ -18,9 +19,16 @@ async function settings(page: import('@playwright/test').Page) {
           targets: entries,
           connection_refs: ['team-compute'],
           runtime_options: [
-            { id: 'worker', label: 'Registered policy worker', operations: ['policy.finetune', 'policy.quantize'] },
+            {
+              id: 'worker',
+              label: 'Registered policy worker',
+              operations: ['policy.finetune', 'policy.quantize'],
+              device: 'cpu',
+              accelerator: null,
+              remote_only: false,
+            },
           ],
-        },
+        } satisfies ComputeTargetList,
       });
       return;
     }
@@ -60,6 +68,23 @@ async function settings(page: import('@playwright/test').Page) {
         runtimes: [],
         sources: [],
         compute: { local: { enabled: false, label: 'Local machine' } },
+        training_methods: [],
+        default_training_method: 'lora',
+        training_models: [],
+        quantization_defaults: {
+          cpu: { language: 'Q8_0', vision: null },
+          cuda: { language: 'Q8_0', vision: null },
+          note: 'Synthetic UI fixture.',
+        },
+      } satisfies PolicyOptions,
+      '/api/v1/compute-settings/local/setup': {
+        id: null,
+        status: 'idle',
+        stage: '',
+        message: '',
+        started_at: null,
+        finished_at: null,
+        runtime_id: null,
       },
     };
     await route.fulfill({ json: replies[path] ?? [] });
@@ -73,9 +98,9 @@ test('targets are explicit opt-in and can be edited, checked and removed', async
   const state = await settings(page);
   await page.getByRole('button', { name: 'Add compute target', exact: true }).click();
   const form = page.getByRole('form', { name: 'Configure compute target', exact: true });
-  await form.getByLabel('Target name', { exact: true }).fill('GPU server');
-  await form.getByLabel('Worker runtime', { exact: true }).selectOption('worker');
-  await expect(form.getByLabel('Allow jobs on this target', { exact: true })).not.toBeChecked();
+  await form.getByRole('textbox', { name: 'Target name', exact: true }).fill('GPU server');
+  await form.getByRole('combobox', { name: 'Worker runtime', exact: true }).selectOption('worker');
+  await expect(form.getByRole('checkbox', { name: 'Allow jobs on this target', exact: true })).not.toBeChecked();
   await form.getByRole('button', { name: 'Save compute target', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'GPU server', exact: true })).toBeVisible();
   expect(state.saved[0].enabled).toBe(false);
@@ -85,7 +110,7 @@ test('targets are explicit opt-in and can be edited, checked and removed', async
   await page.getByRole('button', { name: 'Check configuration', exact: true }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Access verified without provisioning' })).toBeVisible();
   await page.getByRole('button', { name: 'Edit', exact: true }).click();
-  await form.getByLabel('Target name', { exact: true }).fill('Policy worker');
+  await form.getByRole('textbox', { name: 'Target name', exact: true }).fill('Policy worker');
   await form.getByRole('button', { name: 'Save compute target', exact: true }).click();
   expect(state.saved[2].id).toBe(state.saved[0].id);
   await page.getByRole('button', { name: 'Remove', exact: true }).click();
@@ -97,20 +122,20 @@ test('Slurm settings retain resource limits and connection references', async ({
   const state = await settings(page);
   await page.getByRole('button', { name: 'Add compute target', exact: true }).click();
   const form = page.getByRole('form', { name: 'Configure compute target', exact: true });
-  await form.getByLabel('Target name', { exact: true }).fill('Research cluster');
-  await form.getByLabel('Infrastructure', { exact: true }).selectOption('slurm');
-  await form.getByLabel('Worker runtime', { exact: true }).selectOption('worker');
-  await form.getByLabel('Connection', { exact: true }).selectOption('team-compute');
-  await form.getByLabel('Registered cluster', { exact: true }).fill('research');
-  await form.getByLabel('Partition (optional)', { exact: true }).fill('gpu');
-  await form.getByLabel('Account (optional)', { exact: true }).fill('robotics');
-  await form.getByLabel('QoS (optional)', { exact: true }).fill('normal');
-  await form.getByLabel('CPUs', { exact: true }).fill('8');
-  await form.getByLabel('Memory (GiB)', { exact: true }).fill('32');
-  await form.getByLabel('GPU count', { exact: true }).selectOption('1');
-  await form.getByLabel('Accelerator type', { exact: true }).fill('L4');
-  await form.getByLabel('Concurrent jobs', { exact: true }).fill('2');
-  await form.getByLabel('Allow jobs on this target', { exact: true }).check();
+  await form.getByRole('textbox', { name: 'Target name', exact: true }).fill('Research cluster');
+  await form.getByRole('combobox', { name: 'Infrastructure', exact: true }).selectOption('slurm');
+  await form.getByRole('combobox', { name: 'Worker runtime', exact: true }).selectOption('worker');
+  await form.getByRole('combobox', { name: 'Connection', exact: true }).selectOption('team-compute');
+  await form.getByRole('textbox', { name: 'Registered cluster', exact: true }).fill('research');
+  await form.getByRole('textbox', { name: 'Partition (optional)', exact: true }).fill('gpu');
+  await form.getByRole('textbox', { name: 'Account (optional)', exact: true }).fill('robotics');
+  await form.getByRole('textbox', { name: 'QoS (optional)', exact: true }).fill('normal');
+  await form.getByRole('spinbutton', { name: 'CPUs', exact: true }).fill('8');
+  await form.getByRole('spinbutton', { name: 'Memory (GiB)', exact: true }).fill('32');
+  await form.getByRole('combobox', { name: 'GPU count', exact: true }).selectOption('1');
+  await form.getByRole('textbox', { name: 'Accelerator type', exact: true }).fill('L4');
+  await form.getByRole('spinbutton', { name: 'Concurrent jobs', exact: true }).fill('2');
+  await form.getByRole('checkbox', { name: 'Allow jobs on this target', exact: true }).check();
   await form.getByRole('button', { name: 'Save compute target', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Research cluster', exact: true })).toBeVisible();
   expect(state.saved[0]).toMatchObject({

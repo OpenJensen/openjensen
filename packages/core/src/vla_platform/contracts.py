@@ -25,6 +25,7 @@ from vla_platform.lifecycle.contracts import (
     PolicyRequest,
     SimulationTarget,
 )
+from vla_platform.scenes.contracts import SceneJobResult, SceneRequest
 from vla_platform.teaching_sessions.contracts import TeachingCaptureRequest, TeachingCaptureResult
 
 NonEmptyString = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
@@ -347,6 +348,7 @@ class Job(Record):
         | AugmentationRequest
         | TeachingCaptureRequest
         | DecisionRequest
+        | SceneRequest
     )
     execution: ExecutionBinding | None = Field(default=None, exclude_if=lambda value: value is None)
     compute_target: CloudExecutionTarget | None = None
@@ -359,6 +361,7 @@ class Job(Record):
         | AugmentationResult
         | TeachingCaptureResult
         | ScoreResult
+        | SceneJobResult
         | None
     ) = None
     error: str | None = None
@@ -370,7 +373,13 @@ class Job(Record):
             self.request.operation
             if isinstance(
                 self.request,
-                (PolicyRequest, AugmentationRequest, TeachingCaptureRequest, DecisionRequest),
+                (
+                    PolicyRequest,
+                    AugmentationRequest,
+                    TeachingCaptureRequest,
+                    DecisionRequest,
+                    SceneRequest,
+                ),
             )
             else "dataset.inspect"
         )
@@ -379,6 +388,8 @@ class Job(Record):
         result_type = (
             ScoreResult
             if isinstance(self.request, DecisionRequest)
+            else SceneJobResult
+            if isinstance(self.request, SceneRequest)
             else TeachingCaptureResult
             if isinstance(self.request, TeachingCaptureRequest)
             else AugmentationResult
@@ -397,6 +408,7 @@ Operation = Literal[
     "dataset.inspect",
     "dataset.inspect.local",
     "dataset.augment",
+    "scene.generate",
     "policy.finetune",
     "policy.distill",
     "policy.export",
@@ -408,6 +420,7 @@ OPERATION_STAGES: dict[Operation, Stage] = {
     "dataset.inspect": "Dataset",
     "dataset.inspect.local": "Dataset",
     "dataset.augment": "Dataset",
+    "scene.generate": "Dataset",
     "policy.finetune": "Fine-tune",
     "policy.distill": "Distill",
     "policy.export": "Run",
@@ -422,6 +435,7 @@ IMPLEMENTED_OPERATIONS = frozenset(
         "dataset.inspect",
         "dataset.inspect.local",
         "dataset.augment",
+        "scene.generate",
         "policy.finetune",
         "policy.distill",
         "policy.export",

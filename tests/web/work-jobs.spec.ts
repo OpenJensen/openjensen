@@ -161,7 +161,7 @@ test('shared job detail explains failure and exposes correlated logs', async ({ 
     /diagnostics\.zip$/,
   );
   await page.getByLabel('Follow live logs').uncheck();
-  await page.getByLabel('Severity', { exact: true }).selectOption('error');
+  await page.getByRole('combobox', { name: 'Severity', exact: true }).selectOption('error');
   await expect(page.getByRole('list', { name: 'Log messages' })).toContainText('Model manifest validation failed.');
 });
 
@@ -180,11 +180,11 @@ test('modules with previously separate run systems open the shared history first
   await expect(
     page.getByRole('group', { name: 'Module view' }).getByRole('button', { name: 'Jobs', exact: true }),
   ).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.getByRole('heading', { name: 'New scene', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('combobox', { name: 'Scene dataset', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'New job', exact: true }).click();
   await page.getByRole('button', { name: 'Real to sim', exact: true }).click();
   await page.getByRole('button', { name: 'Configure real to sim', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'New scene', exact: true })).toBeVisible();
+  await expect(page.getByRole('combobox', { name: 'Scene dataset', exact: true })).toBeVisible();
 });
 
 test('shared job filters remain usable at a narrow viewport', async ({ page }) => {

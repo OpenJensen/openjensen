@@ -291,3 +291,49 @@ def test_generic_failure_does_not_erase_provider_failure_evidence(tmp_path):
         "job-1", stage="run", message="Another attempt failed", attempt_id="2"
     )
     assert new_attempt.exit_code is None and new_attempt.cleanup == "unknown"
+
+
+@pytest.mark.parametrize("malformed", ["{", '{"max_log_bytes":1}', '{"retention_days":"unknown"}'])
+def test_invalid_retention_policy_does_not_disable_workspace_access(
+    tmp_path, monkeypatch, malformed
+):
+    from vla_platform.api import create_app
+    from vla_platform.execution import Execution
+    from vla_platform.settings import Settings
+
+    path = tmp_path / "job-observability-settings.json"
+    path.write_text(malformed)
+    monkeypatch.setattr(Execution, "_schedule", lambda self, ident: None)
+    with TestClient(create_app(Settings(data_dir=tmp_path))) as client:
+        assert client.get("/api/v1/health").status_code == 200
+        project = client.post("/api/v1/projects", json={"name": "Accessible workspace"})
+        assert project.status_code == 201
+        ident = project.json()["id"]
+        assert client.get(f"/api/v1/projects/{ident}/jobs").json() == []
+        imported = client.post(
+            f"/api/v1/projects/{ident}/dataset-uploads", json={"name": "An upload"}
+        )
+        assert imported.status_code == 201
+        jobs = client.get(f"/api/v1/projects/{ident}/work-jobs")
+        assert jobs.status_code == 200 and len(jobs.json()) == 1
+        key = jobs.json()[0]["id"]
+        for suffix in ("logs", "failure", "diagnostics.zip"):
+            response = client.get(f"/api/v1/projects/{ident}/work-jobs/{key}/{suffix}")
+            assert response.status_code == 503
+            assert "diagnostic" in response.json()["detail"].lower()
+            assert "max_log_bytes" not in response.text
+        assert client.get("/api/v1/job-diagnostics-settings").status_code == 503
+    assert path.read_text() == malformed
+    assert not (tmp_path / "job-observability.sqlite3").exists()
+
+
+def test_invalid_retention_policy_never_uses_an_implicit_write_policy(tmp_path):
+    (tmp_path / "job-observability-settings.json").write_text("{")
+    store = JobObservability(tmp_path)
+    assert store.try_record("job-1", "must not be persisted") is None
+    assert store.try_failure("job-1", stage="run", message="must not be persisted") is None
+    with pytest.raises(ObservabilityError):
+        store.record("job-1", "strict write")
+    with pytest.raises(ObservabilityError):
+        store.page("job-1")
+    assert not store.path.exists()

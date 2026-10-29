@@ -280,7 +280,7 @@ class SkyPilotTargetAdapter:
             "gpu_count": definition.resources.gpu_count,
             "disk_size_gb": definition.resources.disk_gib,
             "idle_minutes": 10,
-            "region": definition.location,
+            "region": connection.get("region", definition.location),
         }
         if definition.infrastructure == "gcp":
             target["project_id"] = connection["project_id"]

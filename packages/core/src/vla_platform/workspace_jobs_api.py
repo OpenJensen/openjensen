@@ -22,7 +22,6 @@ from vla_platform.workspace_jobs import (
     core_job,
     get_job,
     list_jobs,
-    scene_job,
 )
 
 router = APIRouter(prefix="/api/v1", tags=["Jobs"])
@@ -116,6 +115,16 @@ async def detail(project_id: str, key: str, request: Request):
             WorkEvent(timestamp=e.timestamp, stage=e.stage, message=e.message)
             for e in state.execution.lifecycle.events(job.source_id)[-200:]
         ]
+    if job.operation == "scene.generate" and key.startswith("core:"):
+        try:
+            run = state.scenes.get(job.inputs["request_id"])
+            if run.job_id == job.source_id and run.project_id == project_id:
+                job.events = [
+                    WorkEvent(timestamp=e["at"], stage=e["stage"], message=e["message"])
+                    for e in run.events[-200:]
+                ]
+        except SceneError, ValueError:
+            pass
     return job
 
 
@@ -153,7 +162,9 @@ async def submit(
             source = await state.execution.get(body.source_job_id)
             if source is None or source.project_id != project_id:
                 raise HTTPException(404, "Dataset source not found in this project")
-            return scene_job(await state.scenes.create(project_id, body, source, state.explorer))
+            return core_job(
+                await state.execution.submit(project_id, body, idempotency_key=idempotency_key)
+            )
         model = {
             "dataset.inspect": IntakeRequest,
             "dataset.augment": AugmentationRequest,

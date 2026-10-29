@@ -191,7 +191,7 @@ def prepare(payload: dict, stage_dir: Path, target: dict) -> tuple[Path, dict]:
         raise ValueError("Invalid Google Cloud project")
     if not generic and not re.fullmatch(r"[a-z][a-z0-9-]{2,62}[0-9]", region):
         raise ValueError("Invalid Google Cloud region")
-    if (
+    if not generic and (
         not re.fullmatch(r"[A-Za-z][A-Za-z0-9_-]{0,63}", accelerator)
         or type(count) is not int
         or count != 1
@@ -1295,7 +1295,8 @@ async def _run(
         request = re.search(r"Submitted sky\.launch request: ([a-f0-9-]{8,64})", output)
         if code or request is None:
             raise RuntimeError(
-                "SkyPilot could not submit the cloud launch. Check the worker log and GCP setup."
+                "SkyPilot could not submit the launch. "
+                "Check job logs and configured infrastructure."
             )
         state["request_id"] = request[1]
         _write_json(state_path, state)
