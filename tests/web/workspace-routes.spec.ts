@@ -15,6 +15,7 @@ const destinations = [
   ['cloud-apis', 'Cloud & APIs'],
   ['cloud-runs', 'Cloud runs'],
   ['augmentation', 'Augmentation'],
+  ['real-to-sim', 'Real to sim'],
   ['ai-teleoperation', 'AI teleoperation'],
   ['decision-lab', 'Decision Lab'],
   ['models', 'Models'],
@@ -26,6 +27,7 @@ const moduleGroups: Record<string, string> = {
   'ai-teleoperation': 'Robot Lab',
   datasets: 'Data',
   augmentation: 'Data',
+  'real-to-sim': 'Data',
   training: 'Train',
   distillation: 'Train',
   quantization: 'Train',
@@ -143,12 +145,12 @@ test('the sidebar lists installed modules and Modules shows how to install the r
   const nav = page.getByRole('navigation', { name: 'Policy lifecycle' });
   await expect(nav.getByRole('group', { name: 'Robot Lab' }).getByRole('link')).toHaveText(['Initial setup']);
   await expect(nav.getByRole('group', { name: 'Data' }).getByRole('link')).toHaveText(['Datasets']);
-  for (const name of ['AI teleoperation', 'Augmentation', 'Decision Lab', 'Cloud runs']) {
+  for (const name of ['AI teleoperation', 'Augmentation', 'Real to sim', 'Decision Lab', 'Cloud runs']) {
     await expect(nav.getByRole('link', { name, exact: true })).toHaveCount(0);
   }
   await nav.getByRole('link', { name: 'Modules', exact: true }).click();
   const modules = page.getByLabel('Workspace modules', { exact: true }).getByRole('listitem');
-  await expect(modules).toHaveCount(12);
+  await expect(modules).toHaveCount(13);
   await expect(modules.filter({ hasText: 'Initial setup' })).toContainText('Installed');
   const teaching = modules.filter({ hasText: 'AI teleoperation' });
   await expect(teaching).toContainText('Disabled');

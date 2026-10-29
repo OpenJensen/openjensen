@@ -35,7 +35,7 @@ async def _bounded_read(stream: asyncio.StreamReader, limit: int, label: str) ->
 
 async def read_parquet(
     raw: bytes,
-    operation: Literal["index", "frames"],
+    operation: Literal["index", "frames", "trajectory"],
     *,
     episode_index: int = 0,
     python: str | Path | None = None,
@@ -52,7 +52,11 @@ async def read_parquet(
     timeout = READER_TIMEOUT_SECONDS if timeout_seconds is None else timeout_seconds
     if type(timeout) not in (int, float) or not math.isfinite(timeout) or not 0 < timeout <= 30:
         raise ReaderError("invalid_request", "Reader timeout must be finite and in (0, 30]")
-    if operation not in {"index", "frames"} or type(episode_index) is not int or episode_index < 0:
+    if (
+        operation not in {"index", "frames", "trajectory"}
+        or type(episode_index) is not int
+        or episode_index < 0
+    ):
         raise ReaderError("invalid_request", "Unsupported Parquet preview request")
     input_limit = 8 * 1024 * 1024 if operation == "index" else MAX_INPUT_BYTES
     if not isinstance(raw, bytes) or len(raw) > input_limit:
@@ -154,9 +158,9 @@ async def read_parquet(
         rows = response["rows"]
         if response.get("schema_version") != 1 or not isinstance(rows, list):
             raise ValueError("Invalid response")
-        if len(rows) > (100_000 if operation == "index" else 5) or not all(
-            isinstance(row, dict) for row in rows
-        ):
+        if len(rows) > (
+            100_000 if operation == "index" else 18_000 if operation == "trajectory" else 5
+        ) or not all(isinstance(row, dict) for row in rows):
             raise ValueError("Invalid rows")
         return rows
     except ReaderError:

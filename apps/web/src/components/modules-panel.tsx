@@ -17,6 +17,7 @@ const purpose: Record<WorkspaceModule['id'], string> = {
   teaching: 'Goal-directed AI teleoperation and recording',
   datasets: 'Import, inspect and organize datasets',
   augmentation: 'Generate dataset variations',
+  'real-to-sim': 'Build simulation scenes from real dataset episodes',
   training: 'Fine-tune policies on your datasets',
   distillation: 'Distill policies into smaller models',
   quantization: 'Compress policies and export model formats',
