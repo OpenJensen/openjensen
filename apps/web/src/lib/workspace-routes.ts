@@ -16,6 +16,7 @@ export const workspaceRoutes: Record<StageId, WorkspaceRoute> = {
   teaching: { name: 'AI teleoperation', icon: 'record', path: '/ai-teleoperation/', module: true },
   datasets: { name: 'Datasets', icon: 'database', path: '/datasets/', module: true },
   augmentation: { name: 'Augmentation', icon: 'spark', path: '/augmentation/', module: true },
+  'real-to-sim': { name: 'Real to sim', icon: 'box', path: '/real-to-sim/', module: true },
   training: { name: 'Fine-tune', icon: 'sliders', path: '/training/', module: true },
   distillation: { name: 'Distill', icon: 'funnel', path: '/distillation/', module: true },
   quantization: { name: 'Quantize', icon: 'compress', path: '/quantization/', module: true },
@@ -34,7 +35,7 @@ export const isModule = (id: StageId): id is FeatureModuleId => !!workspaceRoute
 export const navigationGroups: { name?: string; items: StageId[] }[] = [
   { items: ['dashboard'] },
   { name: 'Robot Lab', items: ['robot-lab', 'teaching'] },
-  { name: 'Data', items: ['datasets', 'augmentation'] },
+  { name: 'Data', items: ['datasets', 'augmentation', 'real-to-sim'] },
   { name: 'Train', items: ['training', 'distillation', 'quantization'] },
   { name: 'Test', items: ['evaluation', 'simulation', 'decision-lab'] },
   { name: 'Workspace', items: ['models', 'cloud-runs', 'modules', 'cloud-apis', 'settings'] },
