@@ -144,6 +144,7 @@ test('the contextual guide covers every section and keeps API docs separate', as
     'Dashboard',
     'Models',
     'Datasets',
+    'Real to sim',
     'Augmentation',
     'AI teleoperation',
     'Initial setup',
