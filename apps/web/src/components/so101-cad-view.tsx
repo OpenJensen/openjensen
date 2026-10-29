@@ -27,7 +27,7 @@ export function So101CadView({ pose, selected, view }: { pose: RobotPose; select
       if (!active || !element || !loaded) return;
       try {
         renderer.current?.dispose();
-        renderer.current = createSo101Renderer(element, loaded);
+        renderer.current = createSo101Renderer(element, loaded, pose.role);
         renderer.current.render(latest.current.pose, latest.current.selected, latest.current.view);
         setState('webgl');
       } catch {
@@ -45,7 +45,7 @@ export function So101CadView({ pose, selected, view }: { pose: RobotPose; select
     const restored = () => initialize();
     element?.addEventListener('webglcontextlost', lost);
     element?.addEventListener('webglcontextrestored', restored);
-    void loadSo101Meshes()
+    void loadSo101Meshes(pose.role)
       .then((meshes) => {
         loaded = meshes;
         initialize();
@@ -66,7 +66,7 @@ export function So101CadView({ pose, selected, view }: { pose: RobotPose; select
       renderer.current?.dispose();
       renderer.current = null;
     };
-  }, []);
+  }, [pose.role]);
   useEffect(() => {
     try {
       renderer.current?.render(pose, selected, view);

@@ -2,12 +2,12 @@ import { publicPath } from './base-path';
 import {
   affectedLink,
   so101Camera,
-  so101Description,
+  descriptionForRole,
   visualMatrix,
   type Camera,
   type RobotPose,
 } from './so101-schematic';
-import type { RobotJoint } from './robot-api';
+import type { RobotJoint, RobotRole } from './robot-api';
 
 export type Mesh = { vertices: Float32Array; count: number };
 export function parseBinaryStl(buffer: ArrayBuffer): Mesh {
@@ -30,22 +30,27 @@ export function parseBinaryStl(buffer: ArrayBuffer): Mesh {
   }
   return { vertices, count: triangles * 3 };
 }
-let cachedMeshes: Promise<Map<string, Mesh>> | null = null;
-export function loadSo101Meshes(): Promise<Map<string, Mesh>> {
-  if (!cachedMeshes)
-    cachedMeshes = Promise.all(
-      [...new Set(so101Description.visuals.map((visual) => visual.mesh))].map(async (mesh) => {
-        const response = await fetch(publicPath(`/robots/so101/assets/${mesh}`), { cache: 'force-cache' });
-        if (!response.ok) throw new Error('CAD mesh unavailable.');
-        return [mesh, parseBinaryStl(await response.arrayBuffer())] as const;
-      }),
-    )
-      .then((entries) => new Map(entries))
-      .catch((error) => {
-        cachedMeshes = null;
-        throw error;
-      });
-  return cachedMeshes;
+const cachedMeshes = new Map<string, Promise<Mesh>>();
+export async function loadSo101Meshes(role: RobotRole = 'follower'): Promise<Map<string, Mesh>> {
+  const entries = await Promise.all(
+    [...new Set(descriptionForRole(role).visuals.map((visual) => visual.mesh))].map(async (mesh) => {
+      let pending = cachedMeshes.get(mesh);
+      if (!pending) {
+        pending = fetch(publicPath(`/robots/so101/assets/${mesh}`), { cache: 'force-cache' })
+          .then(async (response) => {
+            if (!response.ok) throw new Error('CAD mesh unavailable.');
+            return parseBinaryStl(await response.arrayBuffer());
+          })
+          .catch((error) => {
+            cachedMeshes.delete(mesh);
+            throw error;
+          });
+        cachedMeshes.set(mesh, pending);
+      }
+      return [mesh, await pending] as const;
+    }),
+  );
+  return new Map(entries);
 }
 const vertexSource = `attribute vec3 position;attribute vec3 normal;uniform mat4 model;uniform mat4 camera;varying vec3 worldNormal;void main(){worldNormal=mat3(model)*normal;gl_Position=camera*model*vec4(position,1.0);}`;
 const fragmentSource = `precision mediump float;uniform vec3 color;varying vec3 worldNormal;void main(){vec3 n=normalize(worldNormal);float diffuse=max(dot(n,normalize(vec3(0.4,-0.65,0.8))),0.0);float fill=max(dot(n,normalize(vec3(-0.7,0.2,0.4))),0.0);gl_FragColor=vec4(color*(0.48+0.43*diffuse+0.15*fill),1.0);}`;
@@ -77,7 +82,12 @@ export type CadRenderer = {
   render: (pose: RobotPose, selected: RobotJoint, view?: Camera) => void;
   dispose: () => void;
 };
-export function createSo101Renderer(canvas: HTMLCanvasElement, meshes: Map<string, Mesh>): CadRenderer {
+export function createSo101Renderer(
+  canvas: HTMLCanvasElement,
+  meshes: Map<string, Mesh>,
+  role: RobotRole = 'follower',
+): CadRenderer {
+  const description = descriptionForRole(role);
   const gl = canvas.getContext('webgl', { antialias: true, alpha: false, preserveDrawingBuffer: true });
   if (!gl) throw new Error('WebGL unavailable.');
   const vertex = shader(gl, gl.VERTEX_SHADER, vertexSource);
@@ -144,8 +154,8 @@ export function createSo101Renderer(canvas: HTMLCanvasElement, meshes: Map<strin
       gl.uniformMatrix4fv(camera, false, new Float32Array(view.matrix));
       gl.enableVertexAttribArray(pos);
       gl.enableVertexAttribArray(normal);
-      const child = so101Description.joints.find((joint) => joint.name === selected)!.child;
-      for (const visual of so101Description.visuals) {
+      const child = description.joints.find((joint) => joint.name === selected)!.child;
+      for (const visual of description.visuals) {
         const mesh = buffers.get(visual.mesh)!;
         gl.bindBuffer(gl.ARRAY_BUFFER, mesh.buffer);
         gl.vertexAttribPointer(pos, 3, gl.FLOAT, false, 24, 0);
@@ -159,7 +169,7 @@ export function createSo101Renderer(canvas: HTMLCanvasElement, meshes: Map<strin
             : dark
               ? [0.64, 0.69, 0.75]
               : [0.83, 0.86, 0.9];
-        const highlight = visual.link === child ? 0.85 : affectedLink(selected, visual.link) ? 0.25 : 0;
+        const highlight = visual.link === child ? 0.85 : affectedLink(selected, visual.link, role) ? 0.25 : 0;
         gl.uniform3f(
           color,
           base[0] * (1 - highlight) + accent[0] * highlight,

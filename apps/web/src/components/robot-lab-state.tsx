@@ -22,11 +22,17 @@ export function useRobotLab() {
   const { projectId, navigateStage } = useWorkspace();
   const client = useQueryClient();
   const [step, setStep] = useState(0);
-  const [port, setPort] = useState('');
-  const [robotId, setRobotId] = useState('my-so101');
+  const [followerDevice, setFollowerDevice] = useState('');
+  const [followerId, setFollowerId] = useState('my-so101');
   const [role, setRole] = useState<RobotRole>('follower');
   const [leaderPort, setLeaderPort] = useState('');
   const [leaderId, setLeaderId] = useState('my-so101-leader');
+  const port = role === 'leader' ? leaderPort : followerDevice;
+  const robotId = role === 'leader' ? leaderId : followerId;
+  const setPort = role === 'leader' ? setLeaderPort : setFollowerDevice;
+  const setRobotId = role === 'leader' ? setLeaderId : setFollowerId;
+  const armLabel = role === 'leader' ? 'Leader' : 'Follower';
+  const validRobotName = /^[A-Za-z0-9_-]{1,64}$/.test(robotId);
   const [mode, setMode] = useState<ControlMode>('manual');
   const [isolated, setIsolated] = useState(false);
   const [assembledReady, setAssembledReady] = useState(false);
@@ -100,7 +106,7 @@ export function useRobotLab() {
   const calibrationStage = calibration?.phase === 'interrupted' ? calibration.interrupted_stage : calibration?.phase;
   const calibrationError = step === 2 ? error || calibration?.error || session?.error : null;
   const recording = state?.recording;
-  const assembled = state?.assembled;
+  const assembled = state?.assembled?.port === port ? state.assembled : undefined;
   const verification = state?.verification;
   const mappingComplete = assembled?.phase === 'complete' && assembled.port === port;
   const active = !!session && session.mode !== 'idle';
@@ -151,7 +157,11 @@ export function useRobotLab() {
     ),
   ) as typeof localMotionChecks;
   const leaderCalibrated = profileFor(leaderId, 'leader')?.valid !== false && !!profileFor(leaderId, 'leader');
-  const selectedMotor = robotJoints.find((item) => item.name === setupOrder[motorIndex])!;
+  const motorDefinition = robotJoints.find((item) => item.name === setupOrder[motorIndex])!;
+  const selectedMotor =
+    role === 'leader' && motorDefinition.name === 'gripper'
+      ? { ...motorDefinition, label: 'Trigger' }
+      : motorDefinition;
   const availableCameras = devices.data?.cameras ?? [];
   const busy = !!pending;
   const canAct = online && !busy && !reconnecting;
@@ -161,14 +171,14 @@ export function useRobotLab() {
     online && !!leaderPort && !devices.isError && !!devices.data?.ports.some((item) => item.device === leaderPort);
   const canUseArm = canAct && portConnected;
   const usbStatus = devices.isPending
-    ? 'Checking robot USB…'
+    ? `Checking ${role} USB…`
     : devices.isError
-      ? 'Robot USB status unavailable'
+      ? `${armLabel} USB status unavailable`
       : portConnected
-        ? 'Robot USB connected · Idle'
+        ? `${armLabel} USB connected · Idle`
         : port
-          ? 'Robot USB disconnected'
-          : 'Select a robot USB device';
+          ? `${armLabel} USB disconnected`
+          : `Select the ${role} USB device`;
   const datasetList = datasets.data?.datasets ?? state?.datasets ?? [];
   const missingHardwareTools = Object.entries(state?.dependencies ?? {}).filter(
     ([name, dependency]) => !dependency.installed && ['serial', 'scservo_sdk', 'cv2'].includes(name),
@@ -179,8 +189,9 @@ export function useRobotLab() {
     mounted.current = true;
     try {
       const saved = JSON.parse(localStorage.getItem('openjensen.robot-lab.preferences') ?? '{}');
-      if (typeof saved.port === 'string') setPort(saved.port);
-      if (typeof saved.robotId === 'string') setRobotId(saved.robotId);
+      if (typeof saved.port === 'string') setFollowerDevice(saved.port);
+      if (typeof saved.robotId === 'string') setFollowerId(saved.robotId);
+      if (saved.role === 'leader' || saved.role === 'follower') setRole(saved.role);
       if (typeof saved.leaderPort === 'string') setLeaderPort(saved.leaderPort);
       if (typeof saved.leaderId === 'string') setLeaderId(saved.leaderId);
       if ([2, 5].includes(saved.middleTolerance)) setMiddleTolerance(saved.middleTolerance);
@@ -194,10 +205,11 @@ export function useRobotLab() {
   }, []);
   useEffect(() => {
     if (!devices.data) return;
-    if (!port) setPort(devices.data.ports[0]?.device ?? '');
+    if (role === 'follower' && !followerDevice)
+      setFollowerDevice(devices.data.ports.find((item) => item.device !== leaderPort)?.device ?? '');
     const cameras = devices.data.cameras;
     if (!cameras.some((camera) => camera.index === cameraIndex)) setCameraIndex(cameras[0]?.index ?? 0);
-  }, [devices.data, port, cameraIndex]);
+  }, [devices.data, followerDevice, leaderPort, role, cameraIndex]);
   useEffect(() => {
     setIsolated(false);
     setAssembledReady(false);
@@ -238,8 +250,13 @@ export function useRobotLab() {
       ownedRef.current = true;
       setOwnsSession(true);
       setStep(2);
-      if (session.port) setPort(session.port);
-      if (session.robot_id) setRobotId(session.robot_id);
+      if (session.role === 'leader') {
+        if (session.port) setLeaderPort(session.port);
+        if (session.robot_id) setLeaderId(session.robot_id);
+      } else {
+        if (session.port) setFollowerDevice(session.port);
+        if (session.robot_id) setFollowerId(session.robot_id);
+      }
       if (session.role) setRole(session.role);
       setError(null);
       setNotice(null);
@@ -441,6 +458,7 @@ export function useRobotLab() {
     ) : undefined;
   const jointGuide = (
     <So101JointGuide
+      role={role}
       previewControls={!(step === 1 && mappingComplete && !reidentify)}
       feedback={detectionFeedback}
       selected={selectedMotor.name}
@@ -522,11 +540,23 @@ export function useRobotLab() {
     try {
       localStorage.setItem(
         'openjensen.robot-lab.preferences',
-        JSON.stringify({ port, robotId, leaderPort, leaderId, middleTolerance }),
+        JSON.stringify({ port: followerDevice, robotId: followerId, role, leaderPort, leaderId, middleTolerance }),
       );
+      return true;
     } catch {
-      /* Preferences are optional. */
+      return false;
     }
+  }
+  function saveDeviceName() {
+    if (active || busy || !validRobotName) return;
+    if (!remember()) {
+      setError('The browser could not save this name. Check that local storage is available.');
+      return;
+    }
+    setError(null);
+    setNotice(
+      `${armLabel} name saved in this browser: ${robotId}. ${selectedProfile?.valid !== false && selectedProfile ? 'Saved calibration found; scan the arm to check it.' : 'Calibrate this arm to save motor settings under this name.'}`,
+    );
   }
   async function jog(joint: RobotJoint, delta: number) {
     return commandJoint(() => robotApi.jog(joint, delta));
@@ -586,14 +616,14 @@ export function useRobotLab() {
   }
   const followerPort = (
     <label>
-      Robot USB port
+      {armLabel} USB port
       <select
-        aria-label="Robot USB port"
+        aria-label={`${armLabel} USB port`}
         value={port}
         disabled={active || busy || !online}
         onChange={(event) => updatePort(event.target.value)}
       >
-        <option value="">Select a serial device</option>
+        <option value="">Select the {role} USB device</option>
         {port && !portConnected && (
           <option value={port} disabled>
             {port} · Disconnected
@@ -610,20 +640,39 @@ export function useRobotLab() {
   const identity = (
     <div className="robot-lab-fields">
       {followerPort}
-      <label>
-        Robot name
-        <input
-          aria-label="Robot name"
-          value={robotId}
-          disabled={active || busy}
-          onChange={(event) => {
-            setRobotId(event.target.value);
-            setMotionReady(false);
-          }}
-          maxLength={64}
-          pattern="[A-Za-z0-9_-]+"
-        />
-      </label>
+      <div className="robot-lab-name-field">
+        <label htmlFor="robot-profile-name">{armLabel} name</label>
+        <div className="robot-lab-name-controls">
+          <input
+            id="robot-profile-name"
+            aria-label={`${armLabel} name`}
+            aria-describedby="robot-profile-name-help"
+            aria-invalid={!validRobotName}
+            value={robotId}
+            disabled={active || busy}
+            onChange={(event) => {
+              setRobotId(event.target.value);
+              setMotionReady(false);
+              setNotice(null);
+            }}
+            maxLength={64}
+            pattern="[A-Za-z0-9_-]+"
+          />
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={active || busy || !validRobotName}
+            onClick={saveDeviceName}
+          >
+            Save name
+          </button>
+        </div>
+        <small id="robot-profile-name-help">
+          {validRobotName
+            ? 'Used for this arm’s calibration profile.'
+            : 'Use 1–64 letters, numbers, hyphens or underscores.'}
+        </small>
+      </div>
     </div>
   );
 
@@ -672,7 +721,20 @@ export function useRobotLab() {
       : checkedCount === 6
         ? '6/6 verified'
         : `${checkedCount}/6 verified`;
+  function selectArmRole(nextRole: RobotRole) {
+    if (active || busy || nextRole === role) return;
+    setRole(nextRole);
+    setMotionReady(false);
+    setNotice(null);
+    setError(null);
+  }
   function openStep(index: number) {
+    if (index >= 3 && role === 'leader') {
+      if (active || busy) return;
+      setRole('follower');
+      setMode('leader');
+      setMotionReady(false);
+    }
     setStep(index);
     setNotice(null);
     setError(null);
@@ -712,7 +774,7 @@ export function useRobotLab() {
   }
   const nextAction = !portConnected
     ? {
-        text: online ? 'Connect the arm’s USB controller.' : 'Robot companion unavailable.',
+        text: online ? `Connect the ${role} arm’s USB controller.` : 'Robot companion unavailable.',
         label: 'Open devices',
         target: 0,
         action: () => openStep(0),
@@ -762,7 +824,7 @@ export function useRobotLab() {
                     }
                   : {
                       text: 'Motor responses, mapping and calibration checked.',
-                      label: 'Open joint controls',
+                      label: role === 'leader' ? 'Set up follower control' : 'Open joint controls',
                       action: () => openStep(3),
                     };
   const stepStates = [
@@ -781,9 +843,11 @@ export function useRobotLab() {
         ? 'Active'
         : !portConnected
           ? 'Needs connection'
-          : selectedCalibrated
-            ? 'Ready'
-            : 'Needs calibration',
+          : role === 'leader'
+            ? 'Needs follower'
+            : selectedCalibrated
+              ? 'Ready'
+              : 'Needs calibration',
       good: controlling,
       warn: false,
     },
@@ -804,7 +868,7 @@ export function useRobotLab() {
               className={`robot-lab-step${step === index ? ' selected' : ''}${itemState.good ? ' verified' : itemState.warn ? ' attention' : ''}`}
               onClick={() => openStep(index)}
               aria-current={step === index ? 'step' : undefined}
-              disabled={busy}
+              disabled={busy || (active && role === 'leader' && index >= 3)}
             >
               <span className="robot-lab-step-title">{item.title}</span>
               <span className="robot-lab-step-state">
@@ -851,7 +915,7 @@ export function useRobotLab() {
       </div>
       {selectedCalibrated && (
         <button className="text-button" disabled={active || busy} onClick={() => openStep(3)}>
-          Open teleoperation <Icon name="arrow" size={13} />
+          {role === 'leader' ? 'Set up follower control' : 'Open teleoperation'} <Icon name="arrow" size={13} />
         </button>
       )}
     </div>
@@ -859,6 +923,7 @@ export function useRobotLab() {
 
   return {
     active,
+    armLabel,
     allJointsMapped,
     assembled,
     assembledReady,
@@ -945,6 +1010,7 @@ export function useRobotLab() {
     selectedCalibrated,
     selectedMotor,
     selectedProfile,
+    selectArmRole,
     session,
     sessionJoints,
     setAssembledReady,
