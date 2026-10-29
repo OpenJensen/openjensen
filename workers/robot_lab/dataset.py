@@ -326,7 +326,7 @@ class DatasetWriter:
 
         self.episode_active = False
         if self.image_writer:
-            self.image_writer.wait_until_done()
+            self.image_writer.retry_failed()
         if self.frames < 2:
             raise ValueError("Record at least two frames before saving an episode")
         if not len(self.episodes) < 1000:
@@ -403,7 +403,7 @@ class DatasetWriter:
         # Only this writer's own private pending directory is retired.
         for path in self.pending.iterdir():
             if path.is_file() and (
-                path.name == "frames.jsonl" or re.fullmatch(r"\d{6}\.png", path.name)
+                path.name == "frames.jsonl" or re.fullmatch(r"\d{6}\.png(?:\.tmp)?", path.name)
             ):
                 path.unlink()
         self.frames = 0
@@ -480,7 +480,7 @@ def list_datasets(root):
                     )
                 }
             )
-        except (OSError, ValueError):
+        except (OSError, ValueError):  # fmt: skip
             continue
     return output
 

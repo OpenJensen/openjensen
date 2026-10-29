@@ -15,7 +15,9 @@ from pathlib import Path
 def save_png(image, path):
     from PIL import Image
 
-    Image.fromarray(image).save(path, compress_level=1)
+    pending = path.with_suffix(path.suffix + ".tmp")
+    Image.fromarray(image).save(pending, format="PNG", compress_level=1)
+    pending.replace(path)
 
 
 class AsyncImageWriter:
@@ -27,6 +29,8 @@ class AsyncImageWriter:
         self.idle.set()
         self.pending = 0
         self.error = None
+        self.failed = []
+        self.retrying = False
         self.closed = False
         self.thread = threading.Thread(target=self._run, name="robot-lab-images", daemon=True)
         self.thread.start()
@@ -37,6 +41,8 @@ class AsyncImageWriter:
         with self.lock:
             if self.closed:
                 raise ValueError("Image writer is closed")
+            if self.retrying:
+                raise ValueError("Image writer is retrying a paused episode")
             if self.error:
                 raise ValueError("Image writing failed: " + self.error)
             try:
@@ -58,11 +64,11 @@ class AsyncImageWriter:
                         return
                 continue
             try:
-                if self.error is None:
-                    self.write(image, path)
+                self.write(image, path)
             except Exception as error:
                 with self.lock:
                     self.error = str(error)
+                    self.failed.append((image, path))
             finally:
                 with self.lock:
                     self.pending -= 1
@@ -76,11 +82,35 @@ class AsyncImageWriter:
         if self.error and not ignore_error:
             raise ValueError("Image writing failed: " + self.error)
 
+    def retry_failed(self):
+        # Save is an explicit user action. Retain failed buffers so a transient
+        # storage failure can be repaired without discarding completed frames.
+        self.wait_until_done(ignore_error=True)
+        with self.lock:
+            if self.closed:
+                raise ValueError("Image writer is closed")
+            self.retrying = True
+            failed, self.failed = self.failed, []
+            self.error = None
+        try:
+            for image, path in failed:
+                try:
+                    self.write(image, path)
+                except Exception as error:
+                    with self.lock:
+                        self.error = str(error)
+                        self.failed.append((image, path))
+        finally:
+            with self.lock:
+                self.retrying = False
+        self.wait_until_done()
+
     def clear_error(self):
         with self.lock:
             if self.pending:
                 raise ValueError("Wait for image writes before discarding")
             self.error = None
+            self.failed.clear()
 
     def stop(self, timeout=2, *, ignore_error=False):
         with self.lock:

@@ -197,6 +197,46 @@ class DatasetTests(unittest.TestCase):
         writer.finalize()
         self.assertEqual(writer.total_frames, 2)
 
+    def test_save_retries_failed_images_and_keeps_every_recorded_frame(self):
+        import threading
+
+        import numpy as np
+        import pyarrow.parquet as pq
+
+        writer = DatasetWriter(self.root, "retry-image", "Reach", 5, (2, 3, 3))
+        entered, release = threading.Event(), threading.Event()
+        original = writer.image_writer.write
+        first = [True]
+
+        def temporary_failure(image, path):
+            if first[0]:
+                entered.set()
+                release.wait(2)
+                first[0] = False
+                raise OSError("temporary image failure")
+            original(image, path)
+
+        writer.image_writer.write = temporary_failure
+        try:
+            writer.start_episode()
+            writer.add_frame(
+                dict.fromkeys(JOINTS, 1.0), {}, np.zeros((2, 3, 3), dtype=np.uint8), captured_at=0
+            )
+            self.assertTrue(entered.wait(1))
+            writer.add_frame(
+                dict.fromkeys(JOINTS, 2.0), {}, np.ones((2, 3, 3), dtype=np.uint8), captured_at=0.2
+            )
+            release.set()
+            writer.image_writer.wait_until_done(ignore_error=True)
+            writer.save_episode()
+            writer.finalize()
+            table = pq.read_table(writer.root / "data/chunk-000/file-000.parquet")
+            self.assertEqual(len(table), 2)
+            self.assertEqual(writer.total_frames, 2)
+        finally:
+            release.set()
+            writer.image_writer.stop(ignore_error=True)
+
     def test_save_metadata_failure_preserves_a_retryable_pending_episode(self):
         writer = DatasetWriter(self.root, "retry-save", "Reach", 5)
         writer.start_episode()

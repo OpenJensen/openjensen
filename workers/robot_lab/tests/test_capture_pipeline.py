@@ -56,6 +56,36 @@ class ImageWriterTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "closed"):
             writer.save_image(Image(4), Path("four.png"))
 
+    def test_failed_buffers_can_be_retried_without_losing_queued_images(self):
+        entered, release = threading.Event(), threading.Event()
+        first = [True]
+        saved = []
+
+        def write(image, path):
+            if image.value == 1 and first[0]:
+                entered.set()
+                release.wait(2)
+                first[0] = False
+                raise OSError("temporary storage error")
+            saved.append(image.value)
+
+        writer = AsyncImageWriter(write=write)
+        try:
+            writer.save_image(Image(1), Path("one.png"))
+            self.assertTrue(entered.wait(1))
+            writer.save_image(Image(2), Path("two.png"))
+            release.set()
+            writer.wait_until_done(ignore_error=True)
+            self.assertEqual(saved, [2])
+            self.assertEqual(len(writer.failed), 1)
+            writer.retry_failed()
+            self.assertEqual(sorted(saved), [1, 2])
+            self.assertFalse(writer.failed)
+            self.assertIsNone(writer.error)
+        finally:
+            release.set()
+            writer.stop(ignore_error=True)
+
     def test_background_disk_error_is_visible_and_discard_can_recover(self):
         write = Mock(side_effect=OSError("disk full"))
         writer = AsyncImageWriter(write=write)
