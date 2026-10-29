@@ -1869,6 +1869,172 @@
         "title": "ComputeSettingsUpdate",
         "type": "object"
       },
+      "ComputeTarget": {
+        "additionalProperties": false,
+        "properties": {
+          "account": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account"
+          },
+          "adapter": {
+            "default": "local",
+            "enum": [
+              "local",
+              "skypilot"
+            ],
+            "title": "Adapter",
+            "type": "string"
+          },
+          "connection_ref": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connection Ref"
+          },
+          "enabled": {
+            "default": false,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "id": {
+            "pattern": "^[a-z][a-z0-9-]{0,62}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "infrastructure": {
+            "default": "local",
+            "enum": [
+              "local",
+              "ssh",
+              "gcp",
+              "runpod",
+              "nebius",
+              "slurm"
+            ],
+            "title": "Infrastructure",
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "location": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location"
+          },
+          "operations": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Operations",
+            "type": "array"
+          },
+          "partition": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Partition"
+          },
+          "qos": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Qos"
+          },
+          "resources": {
+            "$ref": "#/components/schemas/TargetResources"
+          },
+          "runtime_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$",
+            "title": "Runtime Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "runtime_id"
+        ],
+        "title": "ComputeTarget",
+        "type": "object"
+      },
+      "ComputeTargetList": {
+        "additionalProperties": false,
+        "properties": {
+          "connection_refs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Connection Refs",
+            "type": "array"
+          },
+          "runtime_options": {
+            "items": {
+              "$ref": "#/components/schemas/TargetRuntimeOption"
+            },
+            "title": "Runtime Options",
+            "type": "array"
+          },
+          "schema_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "targets": {
+            "items": {
+              "$ref": "#/components/schemas/PublicComputeTarget"
+            },
+            "title": "Targets",
+            "type": "array"
+          }
+        },
+        "required": [
+          "targets",
+          "runtime_options",
+          "connection_refs"
+        ],
+        "title": "ComputeTargetList",
+        "type": "object"
+      },
       "Context": {
         "additionalProperties": false,
         "properties": {
@@ -1942,6 +2108,28 @@
           }
         },
         "title": "Conversion",
+        "type": "object"
+      },
+      "Criterion": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "text"
+        ],
+        "title": "Criterion",
         "type": "object"
       },
       "DatasetProfile": {
@@ -2211,6 +2399,51 @@
           "receipt"
         ],
         "title": "DecisionProposal",
+        "type": "object"
+      },
+      "DecisionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "criteria": {
+            "items": {
+              "$ref": "#/components/schemas/Criterion"
+            },
+            "maxItems": 8,
+            "minItems": 2,
+            "title": "Criteria",
+            "type": "array"
+          },
+          "instructions": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Instructions",
+            "type": "string"
+          },
+          "operation": {
+            "const": "decision.score",
+            "default": "decision.score",
+            "title": "Operation",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "state": {
+            "maxLength": 8000,
+            "minLength": 1,
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "schema_version",
+          "state",
+          "instructions",
+          "criteria"
+        ],
+        "title": "DecisionRequest",
         "type": "object"
       },
       "DecisionStatus": {
@@ -2614,6 +2847,88 @@
           "record"
         ],
         "title": "Event",
+        "type": "object"
+      },
+      "ExecutionBinding": {
+        "additionalProperties": false,
+        "properties": {
+          "accelerator": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accelerator"
+          },
+          "adapter": {
+            "title": "Adapter",
+            "type": "string"
+          },
+          "connection_sha256": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connection Sha256"
+          },
+          "gpu_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Gpu Count",
+            "type": "integer"
+          },
+          "infrastructure": {
+            "title": "Infrastructure",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "runtime_sha256": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runtime Sha256"
+          },
+          "target_id": {
+            "title": "Target Id",
+            "type": "string"
+          },
+          "target_snapshot": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Snapshot"
+          }
+        },
+        "required": [
+          "adapter",
+          "infrastructure",
+          "target_id",
+          "label"
+        ],
+        "title": "ExecutionBinding",
         "type": "object"
       },
       "ExecutionEvidence": {
@@ -3063,6 +3378,22 @@
             "title": "Message",
             "type": "string"
           },
+          "module": {
+            "anyOf": [
+              {
+                "enum": [
+                  "datasets",
+                  "robot-lab",
+                  "decision-lab"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Module"
+          },
           "pid": {
             "anyOf": [
               {
@@ -3117,6 +3448,11 @@
       "InstallRequest": {
         "additionalProperties": false,
         "properties": {
+          "activate_module": {
+            "default": false,
+            "title": "Activate Module",
+            "type": "boolean"
+          },
           "operation_id": {
             "pattern": "^[0-9a-f]{32}$",
             "title": "Operation Id",
@@ -3240,6 +3576,16 @@
       "Job": {
         "additionalProperties": false,
         "properties": {
+          "cancellation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JobCancellation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "compute_target": {
             "anyOf": [
               {
@@ -3266,6 +3612,16 @@
               }
             ],
             "title": "Error"
+          },
+          "execution": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExecutionBinding"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "id": {
             "minLength": 1,
@@ -3298,6 +3654,9 @@
                 "$ref": "#/components/schemas/TeachingCaptureRequest"
               },
               {
+                "$ref": "#/components/schemas/DecisionRequest"
+              },
+              {
                 "$ref": "#/components/schemas/SceneRequest"
               }
             ],
@@ -3316,6 +3675,9 @@
               },
               {
                 "$ref": "#/components/schemas/TeachingCaptureResult"
+              },
+              {
+                "$ref": "#/components/schemas/ScoreResult"
               },
               {
                 "$ref": "#/components/schemas/SceneJobResult"
@@ -3377,6 +3739,45 @@
         "title": "Job",
         "type": "object"
       },
+      "JobCancellation": {
+        "additionalProperties": false,
+        "properties": {
+          "cleanup": {
+            "default": "pending",
+            "enum": [
+              "pending",
+              "succeeded",
+              "failed"
+            ],
+            "title": "Cleanup",
+            "type": "string"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}[Tt]\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:[Zz]|[+-](?:[01]\\d|2[0-3]):[0-5]\\d)$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "requested_at": {
+            "format": "date-time",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}[Tt]\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:[Zz]|[+-](?:[01]\\d|2[0-3]):[0-5]\\d)$",
+            "title": "Requested At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "requested_at"
+        ],
+        "title": "JobCancellation",
+        "type": "object"
+      },
       "JobEvent": {
         "additionalProperties": false,
         "properties": {
@@ -3409,6 +3810,280 @@
           "timestamp"
         ],
         "title": "JobEvent",
+        "type": "object"
+      },
+      "JobFailure": {
+        "additionalProperties": false,
+        "properties": {
+          "attempt_id": {
+            "default": "1",
+            "title": "Attempt Id",
+            "type": "string"
+          },
+          "cause": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cause"
+          },
+          "cleanup": {
+            "default": "unknown",
+            "enum": [
+              "unknown",
+              "pending",
+              "succeeded",
+              "failed"
+            ],
+            "title": "Cleanup",
+            "type": "string"
+          },
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "exit_code": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exit Code"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "retryable": {
+            "default": false,
+            "title": "Retryable",
+            "type": "boolean"
+          },
+          "stage": {
+            "title": "Stage",
+            "type": "string"
+          },
+          "timestamp": {
+            "title": "Timestamp",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "stage",
+          "message",
+          "timestamp"
+        ],
+        "title": "JobFailure",
+        "type": "object"
+      },
+      "JobLink": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "url"
+        ],
+        "title": "JobLink",
+        "type": "object"
+      },
+      "JobLogPage": {
+        "additionalProperties": false,
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "discarded_records": {
+            "default": 0,
+            "title": "Discarded Records",
+            "type": "integer"
+          },
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "next_cursor": {
+            "title": "Next Cursor",
+            "type": "integer"
+          },
+          "records": {
+            "items": {
+              "$ref": "#/components/schemas/JobLogRecord"
+            },
+            "title": "Records",
+            "type": "array"
+          },
+          "retained_from": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retained From"
+          },
+          "truncated": {
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "records",
+          "next_cursor",
+          "has_more",
+          "retained_from",
+          "truncated",
+          "available"
+        ],
+        "title": "JobLogPage",
+        "type": "object"
+      },
+      "JobLogRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "attempt_id": {
+            "title": "Attempt Id",
+            "type": "string"
+          },
+          "component": {
+            "title": "Component",
+            "type": "string"
+          },
+          "data": {
+            "additionalProperties": true,
+            "title": "Data",
+            "type": "object"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "event",
+              "log"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "sequence": {
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "severity": {
+            "enum": [
+              "debug",
+              "info",
+              "warning",
+              "error"
+            ],
+            "title": "Severity",
+            "type": "string"
+          },
+          "stage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage"
+          },
+          "stream": {
+            "anyOf": [
+              {
+                "enum": [
+                  "stdout",
+                  "stderr"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stream"
+          },
+          "timestamp": {
+            "title": "Timestamp",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sequence",
+          "job_id",
+          "attempt_id",
+          "timestamp",
+          "kind",
+          "component",
+          "severity",
+          "message"
+        ],
+        "title": "JobLogRecord",
+        "type": "object"
+      },
+      "JobOperation": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "module": {
+            "title": "Module",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "submission": {
+            "default": "job",
+            "enum": [
+              "job",
+              "interactive",
+              "upload"
+            ],
+            "title": "Submission",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "module",
+          "path"
+        ],
+        "title": "JobOperation",
         "type": "object"
       },
       "JsonValue": {},
@@ -4265,6 +4940,41 @@
         "title": "NativeReplay",
         "type": "object"
       },
+      "ObservabilityPolicy": {
+        "additionalProperties": false,
+        "properties": {
+          "max_event_records": {
+            "default": 10000,
+            "maximum": 1000000.0,
+            "minimum": 100.0,
+            "title": "Max Event Records",
+            "type": "integer"
+          },
+          "max_log_bytes": {
+            "default": 16777216,
+            "maximum": 1073741824.0,
+            "minimum": 65536.0,
+            "title": "Max Log Bytes",
+            "type": "integer"
+          },
+          "max_record_bytes": {
+            "default": 16384,
+            "maximum": 65536.0,
+            "minimum": 1024.0,
+            "title": "Max Record Bytes",
+            "type": "integer"
+          },
+          "retention_days": {
+            "default": 30,
+            "maximum": 3650.0,
+            "minimum": 1.0,
+            "title": "Retention Days",
+            "type": "integer"
+          }
+        },
+        "title": "ObservabilityPolicy",
+        "type": "object"
+      },
       "ParityLimits": {
         "additionalProperties": false,
         "description": "Operator-declared tolerances; no unmeasured universal default.",
@@ -4536,6 +5246,18 @@
           },
           "evaluation": {
             "$ref": "#/components/schemas/Evaluation"
+          },
+          "execution_target_id": {
+            "anyOf": [
+              {
+                "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_-]{0,95}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Target Id"
           },
           "limits": {
             "anyOf": [
@@ -5072,6 +5794,64 @@
         "title": "ProviderStatus",
         "type": "object"
       },
+      "PublicComputeTarget": {
+        "additionalProperties": false,
+        "properties": {
+          "checked_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checked At"
+          },
+          "definition": {
+            "$ref": "#/components/schemas/ComputeTarget"
+          },
+          "launchable": {
+            "title": "Launchable",
+            "type": "boolean"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "operations": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Operations",
+            "type": "array"
+          },
+          "sha256": {
+            "title": "Sha256",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "disabled",
+              "setup_required",
+              "configured",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "definition",
+          "operations",
+          "status",
+          "message",
+          "launchable",
+          "sha256"
+        ],
+        "title": "PublicComputeTarget",
+        "type": "object"
+      },
       "PublicRuntime": {
         "additionalProperties": false,
         "properties": {
@@ -5195,7 +5975,11 @@
           "provider": {
             "enum": [
               "local",
-              "gcp"
+              "gcp",
+              "ssh",
+              "runpod",
+              "nebius",
+              "slurm"
             ],
             "title": "Provider",
             "type": "string"
@@ -5962,6 +6746,11 @@
             ],
             "title": "Location",
             "type": "string"
+          },
+          "managed": {
+            "default": false,
+            "title": "Managed",
+            "type": "boolean"
           },
           "message": {
             "title": "Message",
@@ -6967,6 +7756,119 @@
         "title": "SimulationTarget",
         "type": "object"
       },
+      "TargetResources": {
+        "additionalProperties": false,
+        "properties": {
+          "accelerator": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accelerator"
+          },
+          "concurrency": {
+            "default": 1,
+            "maximum": 128.0,
+            "minimum": 1.0,
+            "title": "Concurrency",
+            "type": "integer"
+          },
+          "cpus": {
+            "default": 2,
+            "maximum": 1024.0,
+            "minimum": 1.0,
+            "title": "Cpus",
+            "type": "integer"
+          },
+          "disk_gib": {
+            "default": 100,
+            "maximum": 65536.0,
+            "minimum": 10.0,
+            "title": "Disk Gib",
+            "type": "integer"
+          },
+          "gpu_count": {
+            "default": 0,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Gpu Count",
+            "type": "integer"
+          },
+          "memory_gib": {
+            "default": 4,
+            "maximum": 65536.0,
+            "minimum": 1.0,
+            "title": "Memory Gib",
+            "type": "integer"
+          },
+          "timeout_seconds": {
+            "default": 7200,
+            "maximum": 604800.0,
+            "minimum": 30.0,
+            "title": "Timeout Seconds",
+            "type": "integer"
+          }
+        },
+        "title": "TargetResources",
+        "type": "object"
+      },
+      "TargetRuntimeOption": {
+        "additionalProperties": false,
+        "properties": {
+          "accelerator": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accelerator"
+          },
+          "device": {
+            "default": "cpu",
+            "enum": [
+              "cpu",
+              "cuda"
+            ],
+            "title": "Device",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "operations": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Operations",
+            "type": "array"
+          },
+          "remote_only": {
+            "default": false,
+            "title": "Remote Only",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "operations"
+        ],
+        "title": "TargetRuntimeOption",
+        "type": "object"
+      },
       "TaskReview": {
         "additionalProperties": false,
         "properties": {
@@ -7814,6 +8716,213 @@
           "session_id"
         ],
         "title": "VoiceJoin",
+        "type": "object"
+      },
+      "WorkEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "stage": {
+            "title": "Stage",
+            "type": "string"
+          },
+          "timestamp": {
+            "title": "Timestamp",
+            "type": "string"
+          }
+        },
+        "required": [
+          "timestamp",
+          "stage",
+          "message"
+        ],
+        "title": "WorkEvent",
+        "type": "object"
+      },
+      "WorkJob": {
+        "additionalProperties": false,
+        "properties": {
+          "can_cancel": {
+            "default": false,
+            "title": "Can Cancel",
+            "type": "boolean"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/WorkEvent"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "execution": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExecutionBinding"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "inputs": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Inputs",
+            "type": "object"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "module": {
+            "title": "Module",
+            "type": "string"
+          },
+          "operation": {
+            "title": "Operation",
+            "type": "string"
+          },
+          "outputs": {
+            "items": {
+              "$ref": "#/components/schemas/JobLink"
+            },
+            "title": "Outputs",
+            "type": "array"
+          },
+          "parent_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Parent Ids",
+            "type": "array"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "result": {
+            "$ref": "#/components/schemas/JsonValue"
+          },
+          "source_id": {
+            "title": "Source Id",
+            "type": "string"
+          },
+          "source_status": {
+            "title": "Source Status",
+            "type": "string"
+          },
+          "stage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "cancelling",
+              "waiting",
+              "succeeded",
+              "failed",
+              "cancelled",
+              "interrupted"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "source_id",
+          "project_id",
+          "operation",
+          "module",
+          "title",
+          "status",
+          "source_status",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "WorkJob",
+        "type": "object"
+      },
+      "WorkSubmission": {
+        "additionalProperties": false,
+        "properties": {
+          "inputs": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Inputs",
+            "type": "object"
+          },
+          "operation": {
+            "enum": [
+              "dataset.inspect",
+              "dataset.augment",
+              "policy.finetune",
+              "policy.distill",
+              "policy.quantize",
+              "policy.evaluate",
+              "policy.run",
+              "policy.export",
+              "policy.workflow",
+              "teaching.capture",
+              "decision.score",
+              "scene.generate"
+            ],
+            "title": "Operation",
+            "type": "string"
+          },
+          "target_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Id"
+          }
+        },
+        "required": [
+          "operation"
+        ],
+        "title": "WorkSubmission",
         "type": "object"
       },
       "WorkspaceModule": {
@@ -9474,6 +10583,159 @@
         ]
       }
     },
+    "/api/v1/compute-targets": {
+      "get": {
+        "operationId": "targets_api_v1_compute_targets_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComputeTargetList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Targets",
+        "tags": [
+          "Compute targets"
+        ]
+      }
+    },
+    "/api/v1/compute-targets/{ident}": {
+      "delete": {
+        "operationId": "remove_api_v1_compute_targets__ident__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ident",
+            "required": true,
+            "schema": {
+              "title": "Ident",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove",
+        "tags": [
+          "Compute targets"
+        ]
+      },
+      "put": {
+        "operationId": "save_api_v1_compute_targets__ident__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ident",
+            "required": true,
+            "schema": {
+              "title": "Ident",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ComputeTarget"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicComputeTarget"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save",
+        "tags": [
+          "Compute targets"
+        ]
+      }
+    },
+    "/api/v1/compute-targets/{ident}/check": {
+      "post": {
+        "operationId": "check_api_v1_compute_targets__ident__check_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ident",
+            "required": true,
+            "schema": {
+              "title": "Ident",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicComputeTarget"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Check",
+        "tags": [
+          "Compute targets"
+        ]
+      }
+    },
     "/api/v1/dataset-uploads/{ident}": {
       "delete": {
         "operationId": "discard_upload_api_v1_dataset_uploads__ident__delete",
@@ -10176,6 +11438,52 @@
         "summary": "Save Huggingface Token",
         "tags": [
           "Hugging Face"
+        ]
+      }
+    },
+    "/api/v1/job-diagnostics-settings": {
+      "get": {
+        "operationId": "settings_api_v1_job_diagnostics_settings_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObservabilityPolicy"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Settings",
+        "tags": [
+          "Job diagnostics"
+        ]
+      }
+    },
+    "/api/v1/job-operations": {
+      "get": {
+        "operationId": "operations_api_v1_job_operations_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/JobOperation"
+                  },
+                  "title": "Response Operations Api V1 Job Operations Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Operations",
+        "tags": [
+          "Jobs"
         ]
       }
     },
@@ -12206,6 +13514,7 @@
             "required": true,
             "schema": {
               "enum": [
+                "decision.score",
                 "teaching.capture",
                 "dataset.inspect",
                 "dataset.augment",
@@ -12733,6 +14042,518 @@
         "summary": "Training Plan"
       }
     },
+    "/api/v1/projects/{project_id}/work-jobs": {
+      "get": {
+        "operationId": "history_api_v1_projects__project_id__work_jobs_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "maximum": 1000000,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "module",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 100,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Module"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "default": "all",
+              "maxLength": 32,
+              "title": "Status",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 200,
+              "title": "Q",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/WorkJob"
+                  },
+                  "title": "Response History Api V1 Projects  Project Id  Work Jobs Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "History",
+        "tags": [
+          "Jobs"
+        ]
+      },
+      "post": {
+        "operationId": "submit_api_v1_projects__project_id__work_jobs_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkSubmission"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkJob"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Submit",
+        "tags": [
+          "Jobs"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/work-jobs/{key}": {
+      "get": {
+        "operationId": "detail_api_v1_projects__project_id__work_jobs__key__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "title": "Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkJob"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Detail",
+        "tags": [
+          "Jobs"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/work-jobs/{key}/cancel": {
+      "post": {
+        "operationId": "cancel_api_v1_projects__project_id__work_jobs__key__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "title": "Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkJob"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel",
+        "tags": [
+          "Jobs"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/work-jobs/{key}/diagnostics.zip": {
+      "get": {
+        "operationId": "diagnostics_api_v1_projects__project_id__work_jobs__key__diagnostics_zip_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "title": "Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Diagnostics",
+        "tags": [
+          "Job diagnostics"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/work-jobs/{key}/failure": {
+      "get": {
+        "operationId": "failure_api_v1_projects__project_id__work_jobs__key__failure_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "title": "Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/JobFailure"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Response Failure Api V1 Projects  Project Id  Work Jobs  Key  Failure Get"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Failure",
+        "tags": [
+          "Job diagnostics"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/work-jobs/{key}/logs": {
+      "get": {
+        "operationId": "logs_api_v1_projects__project_id__work_jobs__key__logs_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "title": "Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "After",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "severity",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "debug",
+                    "info",
+                    "warning",
+                    "error"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Severity"
+            }
+          },
+          {
+            "in": "query",
+            "name": "stream",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "stdout",
+                    "stderr"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Stream"
+            }
+          },
+          {
+            "in": "query",
+            "name": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Query"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobLogPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Logs",
+        "tags": [
+          "Job diagnostics"
+        ]
+      }
+    },
     "/api/v1/robot-lab/agent/acquire": {
       "post": {
         "operationId": "robot_lab_post_agent_acquire",
@@ -13110,6 +14931,25 @@
           }
         },
         "summary": "Robot Lab Get Devices",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/diagnostics": {
+      "get": {
+        "operationId": "robot_lab_get_diagnostics",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Get Diagnostics",
         "tags": [
           "Robot Lab"
         ]

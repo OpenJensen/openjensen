@@ -1,7 +1,7 @@
-"""Bounded per-job GCP training through SkyPilot CLI, including artifact return.
+"""Bounded policy jobs on configured SkyPilot infrastructure, with artifact return.
 
 No global SkyPilot configuration or provider credential files are modified.
-Launch uses a private task bundle and verifies the server billing project.
+Launch uses a private task bundle and verifies billing identity for GCP targets.
 Results travel through supported ``sky logs --sync-down`` before ``sky down``.
 See https://docs.skypilot.co/en/latest/reference/cli.html and sky_bootstrap.py.
 """
@@ -40,6 +40,17 @@ RECOVERY_RECORD_LIMIT = 256
 Event = Callable[[str], Awaitable[None]]
 CLUSTER_PATTERN = r"fb-[a-f0-9]{12}-[a-f0-9]{8}"
 _RUN_SECRETS: ContextVar[tuple[str, ...]] = ContextVar("firebird_run_secrets", default=())
+_RUN_LOGGER: ContextVar[Event | None] = ContextVar("job_provider_log", default=None)
+
+
+@contextmanager
+def log_to(callback):
+    """Bind a per-job collector without changing executor call signatures."""
+    token = _RUN_LOGGER.set(callback)
+    try:
+        yield
+    finally:
+        _RUN_LOGGER.reset(token)
 
 
 def validate_endpoint(value: object) -> str:
@@ -132,6 +143,45 @@ def effective_training_recipe(payload: dict) -> dict:
     return {}
 
 
+def target_resources(target: dict) -> dict:
+    """Compile only validated declarative destinations, never shell fragments."""
+    infrastructure = target.get("infrastructure")
+    if infrastructure not in {"ssh", "gcp", "runpod", "nebius", "slurm"}:
+        raise ValueError("Unsupported SkyPilot infrastructure")
+    location, partition = target.get("location"), target.get("partition")
+    for value in (location, partition, target.get("account"), target.get("qos")):
+        if value is not None and (
+            not isinstance(value, str)
+            or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,99}", value)
+        ):
+            raise ValueError("Invalid compute destination selector")
+    if infrastructure != "slurm" and any((partition, target.get("account"), target.get("qos"))):
+        raise ValueError("Partition and quota settings apply only to Slurm")
+    if infrastructure in {"ssh", "slurm"} and not location:
+        raise ValueError("Choose a registered node pool or cluster")
+    infra = "/".join(str(value) for value in (infrastructure, location, partition) if value)
+    resources = target.get("resources", {})
+    for name, low, high in (("cpus", 1, 1024), ("memory_gib", 1, 65536), ("disk_gib", 10, 65536)):
+        if type(resources.get(name)) is not int or not low <= resources[name] <= high:
+            raise ValueError("Invalid compute resource request")
+    accelerator = resources.get("accelerator")
+    if (
+        not isinstance(accelerator, str)
+        or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,99}", accelerator)
+        or type(resources.get("gpu_count")) is not int
+        or resources.get("gpu_count") != 1
+    ):
+        raise ValueError("This portable policy worker requires one registered GPU")
+    return {
+        "infra": infra,
+        "accelerators": f"{accelerator}:1",
+        "cpus": f"{resources['cpus']}+",
+        "memory": f"{resources['memory_gib']}+",
+        "disk_size": resources["disk_gib"],
+        "use_spot": False,
+    }
+
+
 def prepare(payload: dict, stage_dir: Path, target: dict) -> tuple[Path, dict]:
     """Create a reviewable fixed task; payload paths never become shell commands."""
     project = target.get("project_id", "")
@@ -144,17 +194,20 @@ def prepare(payload: dict, stage_dir: Path, target: dict) -> tuple[Path, dict]:
     workspace = target.get("workspace", "default")
     if not isinstance(workspace, str) or not re.fullmatch(r"[a-z][a-z0-9-]{0,62}", workspace):
         raise ValueError("Invalid SkyPilot workspace")
-    if not re.fullmatch(r"[a-z][a-z0-9-]{4,28}[a-z0-9]", project):
+    generic = "infrastructure" in target
+    if generic:
+        target_resources(target)
+    if not generic and not re.fullmatch(r"[a-z][a-z0-9-]{4,28}[a-z0-9]", project):
         raise ValueError("Invalid Google Cloud project")
-    if not re.fullmatch(r"[a-z][a-z0-9-]{2,62}[0-9]", region):
+    if not generic and not re.fullmatch(r"[a-z][a-z0-9-]{2,62}[0-9]", region):
         raise ValueError("Invalid Google Cloud region")
-    if (
+    if not generic and (
         not re.fullmatch(r"[A-Za-z][A-Za-z0-9_-]{0,63}", accelerator)
         or type(count) is not int
         or count != 1
     ):
         raise ValueError("Cloud training requires exactly one registered GPU")
-    if type(disk) is not int or not 100 <= disk <= 2048:
+    if not generic and (type(disk) is not int or not 100 <= disk <= 2048):
         raise ValueError("Cloud disk must be between 100 and 2048 GiB")
     if type(idle) is not int or not 1 <= idle <= 60:
         raise ValueError("Cloud idle teardown must be between 1 and 60 minutes")
@@ -196,7 +249,7 @@ def prepare(payload: dict, stage_dir: Path, target: dict) -> tuple[Path, dict]:
     shutil.copyfile(Path(__file__).with_name("cloud_storage.py"), bundle / "cloud_storage.py")
     remote_payload = json.loads(json.dumps(payload))
     # The bundled worker does not consume runtime commands, mounts or env.
-    remote_payload["runtime"] = {"provider": "gcp", "device": "cuda"}
+    remote_payload["runtime"] = {"provider": target.get("infrastructure", "gcp"), "device": "cuda"}
     remote_payload["output_dir"] = "output"
     remote_payload["source"] = None
     (bundle / "inputs").mkdir()
@@ -304,6 +357,8 @@ def prepare(payload: dict, stage_dir: Path, target: dict) -> tuple[Path, dict]:
         "disk_size": disk,
         "use_spot": False,
     }
+    if generic:
+        resources = target_resources(target)
     instance = target.get("instance_type")
     if instance:
         if not isinstance(instance, str) or not re.fullmatch(r"[a-z][a-z0-9-]{2,79}", instance):
@@ -321,11 +376,39 @@ def prepare(payload: dict, stage_dir: Path, target: dict) -> tuple[Path, dict]:
                 "WANDB_MODE": "disabled",
                 **({"FIREBIRD_PSI_ROOT": "psi"} if psi_training else {}),
             },
+            **(
+                {
+                    "config": {
+                        "slurm": {
+                            "sbatch_options": {
+                                key: value
+                                for key, value in {
+                                    "account": target.get("account"),
+                                    "qos": target.get("qos"),
+                                }.items()
+                                if value
+                            }
+                        }
+                    }
+                }
+                if target.get("infrastructure") == "slurm"
+                and (target.get("account") or target.get("qos"))
+                else {}
+            ),
             "setup": "\n".join(
                 [
                     "set -euo pipefail",
-                    "sudo apt-get update -qq",
-                    "sudo apt-get install -y ffmpeg libgl1 libglib2.0-0",
+                    *(
+                        [
+                            "command -v ffmpeg >/dev/null || "
+                            "{ echo 'Install ffmpeg on the registered worker image'; exit 1; }"
+                        ]
+                        if target.get("infrastructure") in {"ssh", "slurm"}
+                        else [
+                            "sudo apt-get update -qq",
+                            "sudo apt-get install -y ffmpeg libgl1 libglib2.0-0",
+                        ]
+                    ),
                     "python3 -m pip install --user uv==0.12.19",
                     "python3 -m uv venv --python " + ("3.12" if profile else "3.11") + " .venv",
                     *dependency_setup,
@@ -483,22 +566,47 @@ async def _command(
         },
     )
     captured = bytearray()
-    pending = ""
+    from vla_platform.compute.streams import BoundedLines
+
+    framing = BoundedLines()
+    private_key_block = False
 
     async def process_line(line):
+        nonlocal written, private_key_block
         if not line:
             return
+        from vla_platform.job_observability import redact
+
+        private = private_key_block or "-----BEGIN " in line and "PRIVATE KEY-----" in line
+        private_key_block = private and "-----END " not in line
+        safe = "[redacted private key]" if private else redact(line)
+        logger = _RUN_LOGGER.get()
+        if logger:
+            logged = await logger(safe)
+            if isinstance(logged, str):
+                safe = logged
+        # One canonical representation feeds capture, legacy logs and callbacks.
+        # Preserve the existing split-secret stream marker at every boundary.
+        safe = re.sub(r"\[redacted\]", "[REDACTED]", safe, flags=re.I)
+        encoded = (safe + "\n").encode()
+        if len(captured) < MAX_LOG_BYTES:
+            captured.extend(encoded[: MAX_LOG_BYTES - len(captured)])
+        if written < MAX_LOG_BYTES:
+            part = encoded[: MAX_LOG_BYTES - written]
+            log.write(part)
+            log.flush()
+            written += len(part)
         if on_line:
-            await on_line(line)
+            await on_line(safe)
         if not on_event:
             return
         # SkyPilot may prefix job-log lines. Progress content is parsed strictly
         # and never treated as executable text.
-        start = line.find("{")
+        start = safe.find("{")
         if start < 0:
             return
         try:
-            item = json.loads(line[start:])
+            item = json.loads(safe[start:])
         except ValueError:
             return
         if isinstance(item, dict) and (
@@ -521,21 +629,10 @@ async def _command(
         async with asyncio.timeout(timeout):
             with log_path.open("ab") as log:
                 async for chunk in _safe_output(process.stdout, (*_RUN_SECRETS.get(), *secrets)):
-                    if len(captured) < MAX_LOG_BYTES:
-                        captured.extend(chunk[: MAX_LOG_BYTES - len(captured)])
-                    if written < MAX_LOG_BYTES:
-                        part = chunk[: MAX_LOG_BYTES - written]
-                        log.write(part)
-                        log.flush()
-                        written += len(part)
-                    if on_event or on_line:
-                        pending += chunk.decode("utf-8", errors="replace")
-                        lines = re.split(r"\r\n|\r|\n", pending)
-                        pending = lines.pop()[-16384:]
-                        for line in lines:
-                            await process_line(line)
-                if pending:
-                    await process_line(pending)
+                    for line in framing.feed(chunk):
+                        await process_line(line)
+                for line in framing.finish():
+                    await process_line(line)
                 await process.wait()
         return process.returncode, captured.decode("utf-8", errors="replace")
     finally:
@@ -951,7 +1048,7 @@ async def cleanup(stage_dir: Path, state: dict, *, on_event: Event | None = None
     state["phase"] = "cleaning_up"
     _write_json(stage_dir / STATE_NAME, state)
     if on_event:
-        await on_event(f"Stopping Google Cloud resources for {cluster}")
+        await on_event(f"Stopping owned compute resources for {cluster}")
     try:
         sky = executable()
         discovery_failed = False
@@ -1048,13 +1145,21 @@ async def cleanup(stage_dir: Path, state: dict, *, on_event: Event | None = None
 
 
 async def run(
-    payload: dict, stage_dir: Path, target: dict, on_event: Event, *, hf_token: str | None = None
+    payload: dict,
+    stage_dir: Path,
+    target: dict,
+    on_event: Event,
+    *,
+    hf_token: str | None = None,
+    on_log: Event | None = None,
 ) -> int:
     context = _RUN_SECRETS.set((hf_token,) if hf_token else ())
+    log_context = _RUN_LOGGER.set(on_log if on_log is not None else _RUN_LOGGER.get())
     try:
         return await _run(payload, stage_dir, target, on_event, hf_token=hf_token)
     finally:
         _RUN_SECRETS.reset(context)
+        _RUN_LOGGER.reset(log_context)
 
 
 async def ensure_cloud_storage(sky, target):
@@ -1123,22 +1228,26 @@ async def _run(
 ) -> int:
     sky = executable()
     endpoint = validate_endpoint(target.get("sky_api_endpoint"))
-    verified = await cloud_compute_catalog.verify_sky_target(
-        sky,
-        target["project_id"],
-        endpoint=endpoint,
-    )
-    if (
-        verified["workspace"] != target.get("workspace")
-        or validate_endpoint(verified["sky_api_endpoint"]) != endpoint
-    ):
-        raise ValueError("The queued run's SkyPilot workspace no longer matches its cloud project")
-    await on_event("Preparing private Google Cloud checkpoint storage")
-    bucket = await ensure_cloud_storage(sky, target)
-    target = {
-        **target,
-        "storage_uri": bucket.strip() + "/jobs/" + payload["job_id"] + "/" + stage_dir.name,
-    }
+    generic = "infrastructure" in target
+    if not generic or target["infrastructure"] == "gcp":
+        verified = await cloud_compute_catalog.verify_sky_target(
+            sky,
+            target["project_id"],
+            endpoint=endpoint,
+        )
+        if (
+            verified["workspace"] != target.get("workspace")
+            or validate_endpoint(verified["sky_api_endpoint"]) != endpoint
+        ):
+            raise ValueError(
+                "The queued run's SkyPilot workspace no longer matches its cloud project"
+            )
+        await on_event("Preparing private Google Cloud checkpoint storage")
+        bucket = await ensure_cloud_storage(sky, target)
+        target = {
+            **target,
+            "storage_uri": bucket.strip() + "/jobs/" + payload["job_id"] + "/" + stage_dir.name,
+        }
     task_path, state = await asyncio.to_thread(prepare, payload, stage_dir, target)
     state_path = stage_dir / STATE_NAME
     timeout = payload["parameters"].get("timeout_seconds", 7200)
@@ -1146,8 +1255,7 @@ async def _run(
         state["phase"] = "launching"
         _write_json(state_path, state)
         await on_event(
-            f"Provisioning {target['accelerator']}:1 on Google Cloud · "
-            f"{target['project_id']} · {target['region']}"
+            f"Provisioning {target['accelerator']}:1 on {target.get('label', 'Google Cloud')}"
         )
         code, output = await _command(
             [
@@ -1178,7 +1286,8 @@ async def _run(
         request = re.search(r"Submitted sky\.launch request: ([a-f0-9-]{8,64})", output)
         if code or request is None:
             raise RuntimeError(
-                "SkyPilot could not submit the cloud launch. Check the worker log and GCP setup."
+                "SkyPilot could not submit the launch. "
+                "Check job logs and configured infrastructure."
             )
         state["request_id"] = request[1]
         _write_json(state_path, state)
@@ -1203,7 +1312,9 @@ async def _run(
         state["phase"] = "training"
         _write_json(state_path, state)
         await on_event(
-            "Quantizing on Google Cloud"
+            f"Running {payload['operation']} on {target.get('label', target['infrastructure'])}"
+            if generic
+            else "Quantizing on Google Cloud"
             if payload["operation"] == "policy.quantize"
             else "Evaluating on Google Cloud"
             if payload["operation"] == "policy.evaluate"

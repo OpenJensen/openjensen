@@ -1,3 +1,4 @@
+import { openModuleTask } from './work-job-controls';
 import { fulfillApplicationUpdateRead } from './application-update-controls';
 import { selectProject } from './project-controls';
 import { expect, test, type Page } from '@playwright/test';
@@ -53,6 +54,7 @@ test('data tools are first-class pages with clear return paths and no job submis
     await expect(page.locator('.workflow-panel')).toHaveCount(0);
   }
   await navigation.getByRole('link', { name: 'Augmentation', exact: true }).click();
+  await openModuleTask(page);
   await page.getByRole('button', { name: 'Import a dataset', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Datasets', level: 1, exact: true })).toBeVisible();
   expect(mutations).toEqual([]);
@@ -61,6 +63,7 @@ test('data tools are first-class pages with clear return paths and no job submis
 test('run choices are visible, keyboard accessible and stay within a narrow screen', async ({ page }, testInfo) => {
   const mutations = await workspace(page);
   await page.getByRole('link', { name: 'Run', exact: true }).click();
+  await openModuleTask(page);
   const choices = page.getByRole('group', { name: 'Run mode', exact: true });
   await expect(choices.getByRole('button')).toHaveCount(3);
   for (const name of ['3D simulation', 'Replay observations', 'Check inference']) {
@@ -142,6 +145,7 @@ test('the contextual guide covers every section and keeps API docs separate', as
   const sections = page.locator('.guide-sections > section');
   const expectedSections = [
     'Dashboard',
+    'Jobs',
     'Models',
     'Datasets',
     'Real to sim',
@@ -207,6 +211,7 @@ test('fresh workflows require explicit model and runner choices', async ({ page 
   await expect(page.getByRole('region', { name: 'Native ACT quantization', exact: true })).toHaveCount(0);
 
   await page.getByRole('link', { name: 'Run', exact: true }).click();
+  await openModuleTask(page);
   const runners = page.getByRole('group', { name: 'Run mode', exact: true });
   for (const name of ['3D simulation', 'Replay observations', 'Check inference']) {
     await expect(runners.getByRole('button', { name, exact: true })).toHaveAttribute('aria-pressed', 'false');

@@ -248,7 +248,7 @@ class PublicRuntime(StrictRecord):
     unavailable_reason: str | None = None
     launchable: bool = True
     needs_preparation: bool = False
-    provider: Literal["local", "gcp"]
+    provider: Literal["local", "gcp", "ssh", "runpod", "nebius", "slurm"]
     provider_label: str
     region: str | None
     enabled: bool

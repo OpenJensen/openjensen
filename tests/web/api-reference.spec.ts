@@ -870,6 +870,7 @@ async function mockTrainingWorkspace(
         '/api/v1/capabilities': [],
         '/api/v1/modules': installedModules,
         '/api/v1/datasets': [],
+        '/api/v1/compute-targets': { schema_version: 1, targets: [], runtime_options: [], connection_refs: [] },
         '/api/v1/compute-settings/local/setup': {
           status: 'idle',
           stage: '',
@@ -1748,7 +1749,7 @@ test('blank dataset revision uses latest and reused inspections keep one history
   expect(previews).toEqual(['index', 'episode']);
 });
 
-test('visiting Cloud & APIs preserves the draft through the jobs-first entry', async ({ page }) => {
+test('visiting compute settings preserves the draft through the jobs-first entry', async ({ page }) => {
   const { submitted, unexpectedRequests } = await mockTrainingWorkspace(page, {
     runtimes: trainingRuntimes.filter((runtime) => runtime.accelerator !== 'T4'),
   });
@@ -1764,8 +1765,8 @@ test('visiting Cloud & APIs preserves the draft through the jobs-first entry', a
   await page.getByRole('spinbutton', { name: 'Steps', exact: true }).fill('123');
   await page.getByRole('spinbutton', { name: 'Batch size', exact: true }).fill('2');
   await page.getByRole('button', { name: 'Connect account', exact: true }).click();
-  await expect(page).toHaveURL(/\/cloud-apis\/$/);
-  await expect(page.getByRole('region', { name: 'Google Cloud', exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/\/settings\/$/);
+  await expect(page.getByRole('heading', { name: 'Compute targets', exact: true })).toBeVisible();
   await expect(page.getByRole('navigation', { name: 'Training setup', exact: true })).toBeHidden();
   await page.getByRole('link', { name: 'Fine-tune', exact: true }).click();
   await page.getByRole('button', { name: 'Start a new fine-tuning', exact: true }).click();

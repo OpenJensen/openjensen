@@ -46,6 +46,7 @@ class LocalWorkerSetup:
         self.state = LocalSetupState()
         self.task = None
         self.process = None
+        self.activate_module = False
         self.lock = asyncio.Lock()
         if self.path.is_file() and not self.path.is_symlink() and self.path.stat().st_size < 16384:
             try:
@@ -108,10 +109,11 @@ class LocalWorkerSetup:
             return False
         return True
 
-    async def start(self):
+    async def start(self, *, activate_module=False):
         async with self.lock:
             if self.task and not self.task.done():
                 return self.public()
+            self.activate_module = activate_module
             root = _worker_root()
             if platform.system() != "Linux" or platform.machine() not in {"x86_64", "AMD64"}:
                 raise ValueError("Automatic NVIDIA setup requires Linux x86-64.")
@@ -158,6 +160,7 @@ class LocalWorkerSetup:
                     message="The local SmolVLA worker is already installed and added.",
                     finished_at=now(),
                 )
+                self._activate_feature()
                 self._save()
                 return self.public()
             self.state = LocalSetupState(
@@ -196,6 +199,7 @@ class LocalWorkerSetup:
             UV_NO_CONFIG="1",
             UV_DEFAULT_INDEX="https://pypi.org/simple",
             UV_LINK_MODE="copy",
+            UV_NO_CACHE="1",
             PYTHONDONTWRITEBYTECODE="1",
         )
         descriptor = os.open(
@@ -232,6 +236,12 @@ class LocalWorkerSetup:
             await self._stop(process)
             self.process = None
 
+    def _activate_feature(self):
+        if self.activate_module:
+            from vla_platform.modules import set_module_installed
+
+            set_module_installed(self.lifecycle.settings.data_dir, "training", True)
+
     async def _install(self, root, uv, destination):
         try:
             if not (destination / "bin/python").is_file():
@@ -266,6 +276,7 @@ class LocalWorkerSetup:
                 )
             runtime = await self.discovery.add(candidate.id)
             self.state.runtime_id = runtime.id
+            self._activate_feature()
             self.state.status = "succeeded"
             self.state.message = (
                 "SmolVLA is installed and added. Enable local runs when you are ready."
@@ -282,6 +293,28 @@ class LocalWorkerSetup:
         finally:
             self.state.finished_at = now()
             self._save()
+
+    def remove(self):
+        """Delete the managed training environment while retaining worker configuration."""
+        if self.lock.locked() or (self.task and not self.task.done()):
+            raise ValueError("Finish or cancel training setup before uninstalling.")
+        target = self.directory / "smolvla-cu126"
+        if self.directory.is_symlink() or target.is_symlink():
+            raise ValueError("Managed environments must not be symbolic links.")
+        if not target.exists():
+            return False
+        runtime = self.lifecycle.catalog.runtime(self.state.runtime_id)
+        if runtime is None or runtime.training_python != str(target / "bin/python"):
+            raise ValueError("This training environment needs administrator review before removal.")
+        from vla_platform.module_installations import require_runtime_unused
+
+        require_runtime_unused(target)
+        shutil.rmtree(target)
+        self.state = LocalSetupState(
+            message="Managed training packages uninstalled. Saved data and configuration are kept."
+        )
+        self._save()
+        return True
 
     async def cancel(self):
         async with self.lock:

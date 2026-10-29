@@ -572,6 +572,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/compute-targets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Targets */
+        get: operations["targets_api_v1_compute_targets_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/compute-targets/{ident}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Save */
+        put: operations["save_api_v1_compute_targets__ident__put"];
+        post?: never;
+        /** Remove */
+        delete: operations["remove_api_v1_compute_targets__ident__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/compute-targets/{ident}/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Check */
+        post: operations["check_api_v1_compute_targets__ident__check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/dataset-uploads/{ident}": {
         parameters: {
             query?: never;
@@ -808,6 +860,40 @@ export interface paths {
         post: operations["save_huggingface_token_api_v1_huggingface_connection_post"];
         /** Delete Huggingface Token */
         delete: operations["delete_huggingface_token_api_v1_huggingface_connection_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/job-diagnostics-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Settings */
+        get: operations["settings_api_v1_job_diagnostics_settings_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/job-operations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Operations */
+        get: operations["operations_api_v1_job_operations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1649,6 +1735,109 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects/{project_id}/work-jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** History */
+        get: operations["history_api_v1_projects__project_id__work_jobs_get"];
+        put?: never;
+        /** Submit */
+        post: operations["submit_api_v1_projects__project_id__work_jobs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/work-jobs/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Detail */
+        get: operations["detail_api_v1_projects__project_id__work_jobs__key__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/work-jobs/{key}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel */
+        post: operations["cancel_api_v1_projects__project_id__work_jobs__key__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/work-jobs/{key}/diagnostics.zip": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Diagnostics */
+        get: operations["diagnostics_api_v1_projects__project_id__work_jobs__key__diagnostics_zip_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/work-jobs/{key}/failure": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Failure */
+        get: operations["failure_api_v1_projects__project_id__work_jobs__key__failure_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/work-jobs/{key}/logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Logs */
+        get: operations["logs_api_v1_projects__project_id__work_jobs__key__logs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/robot-lab/agent/acquire": {
         parameters: {
             query?: never;
@@ -1964,6 +2153,23 @@ export interface paths {
         };
         /** Robot Lab Get Devices */
         get: operations["robot_lab_get_devices"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/robot-lab/diagnostics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Robot Lab Get Diagnostics */
+        get: operations["robot_lab_get_diagnostics"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3289,6 +3495,63 @@ export interface components {
             gcp?: components["schemas"]["GcpComputeSettings"] | null;
             local?: components["schemas"]["LocalComputeSettings"] | null;
         };
+        /** ComputeTarget */
+        ComputeTarget: {
+            /** Account */
+            account?: string | null;
+            /**
+             * Adapter
+             * @default local
+             * @enum {string}
+             */
+            adapter: "local" | "skypilot";
+            /** Connection Ref */
+            connection_ref?: string | null;
+            /**
+             * Enabled
+             * @default false
+             */
+            enabled: boolean;
+            /** Id */
+            id: string;
+            /**
+             * Infrastructure
+             * @default local
+             * @enum {string}
+             */
+            infrastructure: "local" | "ssh" | "gcp" | "runpod" | "nebius" | "slurm";
+            /** Label */
+            label: string;
+            /** Location */
+            location?: string | null;
+            /**
+             * Operations
+             * @default []
+             */
+            operations: string[];
+            /** Partition */
+            partition?: string | null;
+            /** Qos */
+            qos?: string | null;
+            resources?: components["schemas"]["TargetResources"];
+            /** Runtime Id */
+            runtime_id: string;
+        };
+        /** ComputeTargetList */
+        ComputeTargetList: {
+            /** Connection Refs */
+            connection_refs: string[];
+            /** Runtime Options */
+            runtime_options: components["schemas"]["TargetRuntimeOption"][];
+            /**
+             * Schema Version
+             * @default 1
+             * @constant
+             */
+            schema_version: 1;
+            /** Targets */
+            targets: components["schemas"]["PublicComputeTarget"][];
+        };
         /** Context */
         Context: {
             /** Episode Id */
@@ -3319,6 +3582,13 @@ export interface components {
              * @default Recorded robot task
              */
             task: string;
+        };
+        /** Criterion */
+        Criterion: {
+            /** Id */
+            id: string;
+            /** Text */
+            text: string;
         };
         /** DatasetProfile */
         DatasetProfile: {
@@ -3420,6 +3690,26 @@ export interface components {
                 [key: string]: number;
             };
             receipt: components["schemas"]["Provenance"];
+        };
+        /** DecisionRequest */
+        DecisionRequest: {
+            /** Criteria */
+            criteria: components["schemas"]["Criterion"][];
+            /** Instructions */
+            instructions: string;
+            /**
+             * Operation
+             * @default decision.score
+             * @constant
+             */
+            operation: "decision.score";
+            /**
+             * Schema Version
+             * @constant
+             */
+            schema_version: 1;
+            /** State */
+            state: string;
         };
         /** DecisionStatus */
         DecisionStatus: {
@@ -3574,6 +3864,32 @@ export interface components {
             record: {
                 [key: string]: unknown;
             };
+        };
+        /** ExecutionBinding */
+        ExecutionBinding: {
+            /** Accelerator */
+            accelerator?: string | null;
+            /** Adapter */
+            adapter: string;
+            /** Connection Sha256 */
+            connection_sha256?: string | null;
+            /**
+             * Gpu Count
+             * @default 0
+             */
+            gpu_count: number;
+            /** Infrastructure */
+            infrastructure: string;
+            /** Label */
+            label: string;
+            /** Runtime Sha256 */
+            runtime_sha256?: string | null;
+            /** Target Id */
+            target_id: string;
+            /** Target Snapshot */
+            target_snapshot?: {
+                [key: string]: unknown;
+            } | null;
         };
         /** ExecutionEvidence */
         ExecutionEvidence: {
@@ -3733,6 +4049,8 @@ export interface components {
             id: string;
             /** Message */
             message: string;
+            /** Module */
+            module?: ("datasets" | "robot-lab" | "decision-lab") | null;
             /** Pid */
             pid?: number | null;
             /**
@@ -3752,6 +4070,11 @@ export interface components {
         };
         /** InstallRequest */
         InstallRequest: {
+            /**
+             * Activate Module
+             * @default false
+             */
+            activate_module: boolean;
             /** Operation Id */
             operation_id: string;
             /**
@@ -3799,6 +4122,7 @@ export interface components {
         };
         /** Job */
         Job: {
+            cancellation?: components["schemas"]["JobCancellation"] | null;
             compute_target?: components["schemas"]["CloudExecutionTarget"] | null;
             /**
              * Created At
@@ -3807,6 +4131,7 @@ export interface components {
             created_at: string;
             /** Error */
             error?: string | null;
+            execution?: components["schemas"]["ExecutionBinding"] | null;
             /** Id */
             id: string;
             /**
@@ -3817,9 +4142,9 @@ export interface components {
             /** Project Id */
             project_id: string;
             /** Request */
-            request: components["schemas"]["IntakeRequest"] | components["schemas"]["PolicyRequest"] | components["schemas"]["AugmentationRequest"] | components["schemas"]["TeachingCaptureRequest"] | components["schemas"]["SceneRequest"];
+            request: components["schemas"]["IntakeRequest"] | components["schemas"]["PolicyRequest"] | components["schemas"]["AugmentationRequest"] | components["schemas"]["TeachingCaptureRequest"] | components["schemas"]["DecisionRequest"] | components["schemas"]["SceneRequest"];
             /** Result */
-            result?: components["schemas"]["DatasetProfile"] | components["schemas"]["LifecycleResult"] | components["schemas"]["AugmentationResult"] | components["schemas"]["TeachingCaptureResult"] | components["schemas"]["SceneJobResult"] | null;
+            result?: components["schemas"]["DatasetProfile"] | components["schemas"]["LifecycleResult"] | components["schemas"]["AugmentationResult"] | components["schemas"]["TeachingCaptureResult"] | components["schemas"]["ScoreResult"] | components["schemas"]["SceneJobResult"] | null;
             simulation_target?: components["schemas"]["SimulationTarget"] | null;
             /** Stage */
             stage?: string | null;
@@ -3835,6 +4160,22 @@ export interface components {
              */
             updated_at: string;
         };
+        /** JobCancellation */
+        JobCancellation: {
+            /**
+             * Cleanup
+             * @default pending
+             * @enum {string}
+             */
+            cleanup: "pending" | "succeeded" | "failed";
+            /** Finished At */
+            finished_at?: string | null;
+            /**
+             * Requested At
+             * Format: date-time
+             */
+            requested_at: string;
+        };
         /** JobEvent */
         JobEvent: {
             /** Data */
@@ -3849,6 +4190,114 @@ export interface components {
             stage: string;
             /** Timestamp */
             timestamp: string;
+        };
+        /** JobFailure */
+        JobFailure: {
+            /**
+             * Attempt Id
+             * @default 1
+             */
+            attempt_id: string;
+            /** Cause */
+            cause?: string | null;
+            /**
+             * Cleanup
+             * @default unknown
+             * @enum {string}
+             */
+            cleanup: "unknown" | "pending" | "succeeded" | "failed";
+            /** Code */
+            code: string;
+            /** Exit Code */
+            exit_code?: number | null;
+            /** Message */
+            message: string;
+            /**
+             * Retryable
+             * @default false
+             */
+            retryable: boolean;
+            /** Stage */
+            stage: string;
+            /** Timestamp */
+            timestamp: string;
+        };
+        /** JobLink */
+        JobLink: {
+            /** Label */
+            label: string;
+            /** Url */
+            url: string;
+        };
+        /** JobLogPage */
+        JobLogPage: {
+            /** Available */
+            available: boolean;
+            /**
+             * Discarded Records
+             * @default 0
+             */
+            discarded_records: number;
+            /** Has More */
+            has_more: boolean;
+            /** Next Cursor */
+            next_cursor: number;
+            /** Records */
+            records: components["schemas"]["JobLogRecord"][];
+            /** Retained From */
+            retained_from: number | null;
+            /** Truncated */
+            truncated: boolean;
+        };
+        /** JobLogRecord */
+        JobLogRecord: {
+            /** Attempt Id */
+            attempt_id: string;
+            /** Component */
+            component: string;
+            /** Data */
+            data?: {
+                [key: string]: unknown;
+            };
+            /** Job Id */
+            job_id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "event" | "log";
+            /** Message */
+            message: string;
+            /** Sequence */
+            sequence: number;
+            /**
+             * Severity
+             * @enum {string}
+             */
+            severity: "debug" | "info" | "warning" | "error";
+            /** Stage */
+            stage?: string | null;
+            /** Stream */
+            stream?: ("stdout" | "stderr") | null;
+            /** Timestamp */
+            timestamp: string;
+        };
+        /** JobOperation */
+        JobOperation: {
+            /** Id */
+            id: string;
+            /** Module */
+            module: string;
+            /** Path */
+            path: string;
+            /**
+             * Submission
+             * @default job
+             * @enum {string}
+             */
+            submission: "job" | "interactive" | "upload";
+            /** Title */
+            title: string;
         };
         JsonValue: unknown;
         /** Labels */
@@ -4213,6 +4662,29 @@ export interface components {
             /** Units */
             units: string[];
         };
+        /** ObservabilityPolicy */
+        ObservabilityPolicy: {
+            /**
+             * Max Event Records
+             * @default 10000
+             */
+            max_event_records: number;
+            /**
+             * Max Log Bytes
+             * @default 16777216
+             */
+            max_log_bytes: number;
+            /**
+             * Max Record Bytes
+             * @default 16384
+             */
+            max_record_bytes: number;
+            /**
+             * Retention Days
+             * @default 30
+             */
+            retention_days: number;
+        };
         /**
          * ParityLimits
          * @description Operator-declared tolerances; no unmeasured universal default.
@@ -4309,6 +4781,8 @@ export interface components {
             /** Dataset Job Ids */
             dataset_job_ids?: string[] | null;
             evaluation?: components["schemas"]["Evaluation"];
+            /** Execution Target Id */
+            execution_target_id?: string | null;
             limits?: components["schemas"]["Limits"] | null;
             native_distillation?: components["schemas"]["NativeDistillation"] | null;
             native_quantization?: components["schemas"]["NativeQuantization"] | null;
@@ -4483,6 +4957,25 @@ export interface components {
             /** Saved */
             saved: boolean;
         };
+        /** PublicComputeTarget */
+        PublicComputeTarget: {
+            /** Checked At */
+            checked_at?: string | null;
+            definition: components["schemas"]["ComputeTarget"];
+            /** Launchable */
+            launchable: boolean;
+            /** Message */
+            message: string;
+            /** Operations */
+            operations: string[];
+            /** Sha256 */
+            sha256: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "disabled" | "setup_required" | "configured" | "error";
+        };
         /** PublicRuntime */
         PublicRuntime: {
             /** Accelerator */
@@ -4567,7 +5060,7 @@ export interface components {
              * Provider
              * @enum {string}
              */
-            provider: "local" | "gcp";
+            provider: "local" | "gcp" | "ssh" | "runpod" | "nebius" | "slurm";
             /** Provider Label */
             provider_label: string;
             /** Region */
@@ -4875,6 +5368,11 @@ export interface components {
              * @enum {string}
              */
             location: "server" | "companion";
+            /**
+             * Managed
+             * @default false
+             */
+            managed: boolean;
             /** Message */
             message: string;
             /** Minimum Free Gib */
@@ -5319,6 +5817,63 @@ export interface components {
             /** Source Manifest Sha256 */
             source_manifest_sha256: string;
         };
+        /** TargetResources */
+        TargetResources: {
+            /** Accelerator */
+            accelerator?: string | null;
+            /**
+             * Concurrency
+             * @default 1
+             */
+            concurrency: number;
+            /**
+             * Cpus
+             * @default 2
+             */
+            cpus: number;
+            /**
+             * Disk Gib
+             * @default 100
+             */
+            disk_gib: number;
+            /**
+             * Gpu Count
+             * @default 0
+             */
+            gpu_count: number;
+            /**
+             * Memory Gib
+             * @default 4
+             */
+            memory_gib: number;
+            /**
+             * Timeout Seconds
+             * @default 7200
+             */
+            timeout_seconds: number;
+        };
+        /** TargetRuntimeOption */
+        TargetRuntimeOption: {
+            /** Accelerator */
+            accelerator?: string | null;
+            /**
+             * Device
+             * @default cpu
+             * @enum {string}
+             */
+            device: "cpu" | "cuda";
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Operations */
+            operations: string[];
+            /**
+             * Remote Only
+             * @default false
+             */
+            remote_only: boolean;
+        };
         /** TaskReview */
         TaskReview: {
             /** Authority Epoch */
@@ -5628,6 +6183,76 @@ export interface components {
         VoiceJoin: {
             /** Session Id */
             session_id: string;
+        };
+        /** WorkEvent */
+        WorkEvent: {
+            /** Message */
+            message: string;
+            /** Stage */
+            stage: string;
+            /** Timestamp */
+            timestamp: string;
+        };
+        /** WorkJob */
+        WorkJob: {
+            /**
+             * Can Cancel
+             * @default false
+             */
+            can_cancel: boolean;
+            /** Created At */
+            created_at: string;
+            /** Events */
+            events?: components["schemas"]["WorkEvent"][];
+            execution?: components["schemas"]["ExecutionBinding"] | null;
+            /** Id */
+            id: string;
+            /** Inputs */
+            inputs?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+            /** Message */
+            message?: string | null;
+            /** Module */
+            module: string;
+            /** Operation */
+            operation: string;
+            /** Outputs */
+            outputs?: components["schemas"]["JobLink"][];
+            /** Parent Ids */
+            parent_ids?: string[];
+            /** Project Id */
+            project_id: string;
+            result?: components["schemas"]["JsonValue"];
+            /** Source Id */
+            source_id: string;
+            /** Source Status */
+            source_status: string;
+            /** Stage */
+            stage?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "running" | "cancelling" | "waiting" | "succeeded" | "failed" | "cancelled" | "interrupted";
+            /** Title */
+            title: string;
+            /** Updated At */
+            updated_at: string;
+        };
+        /** WorkSubmission */
+        WorkSubmission: {
+            /** Inputs */
+            inputs?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+            /**
+             * Operation
+             * @enum {string}
+             */
+            operation: "dataset.inspect" | "dataset.augment" | "policy.finetune" | "policy.distill" | "policy.quantize" | "policy.evaluate" | "policy.run" | "policy.export" | "policy.workflow" | "teaching.capture" | "decision.score" | "scene.generate";
+            /** Target Id */
+            target_id?: string | null;
         };
         /** WorkspaceModule */
         WorkspaceModule: {
@@ -6791,6 +7416,123 @@ export interface operations {
             };
         };
     };
+    targets_api_v1_compute_targets_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComputeTargetList"];
+                };
+            };
+        };
+    };
+    save_api_v1_compute_targets__ident__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ident: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ComputeTarget"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicComputeTarget"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_api_v1_compute_targets__ident__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ident: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    check_api_v1_compute_targets__ident__check_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ident: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicComputeTarget"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     discard_upload_api_v1_dataset_uploads__ident__delete: {
         parameters: {
             query: {
@@ -7299,6 +8041,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HuggingFaceStatus"];
+                };
+            };
+        };
+    };
+    settings_api_v1_job_diagnostics_settings_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ObservabilityPolicy"];
+                };
+            };
+        };
+    };
+    operations_api_v1_job_operations_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobOperation"][];
                 };
             };
         };
@@ -8716,7 +9498,7 @@ export interface operations {
     saved_submission_api_v1_projects__project_id__submissions__key__get: {
         parameters: {
             query: {
-                operation: "teaching.capture" | "dataset.inspect" | "dataset.augment" | "scene.generate" | "policy.finetune" | "policy.distill" | "policy.quantize" | "policy.evaluate" | "policy.run" | "policy.export" | "policy.workflow" | "policy.import";
+                operation: "decision.score" | "teaching.capture" | "dataset.inspect" | "dataset.augment" | "scene.generate" | "policy.finetune" | "policy.distill" | "policy.quantize" | "policy.evaluate" | "policy.run" | "policy.export" | "policy.workflow" | "policy.import";
             };
             header?: never;
             path: {
@@ -9048,6 +9830,246 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    history_api_v1_projects__project_id__work_jobs_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+                module?: string | null;
+                status?: string;
+                q?: string;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkJob"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    submit_api_v1_projects__project_id__work_jobs_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "idempotency-key": string;
+            };
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkSubmission"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkJob"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    detail_api_v1_projects__project_id__work_jobs__key__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkJob"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_api_v1_projects__project_id__work_jobs__key__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkJob"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    diagnostics_api_v1_projects__project_id__work_jobs__key__diagnostics_zip_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    failure_api_v1_projects__project_id__work_jobs__key__failure_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobFailure"] | null;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    logs_api_v1_projects__project_id__work_jobs__key__logs_get: {
+        parameters: {
+            query?: {
+                after?: number;
+                limit?: number;
+                severity?: ("debug" | "info" | "warning" | "error") | null;
+                stream?: ("stdout" | "stderr") | null;
+                query?: string | null;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobLogPage"];
                 };
             };
             /** @description Validation Error */
@@ -9433,6 +10455,26 @@ export interface operations {
         };
     };
     robot_lab_get_devices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    robot_lab_get_diagnostics: {
         parameters: {
             query?: never;
             header?: never;

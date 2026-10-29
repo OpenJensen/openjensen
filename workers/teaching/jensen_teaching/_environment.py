@@ -1,6 +1,7 @@
-"""Canonical OPEN JENSEN settings with read compatibility for alpha deployments."""
+"""Canonical OpenJensen settings with read compatibility for alpha deployments."""
 
 import os
+from collections.abc import Mapping
 
 
 def getenv(name: str, default: str | None = None) -> str | None:
@@ -18,6 +19,18 @@ def getenv(name: str, default: str | None = None) -> str | None:
     else:
         return os.environ.get(name, default)
     return os.environ.get(canonical, os.environ.get(legacy, default))
+
+
+def canonical_environment(source: Mapping[str, str]) -> dict[str, str]:
+    """Copy source so each FIREBIRD_* value is also readable as JENSEN_*.
+
+    An explicit JENSEN_* value, even an empty one, wins over its alias.
+    """
+    result = dict(source)
+    for name, value in source.items():
+        if name.startswith("FIREBIRD_"):
+            result.setdefault("JENSEN_" + name.removeprefix("FIREBIRD_"), value)
+    return result
 
 
 def required_env(name: str) -> str:

@@ -14,6 +14,7 @@ export type DistillationModel = 'act';
 
 type Props = {
   projectId: string;
+  startNew?: boolean;
   model?: DistillationModel;
   preferredTeacherArtifactId?: string;
   onSelectModel: (model: DistillationModel | undefined, artifactId?: string) => void;
@@ -27,6 +28,7 @@ type Props = {
 /** Distillation is a workflow; the ACT implementation is one supported adapter. */
 export function DistillationPanel({
   projectId,
+  startNew,
   model,
   preferredTeacherArtifactId,
   onSelectModel,
@@ -55,7 +57,7 @@ export function DistillationPanel({
     unreadable: false,
   });
   const [preferredJobId, setPreferredJobId] = useState<string | undefined>(requestedJobId);
-  const [view, setView] = useState<'jobs' | 'new'>(model || requestedJobId ? 'new' : 'jobs');
+  const [view, setView] = useState<'jobs' | 'new'>(model || requestedJobId || startNew ? 'new' : 'jobs');
   useEffect(() => {
     if (!projectId || model) return;
     try {
@@ -98,7 +100,7 @@ export function DistillationPanel({
     );
 
   return (
-    <section className="distillation-overview" aria-label="Distillation workspace">
+    <section className="distillation-overview" aria-label="Distillation setup">
       {view === 'jobs' ? (
         <JobHistory
           title="Distillation jobs"

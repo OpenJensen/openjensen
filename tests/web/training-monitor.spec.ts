@@ -1111,14 +1111,17 @@ test('ACT export-only computer never appears as an engine execution target', asy
     ['Quantize', 'New quantization'],
   ]) {
     await page.getByRole('link', { name: stage, exact: true }).click();
-    if (stage === 'Run') await page.getByRole('button', { name: 'Check inference', exact: true }).click();
+    if (stage === 'Run') {
+      await page.getByRole('button', { name: 'New run', exact: true }).click();
+      await page.getByRole('button', { name: 'Check inference', exact: true }).click();
+    }
     if (stage === 'Quantize') {
       await page.getByRole('button', { name: 'Start a new quantization', exact: true }).click();
       await expect(page.locator('.model-overview-card[data-artifact-id="checkpoint-artifact"]')).toBeDisabled();
       await expect(page.getByRole('button', { name: 'ACT', exact: true })).toHaveCount(0);
       continue;
     }
-    await page.getByRole('button', { name: create, exact: true }).click();
+    if (stage !== 'Run') await page.getByRole('button', { name: create, exact: true }).click();
     const target = page.getByRole('group', { name: 'Compute', exact: true });
     await expect(target).not.toContainText('Local CPU export');
     if (stage !== 'Quantize') await expect(target.getByRole('radio')).toHaveCount(0);

@@ -1,3 +1,4 @@
+import { fulfillWorkJobRead, openModuleTask } from './work-job-controls';
 import { expect, test, type Page } from '@playwright/test';
 import { fulfillApplicationUpdateRead } from './application-update-controls';
 import { installedModules } from './module-fixtures';
@@ -183,6 +184,7 @@ async function fixture(
   ];
   await page.route('**/api/v1/**', async (route) => {
     if (await fulfillApplicationUpdateRead(route)) return;
+    if (await fulfillWorkJobRead(route)) return;
     const request = route.request(),
       path = new URL(request.url()).pathname.replace('/api/v1', '');
     if (request.method() !== 'GET') requests.push({ path, body: request.postData() ? request.postDataJSON() : {} });
@@ -406,6 +408,7 @@ async function fixture(
 
 async function startReplay(page: Page) {
   await page.goto('/ai-teleoperation/');
+  await openModuleTask(page);
   await page.getByRole('combobox', { name: 'Agent target', exact: true }).selectOption('replay');
   await expect(page.getByRole('combobox', { name: 'Agent target', exact: true })).toBeVisible();
   await page.getByLabel('Task goal', { exact: true }).fill('Move shoulder by 0.03 radians');
@@ -482,6 +485,7 @@ test('an abstract goal starts the bounded task loop and model completion needs s
 }) => {
   const { requests } = await fixture(page, { planningMode: 'task' });
   await page.goto('/ai-teleoperation/');
+  await openModuleTask(page);
   await expect(page.getByRole('combobox', { name: 'Agent target', exact: true })).toBeVisible();
   await page.getByRole('combobox', { name: 'Agent target', exact: true }).selectOption('replay');
   const goal = 'Pick up the object and place it in the tray';
@@ -520,6 +524,7 @@ test('selecting physical control without a governed companion never enables moti
 }) => {
   const { requests } = await fixture(page);
   await page.goto('/ai-teleoperation/');
+  await openModuleTask(page);
   await expect(page.getByRole('combobox', { name: 'Agent target', exact: true })).toBeVisible();
   await page.getByLabel('Task goal', { exact: true }).fill('Pick up the object');
   await page.getByRole('combobox', { name: 'Agent target', exact: true }).selectOption('replay');
@@ -534,6 +539,7 @@ test('selecting physical control without a governed companion never enables moti
 
 async function connectPhysical(page: Page) {
   await page.goto('/ai-teleoperation/');
+  await openModuleTask(page);
   await expect(page.getByRole('combobox', { name: 'Agent target', exact: true })).toBeVisible();
   await page.getByLabel('Task goal', { exact: true }).fill('Pick up the object');
   await page.getByRole('combobox', { name: 'Agent target', exact: true }).selectOption('robot_lab');
@@ -731,6 +737,7 @@ test('AI teleoperation opens physical preparation without starting a simulator, 
 }) => {
   const { requests, reads } = await fixture(page, { physical: true, emptyPorts: true });
   await page.goto('/ai-teleoperation/');
+  await openModuleTask(page);
   await expect(page.getByRole('combobox', { name: 'Agent target', exact: true })).toHaveValue('robot_lab');
   await expect(page.getByLabel('Task goal', { exact: true })).toBeVisible();
   const preflight = page.getByRole('region', { name: 'Physical SO101 preflight' });
@@ -759,6 +766,7 @@ test('AI teleoperation opens physical preparation without starting a simulator, 
 test('Agent Control stays visible while simulation and replay are selected', async ({ page }) => {
   const { requests } = await fixture(page);
   await page.goto('/ai-teleoperation/');
+  await openModuleTask(page);
   const target = page.getByRole('combobox', { name: 'Agent target', exact: true });
   await target.selectOption('teaching');
   await expect(page.getByRole('region', { name: 'Simulation tools', exact: true })).toBeVisible();
@@ -785,6 +793,7 @@ test('switching targets or returning to physical preparation clears operator con
 }) => {
   const { requests } = await fixture(page, { physical: true });
   await page.goto('/ai-teleoperation/');
+  await openModuleTask(page);
   const present = page.getByLabel('I am at the arm, supporting it where needed, with Stop within reach.');
   const clear = page.getByLabel(
     'The arm and its full movement path are clear; the selected camera shows the intended workspace.',
@@ -805,6 +814,7 @@ test('switching targets or returning to physical preparation clears operator con
   await clear.check();
   await page.goto('/dashboard/');
   await page.goto('/ai-teleoperation/');
+  await openModuleTask(page);
   await expect(page.getByRole('combobox', { name: 'Agent target', exact: true })).toHaveValue('robot_lab');
   await expect(present).not.toBeChecked();
   await expect(clear).not.toBeChecked();

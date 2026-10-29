@@ -21,6 +21,7 @@ REQUIREMENTS = [
 ]
 SOURCE_MODULES = (
     "dispatch.py",
+    "diagnostics.py",
     "server.py",
     "agent_control.py",
     "hardware.py",
@@ -30,6 +31,7 @@ SOURCE_MODULES = (
     "camera.py",
     "calibration_draft.py",
     "dataset.py",
+    "image_writer.py",
     "assembled.py",
     "identify.py",
     "verification.py",

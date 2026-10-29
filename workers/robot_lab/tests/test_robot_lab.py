@@ -163,7 +163,9 @@ class SafetyTests(unittest.TestCase):
             bus.raw["gripper"] = value
             self.lab._tick()
         bus.raw["gripper"] = 91
-        with self.assertRaisesRegex(HardwareError, "outside its saved range"):
+        self.lab._tick()
+        bus.raw["gripper"] = -1
+        with self.assertRaisesRegex(HardwareError, "Invalid encoder reading"):
             self.lab._tick()
 
     def test_eight_tick_observation_allowance_is_bounded_at_each_joint_endpoint(self):
@@ -199,7 +201,7 @@ class SafetyTests(unittest.TestCase):
             any(name == "Torque_Enable" and value == 1 for name, _, value in self.buses[-1].writes)
         )
 
-    def test_leader_and_handguide_observations_share_the_bounded_noise_allowance(self):
+    def test_leader_and_handguide_follow_upstream_observations_with_valid_encoders(self):
         self.start(mode="handguide")
         bus = self.buses[-1]
         bus.raw["gripper"] = 4008
@@ -215,7 +217,9 @@ class SafetyTests(unittest.TestCase):
         self.lab._tick()
         self.assertEqual(self.lab.action["gripper"], normalized("gripper", 108, CALIBRATION))
         self.lab.leader.raw["gripper"] = 91
-        with self.assertRaisesRegex(HardwareError, "outside its saved range"):
+        self.lab._tick()
+        self.lab.leader.raw["gripper"] = -1
+        with self.assertRaisesRegex(HardwareError, "Invalid encoder reading"):
             self.lab._tick()
 
     def test_probe_is_read_only_and_closes(self):

@@ -18,6 +18,7 @@ import { currentStage, precisionName, WorkflowPanel } from './workflow-panel';
  * keep their existing admission, cancellation and submission recovery logic. */
 export function QuantizationPanel({
   projectId,
+  startNew,
   preferredArtifactId,
   preferredMode,
   preferredJobId,
@@ -28,6 +29,7 @@ export function QuantizationPanel({
   onModel,
 }: {
   projectId: string;
+  startNew?: boolean;
   preferredArtifactId?: string;
   preferredMode?: QuantizeMode;
   preferredJobId?: string;
@@ -72,7 +74,7 @@ export function QuantizationPanel({
       ? { mode: preferredMode, artifactId: preferredArtifactId, modelRunId: initialArtifact?.job_id }
       : null,
   );
-  const [view, setView] = useState<'jobs' | 'new'>(preferredArtifactId ? 'new' : 'jobs');
+  const [view, setView] = useState<'jobs' | 'new'>(preferredArtifactId || startNew ? 'new' : 'jobs');
   const [handoffConsumed, setHandoffConsumed] = useState(!!(preferredArtifactId && preferredMode));
   useEffect(() => {
     try {
@@ -159,7 +161,7 @@ export function QuantizationPanel({
       />
     );
   return (
-    <section aria-label="Quantization workspace">
+    <section aria-label="Quantization setup">
       {(preferredArtifactId || preferredJobId) && !handoffConsumed && (
         <p role={artifacts.isError || jobs.isError ? 'alert' : 'status'}>
           {artifacts.isPending || jobs.isPending

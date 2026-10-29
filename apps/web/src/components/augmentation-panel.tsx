@@ -217,11 +217,13 @@ function AugmentationRun({
 export function AugmentationPanel({
   projectId,
   preferredDatasetId,
+  preferredJobId,
   onChooseDataset,
   onOpenSettings,
 }: {
   projectId: string;
   preferredDatasetId?: string;
+  preferredJobId?: string;
   onChooseDataset: () => void;
   onOpenSettings?: () => void;
 }) {
@@ -232,7 +234,10 @@ export function AugmentationPanel({
   const [start, setStart] = useState('0');
   const [duration, setDuration] = useState('5');
   const [prompt, setPrompt] = useState('');
-  const [selectedRunId, setSelectedRunId] = useState('');
+  const [selectedRunId, setSelectedRunId] = useState(preferredJobId ?? '');
+  useEffect(() => {
+    if (preferredJobId) setSelectedRunId(preferredJobId);
+  }, [preferredJobId]);
   const [reuse, setReuse] = useState<ReuseSelection | null>(null);
   const [applyJob, setApplyJob] = useState<AugmentationJob | null>(null);
   const applyRef = useRef<HTMLDivElement>(null);
@@ -387,7 +392,7 @@ export function AugmentationPanel({
     },
   });
   const runs = (jobs.data ?? []).filter(isAugmentationJob).sort((a, b) => b.created_at.localeCompare(a.created_at));
-  const selectedRun = runs.find((job) => job.id === selectedRunId) ?? runs[0];
+  const selectedRun = selectedRunId ? runs.find((job) => job.id === selectedRunId) : runs[0];
   const runLabel = (id: string) => {
     const index = runs.findIndex((job) => job.id === id);
     return index < 0 ? undefined : `Run ${runs.length - index}`;

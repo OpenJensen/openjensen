@@ -47,6 +47,8 @@ export function ModulesPanel() {
   const client = useQueryClient();
   const hasModule = (id: WorkspaceModule['id']) =>
     modules.data?.some((item) => item.id === id && item.installed) ?? false;
+  const runtimeFor = (id: WorkspaceModule['id']) =>
+    Object.entries(runtimeModules).find(([, module]) => module === id)?.[0] as InstallableProfile | undefined;
   const hasDependencies = ['datasets', 'robot-lab', 'decision-lab', 'training', 'simulation', 'teaching'].some((id) =>
     hasModule(id as WorkspaceModule['id']),
   );
@@ -79,16 +81,24 @@ export function ModulesPanel() {
   });
   const register = useMutation({
     mutationFn: api.installWorkspaceModule,
-    onSuccess: () => {
-      setMessage('Module installed.');
+    onSuccess: (_, id) => {
+      setMessage(
+        runtimeFor(id) || id === 'training'
+          ? 'Installing runtime packages. The module becomes available after verification.'
+          : 'Feature enabled. This page is built into the app and needs no download.',
+      );
       refresh();
     },
     onError: (error) => setMessage(error.message),
   });
   const uninstall = useMutation({
     mutationFn: api.uninstallWorkspaceModule,
-    onSuccess: () => {
-      setMessage('Module uninstalled. Your data and runtime dependencies are kept.');
+    onSuccess: (value) => {
+      setMessage(
+        value.runtime_removed
+          ? 'Module uninstalled and its managed runtime packages removed. Your data is kept.'
+          : 'Feature disabled. Existing shared or companion runtimes are kept. Your data is kept.',
+      );
       refresh();
     },
     onError: (error) => setMessage(error.message),
@@ -141,7 +151,9 @@ export function ModulesPanel() {
     operation?.status === 'running' ||
     training.data?.status === 'running' ||
     install.isPending ||
-    setupTraining.isPending;
+    setupTraining.isPending ||
+    register.isPending ||
+    uninstall.isPending;
   const start = (profile: InstallableProfile) => {
     // Retain the request id after an uncertain response; retry cannot start a duplicate.
     const value =
@@ -168,8 +180,9 @@ export function ModulesPanel() {
       {modules.isPending && <p role="status">Loading modules…</p>}
       {modules.error && <p role="alert">{modules.error.message}</p>}
       <p className="module-introduction">
-        Install the features you want in this workspace. Datasets and Models are included by default. Hiding changes the
-        sidebar; uninstalling removes a feature while keeping your data and runtime dependencies.
+        Install optional runtimes only when you need them. Install downloads pinned packages from upstream and verifies
+        them before use. Uninstall removes packages owned by this module manager; Hide only changes the sidebar.
+        Built-in pages and connections use Enable and need no package download.
       </p>
       <div className="module-groups" aria-label="Workspace modules">
         {moduleGroups.map((group) => {
@@ -183,97 +196,156 @@ export function ModulesPanel() {
             >
               <h3 id={`module-group-${group.replaceAll(/[^a-z0-9]/gi, '-').toLowerCase()}`}>{group}</h3>
               <ul className="module-cards" aria-label={`${group} modules`}>
-                {items.map((item) => (
-                  <li key={item.id}>
-                    <div className="module-title">
-                      <Icon name={workspaceRoutes[moduleStage(item.id)].icon} size={18} />
-                      <h4>{item.name}</h4>
-                      <StatusBadge tone={item.installed ? 'success' : 'neutral'}>
-                        {item.installed
-                          ? item.enabled === false
-                            ? 'Installed · Hidden'
-                            : 'Installed'
-                          : 'Not installed'}
-                      </StatusBadge>
-                    </div>
-                    <p>{purpose[item.id]}</p>
-                    {item.default_installed && <span className="module-default">Included by default</span>}
-                    <div className="module-actions">
-                      {item.installed ? (
-                        <>
-                          <button
-                            className="secondary-button"
-                            disabled={item.enabled === false && moduleStage(item.id) !== 'cloud-apis'}
-                            onClick={() => navigateStage(moduleStage(item.id))}
-                            aria-label={`Open ${item.name}`}
-                          >
-                            Open
-                          </button>
-                          {!item.managed && (
-                            <>
-                              {moduleStage(item.id) !== 'cloud-apis' && (
+                {items.map((item) => {
+                  const profile = runtimeFor(item.id);
+                  const runtime = packages.data?.profiles.find((value) => value.id === profile);
+                  const needsRuntime = Boolean(profile && !runtime?.ready);
+                  const trainingNeedsRuntime =
+                    item.id === 'training' && !item.configured && training.data?.status !== 'succeeded';
+                  const installing =
+                    (operation?.status === 'running' && operation.profile === profile) ||
+                    (item.id === 'training' && training.data?.status === 'running');
+                  const realInstall = Boolean(profile) || item.id === 'training';
+                  const actualInstalled =
+                    item.installed && (!needsRuntime || item.default_installed) && !trainingNeedsRuntime;
+                  return (
+                    <li key={item.id}>
+                      <div className="module-title">
+                        <Icon name={workspaceRoutes[moduleStage(item.id)].icon} size={18} />
+                        <h4>{item.name}</h4>
+                        <StatusBadge tone={actualInstalled ? 'success' : 'neutral'}>
+                          {installing
+                            ? 'Installing…'
+                            : profile && !runtime
+                              ? 'Checking runtime…'
+                              : actualInstalled
+                                ? item.enabled === false
+                                  ? realInstall
+                                    ? 'Installed · Hidden'
+                                    : 'Enabled · Hidden'
+                                  : realInstall && !needsRuntime
+                                    ? 'Installed'
+                                    : 'Enabled'
+                                : realInstall
+                                  ? 'Not installed'
+                                  : 'Disabled'}
+                        </StatusBadge>
+                      </div>
+                      <p>{purpose[item.id]}</p>
+                      {item.default_installed && <span className="module-default">Included by default</span>}
+                      {profile && (
+                        <p className="module-muted">
+                          {runtime?.location === 'companion'
+                            ? `Runtime on ${runtime.host || 'the paired computer'}.`
+                            : runtime?.ready
+                              ? runtime.managed
+                                ? 'Managed runtime packages installed on this server.'
+                                : 'Uses an existing shared runtime. Uninstall keeps that environment.'
+                              : 'Runtime packages are downloaded only when you install.'}
+                        </p>
+                      )}
+                      {!realInstall && (
+                        <p className="module-muted">
+                          Built-in page · no package download. Configure workers or services separately.
+                        </p>
+                      )}
+                      <div className="module-actions">
+                        {actualInstalled ? (
+                          <>
+                            <button
+                              className="secondary-button"
+                              disabled={item.enabled === false && moduleStage(item.id) !== 'cloud-apis'}
+                              onClick={() => navigateStage(moduleStage(item.id))}
+                              aria-label={`Open ${item.name}`}
+                            >
+                              Open
+                            </button>
+                            {!item.managed && (
+                              <>
+                                {moduleStage(item.id) !== 'cloud-apis' && (
+                                  <button
+                                    className="module-text-button"
+                                    disabled={visibility.isPending || busy}
+                                    onClick={() => visibility.mutate({ id: item.id, enabled: item.enabled === false })}
+                                    aria-label={`${item.enabled === false ? 'Show' : 'Hide'} ${item.name}`}
+                                  >
+                                    {item.enabled === false ? 'Show' : 'Hide'}
+                                  </button>
+                                )}
                                 <button
                                   className="module-text-button"
-                                  disabled={visibility.isPending || uninstall.isPending}
-                                  onClick={() => visibility.mutate({ id: item.id, enabled: item.enabled === false })}
-                                  aria-label={`${item.enabled === false ? 'Show' : 'Hide'} ${item.name}`}
+                                  disabled={busy || visibility.isPending}
+                                  onClick={() => uninstall.mutate(item.id)}
+                                  aria-label={`${realInstall ? 'Uninstall' : 'Disable'} ${item.name}`}
                                 >
-                                  {item.enabled === false ? 'Show' : 'Hide'}
+                                  {realInstall ? 'Uninstall' : 'Disable'}
                                 </button>
-                              )}
-                              <button
-                                className="module-text-button"
-                                disabled={uninstall.isPending || visibility.isPending}
-                                onClick={() => uninstall.mutate(item.id)}
-                                aria-label={`Uninstall ${item.name}`}
-                              >
-                                Uninstall
-                              </button>
-                            </>
-                          )}
-                        </>
-                      ) : (
-                        <button
-                          className="primary-button"
-                          disabled={register.isPending || item.managed || !item.available}
-                          onClick={() => register.mutate(item.id)}
-                          aria-label={`Install module ${item.name}`}
-                        >
-                          Install module
-                        </button>
-                      )}
-                      {item.managed && <span className="module-muted">Managed by server</span>}
-                    </div>
-                    {item.installed && !item.configured && (
-                      <details>
-                        <summary>Setup required</summary>
-                        <p>{item.setup}</p>
-                        {group === 'Cloud & APIs' || item.id === 'augmentation' ? (
-                          <button className="module-text-button" onClick={() => navigateStage('cloud-apis')}>
-                            Open Cloud &amp; APIs
-                          </button>
+                              </>
+                            )}
+                          </>
                         ) : (
-                          <a href={publicPath(item.setup_url || '/guide/')} target="_blank" rel="noreferrer">
-                            Setup guide
-                          </a>
+                          <button
+                            className="primary-button"
+                            disabled={
+                              busy ||
+                              item.managed ||
+                              !item.available ||
+                              Boolean(profile && (!runtime || (!runtime.ready && !runtime.installable)))
+                            }
+                            onClick={() => register.mutate(item.id)}
+                            aria-label={`${realInstall ? 'Install' : 'Enable'} module ${item.name}`}
+                          >
+                            {installing ? 'Installing…' : realInstall ? 'Install' : 'Enable'}
+                          </button>
                         )}
-                      </details>
-                    )}
-                  </li>
-                ))}
+                        {!actualInstalled &&
+                          !installing &&
+                          (item.installed ||
+                            (operation && operation.profile === profile && operation.status !== 'running')) &&
+                          !item.managed && (
+                            <button
+                              className="module-text-button"
+                              disabled={busy}
+                              onClick={() => uninstall.mutate(item.id)}
+                              aria-label={`Uninstall ${item.name}`}
+                            >
+                              Uninstall packages
+                            </button>
+                          )}
+                        {item.managed && <span className="module-muted">Managed by server</span>}
+                      </div>
+                      {item.installed && !item.configured && (
+                        <details>
+                          <summary>Setup required</summary>
+                          <p>{item.setup}</p>
+                          {group === 'Cloud & APIs' || item.id === 'augmentation' ? (
+                            <button className="module-text-button" onClick={() => navigateStage('cloud-apis')}>
+                              Open Cloud &amp; APIs
+                            </button>
+                          ) : (
+                            <a href={publicPath(item.setup_url || '/guide/')} target="_blank" rel="noreferrer">
+                              Setup guide
+                            </a>
+                          )}
+                        </details>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             </section>
           );
         })}
       </div>
-      {hasDependencies && (
+      {(hasDependencies || operation || training.data?.status === 'running') && (
         <>
           <div className="module-section-heading module-packages-heading">
             <h2>Runtime dependencies</h2>
             {packages.data && <span className="module-muted">Server: {packages.data.host}</span>}
           </div>
           <p className="module-introduction">
-            Shared packages used by installed features. Installing a module does not download models or start a job.
+            Packages come from PyPI and, for the CPU scorer, the PyTorch CPU index. Compatible shared environments are
+            reused. Models are downloaded separately.
           </p>
           {packages.isPending && <p role="status">Checking dependencies…</p>}
           {packages.error && <p role="alert">{packages.error.message}</p>}

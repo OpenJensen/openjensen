@@ -10,7 +10,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Mapping
 
-CONFIG_ENV = "FIREBIRD_TEACHING_INTELLIGENCE_FILE"
+from ._environment import canonical_environment
+
+CONFIG_ENV = "JENSEN_TEACHING_INTELLIGENCE_FILE"
 MODEL = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.:/-]{1,160}\Z")
 
 
@@ -80,8 +82,8 @@ def read_saved(path: Path) -> dict:
 
 
 def load_config(environ: Mapping[str, str] | None = None) -> IntelligenceConfig:
-    source = os.environ if environ is None else environ
-    key, model = source.get("OPENROUTER_API_KEY", ""), source.get("FIREBIRD_VOICE_MODEL", "")
+    source = canonical_environment(os.environ if environ is None else environ)
+    key, model = source.get("OPENROUTER_API_KEY", ""), source.get("JENSEN_VOICE_MODEL", "")
     saved: dict = {}
     # Never discover dotenv files or overwrite an operator's configured environment.
     if source.get(CONFIG_ENV) and (not key or not model):
@@ -107,12 +109,12 @@ def load_config(environ: Mapping[str, str] | None = None) -> IntelligenceConfig:
 
 
 def voice_environment() -> dict[str, str]:
-    source = dict(os.environ)
+    source = canonical_environment(os.environ)
     # Without explicit opt-in, preserve existing missing-variable diagnostics.
     if source.get(CONFIG_ENV):
         configuration = load_config(source)
         if not source.get("OPENROUTER_API_KEY"):
             source["OPENROUTER_API_KEY"] = configuration.key
-        if not source.get("FIREBIRD_VOICE_MODEL"):
-            source["FIREBIRD_VOICE_MODEL"] = configuration.voice_model
+        if not source.get("JENSEN_VOICE_MODEL"):
+            source["JENSEN_VOICE_MODEL"] = configuration.voice_model
     return source

@@ -30,7 +30,7 @@ from vla_platform.lifecycle.contracts import (
     PolicyRequest,
     Precision,
 )
-from vla_platform.lifecycle.runtime import RuntimeCatalog, command
+from vla_platform.lifecycle.runtime import RuntimeCatalog
 from vla_platform.lifecycle.temporal import validate_temporal
 from vla_platform.lifecycle.training_catalog import (
     checkpoint_label,
@@ -301,7 +301,37 @@ class Lifecycle:
         return self.local_workers.merge()
 
     def runtime(self, runtime_id: str):
-        return self.compute.runtime(runtime_id) or self.catalog.runtime(runtime_id)
+        from vla_platform.compute.recipes import recipe_catalog
+
+        return self.compute.runtime(runtime_id) or recipe_catalog(self.catalog).runtime(runtime_id)
+
+    def configured_target(self, request):
+        if not request.execution_target_id:
+            return None
+        from vla_platform.compute_targets import ComputeTargets
+
+        return ComputeTargets(self.settings.data_dir).snapshot(
+            request.execution_target_id, request.operation, self.catalog
+        )
+
+    def require_compute(self, request, runtime):
+        if request.execution_target_id:
+            target = self.configured_target(request).definition
+            if target.runtime_id != runtime.id:
+                raise ValueError("The compute target uses a different runtime recipe")
+            if request.timeout_seconds > target.resources.timeout_seconds:
+                raise ValueError("The job deadline exceeds the selected target's time limit")
+            if target.adapter != "local" and (
+                request.native_replay
+                or request.native_distillation
+                or request.native_quantization
+                or request.simulation
+            ):
+                raise ValueError(
+                    "This specialized operation requires its registered execution profile"
+                )
+            return
+        self.compute.require_enabled(runtime)
 
     def _cloud_checkpoint_artifact(self, job, name, label=None):
         if not isinstance(name, str) or not re.fullmatch(r"checkpoint-\d{6,}", name):
@@ -614,6 +644,8 @@ class Lifecycle:
 
     async def validate(self, project_id: str, request: PolicyRequest):
         selected_runtime = self.runtime(request.runtime_id)
+        if request.runtime_id.startswith("portable-") and not request.execution_target_id:
+            raise ValueError("Choose an enabled compute target for this portable worker recipe")
         setup = getattr(self, "local_worker_setup", None)
         if (
             setup
@@ -655,7 +687,7 @@ class Lifecycle:
         runtime = self.runtime(request.runtime_id)
         if runtime is None:
             raise ValueError("Runtime is not configured on this application host")
-        self.compute.require_enabled(runtime)
+        self.require_compute(request, runtime)
         if runtime.native_replay_only:
             raise ValueError("This runtime supports explicit native observation replay only")
         if runtime.native_distillation_only:
@@ -953,7 +985,7 @@ class Lifecycle:
             and not runtime.simulator_lane
         ):
             raise ValueError("LIBERO is not configured for this runtime")
-        if runtime.execution == "skypilot":
+        if runtime.execution == "skypilot" and not request.execution_target_id:
             cloud_target = CloudExecutionTarget.model_validate(
                 await self.compute.plan_cloud_target(runtime.id)
             )
@@ -1048,6 +1080,14 @@ class Lifecycle:
                 stream.write(encoded)
                 stream.flush()
                 os.fsync(stream.fileno())
+        self.execution.observability.try_record(
+            job.id,
+            message,
+            component="operation",
+            stage=stage,
+            severity="error" if stage == "failed" else "info",
+            data=data,
+        )
         async with self.execution.lock:
             current = await self.execution.get(job.id)
             if current and current.status not in TERMINAL:
@@ -1215,7 +1255,7 @@ class Lifecycle:
         runtime = self.runtime(request.runtime_id)
         if runtime is None:
             raise ValueError("Runtime is not configured on this application host")
-        self.compute.require_enabled(runtime)
+        self.require_compute(request, runtime)
         stage_dir = self.settings.data_dir / "jobs" / job.id / output
         if job.compute_target is not None and runtime.execution != "skypilot":
             raise ValueError("Cloud run cannot be redirected to a local worker")
@@ -1299,136 +1339,25 @@ class Lifecycle:
                 }
         request_path, result_path = stage_dir / "request.json", stage_dir / "result.json"
         request_path.write_text(json.dumps(payload, allow_nan=False))
-        if runtime.execution == "skypilot":
-            from vla_platform.lifecycle import sky_runner
+        from vla_platform.compute.contracts import verify_binding
+        from vla_platform.compute.providers import WorkerInvocation, adapters
 
-            if job.compute_target is None:
-                raise ValueError("Cloud run has no saved compute selection; submit a new job")
-            target = job.compute_target.model_dump()
-            self.compute.require_enabled(runtime)
-            await self.event(job, "preparing", "Preparing your GPU…")
-            await self.compute.ensure_cloud_ready(runtime.id, target)
-            current = await self.execution.get(job.id)
-            if current is None or current.status in TERMINAL:
-                raise asyncio.CancelledError
-            await self.event(
-                job,
-                "preparing",
-                f"Launching {target['accelerator']} on Google Cloud via SkyPilot "
-                f"({target['project_id']}, {target['region']})",
-            )
-
-            cloud_stage = "preparing"
-
-            async def progress(message):
-                nonlocal cloud_stage
-                if message.startswith("_cloud_setup:"):
-                    detail = json.loads(message.split(":", 1)[1])
-                    cloud_stage = detail["phase"]
-                    await self.event(job, cloud_stage, detail["message"], detail)
-                    return
-                if message.startswith(("_quantization:", "_inference:")):
-                    detail = json.loads(message.split(":", 1)[1])
-                    cloud_stage = detail.get("phase", "quantizing")
-                    await self.event(
-                        job, cloud_stage, detail.get("message", "Quantizing checkpoint")
-                    )
-                    return
-                if message.startswith("_telemetry:"):
-                    line = message[len("_telemetry:") :]
-                    observed = telemetry.parse_observation(line)
-                    if observed:
-                        cloud_stage = observed.get("phase") or (
-                            "checkpoint" if observed.get("checkpoint_saved") else "training"
-                        )
-                    await self.training_observation(job, line)
-                    return
-                if message.startswith("Optimizer step"):
-                    cloud_stage = "training"
-                elif message.startswith(("Downloading training", "Saving cloud artifacts")):
-                    cloud_stage = "saving"
-                elif message == "Quantizing on Google Cloud":
-                    cloud_stage = "quantizing"
-                elif message == "Evaluating on Google Cloud":
-                    cloud_stage = "evaluating"
-                elif message == "Running policy on Google Cloud":
-                    cloud_stage = "running"
-                elif message == "Training on Google Cloud":
-                    cloud_stage = "training"
-                elif message.startswith("Stopping Google Cloud"):
-                    cloud_stage = "finishing"
-                await self.event(job, cloud_stage, message)
-
-            from vla_platform.huggingface_connection import HuggingFaceConnection
-
-            hf_token = HuggingFaceConnection(self.settings.data_dir).token()
-            secret_options = {"hf_token": hf_token} if hf_token else {}
-            returncode = await sky_runner.run(
-                payload, stage_dir, target, progress, **secret_options
-            )
-        else:
-            container_name = "firebird-" + job.id + "-" + output
-            argv, cwd, env = command(
-                runtime,
-                request_path.resolve(),
-                result_path.resolve(),
-                self.settings.data_dir.resolve(),
-                container_name,
-                training,
-                operation in {"policy.import", "policy.quantize"},
-                operation in {"policy.evaluate", "policy.run"},
-                act_export=act_export,
-                operation=operation,
-            )
-            image = None if act_export else runtime.training_image if training else runtime.image
-            if operation in {"policy.import", "policy.quantize"} and runtime.conversion_python:
-                image = runtime.conversion_image
-            if operation in {"policy.evaluate", "policy.run"} and (
-                runtime.evaluation_python or runtime.evaluation_image
-            ):
-                image = runtime.evaluation_image
-            await self.event(job, output, f"Starting {operation} on {runtime.label}")
-            # Settings may change while a queued run waits, or during an earlier
-            # workflow stage. Check again immediately before starting each worker.
-            self.compute.require_enabled(runtime)
-            spawn = self.act_spawn_owned if act_export else asyncio.create_subprocess_exec
-            process = await spawn(
-                *argv,
-                cwd=cwd,
-                env=env,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.STDOUT,
-                start_new_session=os.name == "posix",
-            )
-            written = 0
-            pending = ""
-            try:
-                with (stage_dir / "worker.log").open("wb") as log:
-                    while chunk := await process.stdout.read(8192):
-                        if written < 5 * 1024 * 1024:
-                            log.write(chunk)
-                            log.flush()
-                            written += len(chunk)
-                        pending += chunk.decode("utf-8", errors="replace")
-                        lines = pending.split("\n")
-                        pending = lines.pop()[-16384:]
-                        for line in lines:
-                            if operation == "policy.finetune":
-                                await self.training_observation(job, line)
-                                continue
-                            try:
-                                progress = json.loads(line)
-                            except ValueError, TypeError:
-                                continue
-                            if isinstance(progress, dict) and type(progress.get("step")) is int:
-                                await self.event(job, output, f"Optimizer step {progress['step']}")
-                await process.wait()
-            finally:
-                if act_export:
-                    await self.act_stop_owned(process)
-                else:
-                    await self.stop(process, container_name if image else None)
-            returncode = process.returncode
+        verify_binding(job.execution, runtime)
+        if job.execution and job.execution.target_snapshot:
+            current_snapshot = self.configured_target(request).model_dump(mode="json")
+            if current_snapshot != job.execution.target_snapshot:
+                raise ValueError("The accepted compute configuration changed; submit a new job")
+        adapter = (
+            job.execution.adapter
+            if job.execution
+            else ("skypilot" if runtime.execution == "skypilot" else "local")
+        )
+        returncode = await adapters.run(
+            adapter,
+            WorkerInvocation(
+                self, job, runtime, operation, payload, stage_dir, output, training, act_export
+            ),
+        )
         if not result_path.exists() or result_path.stat().st_size > 4 * 1024 * 1024:
             raise ValueError("Worker did not produce a bounded result")
         response = json.loads(
@@ -1582,6 +1511,13 @@ class Lifecycle:
 
     async def run(self, job: Job):
         request = job.request
+        if job.execution is not None and job.execution.runtime_sha256 is not None:
+            from vla_platform.compute.contracts import verify_binding
+
+            runtime = self.runtime(request.runtime_id)
+            if runtime is None:
+                raise ValueError("The accepted compute target is no longer available")
+            verify_binding(job.execution, runtime)
         if request.native_replay is not None:
             from vla_platform.lifecycle.native_replay import run
 

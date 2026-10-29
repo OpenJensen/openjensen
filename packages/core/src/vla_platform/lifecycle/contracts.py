@@ -205,6 +205,11 @@ class PolicyRequest(StrictRecord):
         "policy.workflow",
     ]
     runtime_id: str = Field(min_length=1, max_length=100, pattern=r"^[\w-]+$")
+    execution_target_id: str | None = Field(
+        default=None,
+        pattern=r"^[a-zA-Z0-9][a-zA-Z0-9_-]{0,95}$",
+        exclude_if=lambda value: value is None,
+    )
     source_id: str | None = Field(default=None, max_length=100, pattern=r"^[\w-]+$")
     artifact_id: str | None = None
     dataset_job_id: str | None = None

@@ -32,6 +32,8 @@ export default defineConfig({
       name: 'desktop',
       testMatch: [
         'workspace-routes.spec.ts',
+        'work-jobs.spec.ts',
+        'compute-targets.spec.ts',
         'application-updates.spec.ts',
         'modules.spec.ts',
         'project-menu.spec.ts',
@@ -66,6 +68,8 @@ export default defineConfig({
       name: 'mobile',
       testMatch: [
         'workspace-routes.spec.ts',
+        'work-jobs.spec.ts',
+        'compute-targets.spec.ts',
         'application-updates.spec.ts',
         'modules.spec.ts',
         'project-menu.spec.ts',

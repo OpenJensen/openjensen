@@ -25,10 +25,10 @@ async function transformationReady(page: Page, operation: 'distillation' | 'quan
   const destination =
     operation === 'distillation'
       ? page
-          .getByRole('region', { name: 'Distillation workspace', exact: true })
+          .getByRole('region', { name: 'Distillation setup', exact: true })
           .or(page.getByRole('region', { name: 'ACT distillation', exact: true }))
       : page
-          .getByRole('region', { name: 'Quantization workspace', exact: true })
+          .getByRole('region', { name: 'Quantization setup', exact: true })
           .or(page.getByRole('region', { name: 'Native ACT quantization', exact: true }))
           .or(page.locator('.workflow-panel'));
   await expect(destination.first()).toBeVisible();

@@ -1,9 +1,11 @@
+import { fulfillWorkJobRead, openModuleTask } from './work-job-controls';
 import { fulfillApplicationUpdateRead } from './application-update-controls';
 import { expect, test, type Page } from '@playwright/test';
 import { createHash } from 'node:crypto';
 import { installedModules } from './module-fixtures';
 
 async function selectSimulation(page: Page) {
+  await openModuleTask(page);
   await page.getByRole('combobox', { name: 'Agent target', exact: true }).selectOption('teaching');
 }
 
@@ -34,6 +36,7 @@ async function teaching(page: Page, connected = true) {
   };
   await page.route('**/api/v1/**', async (route) => {
     if (await fulfillApplicationUpdateRead(route)) return;
+    if (await fulfillWorkJobRead(route)) return;
     const request = route.request(),
       path = new URL(request.url()).pathname;
     if (request.method() === 'GET' && (path === '/api/v1/agent/providers' || path.endsWith('/agent-sessions')))

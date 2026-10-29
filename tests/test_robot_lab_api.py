@@ -423,3 +423,21 @@ def test_rest_position_routes_forward_only_the_explicit_action(tmp_path, action,
     assert response.status_code == 200
     assert seen == [("/v1/control/rest/" + action, {"confirm": confirm})]
     asyncio.run(companion.close())
+
+
+def test_diagnostics_proxy_is_read_only_and_redacts_private_token(tmp_path):
+    connection(tmp_path)
+    calls = []
+
+    def handler(request):
+        calls.append((request.method, request.url.path))
+        return httpx.Response(200, json={"enabled": True, "events": [], "message": TOKEN})
+
+    companion = bridge(tmp_path, handler)
+    with browser(tmp_path, companion) as client:
+        response = client.get("/api/v1/robot-lab/diagnostics")
+        assert response.status_code == 200
+        assert response.json()["enabled"]
+        assert TOKEN not in response.text
+    assert calls == [("GET", "/v1/diagnostics")]
+    asyncio.run(companion.close())

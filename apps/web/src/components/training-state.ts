@@ -1,5 +1,7 @@
 'use client';
 
+import { useJobComputeSelection } from '@/lib/job-compute-state';
+
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, isActive, isDatasetJob, type Job, type PolicyRequest } from '@/lib/api';
@@ -51,6 +53,8 @@ export function useTrainingPanel({
   active: boolean;
 }) {
   const client = useQueryClient();
+  const computeSelection = useJobComputeSelection(projectId, 'policy.finetune', active);
+  const configuredTarget = computeSelection.data;
   const modules = useQuery({ queryKey: ['modules'], queryFn: api.modules, enabled: active, staleTime: 60_000 });
   const cloudInstalled = modules.data?.some((item) => item.id === 'google-cloud' && item.installed) ?? false;
   const [view, setView] = useState<'jobs' | 'new' | 'run'>(startNew ? 'new' : 'jobs');
@@ -329,7 +333,7 @@ export function useTrainingPanel({
     } as TrainingModel);
   const models = [...mergedModels.values()];
   const runtimes = (options.data?.runtimes ?? []).filter(
-    (item) => cloudInstalled || (item.provider ?? 'local') === 'local',
+    (item) => cloudInstalled || (item.provider ?? 'local') === 'local' || item.id === configuredTarget?.runtimeId,
   );
   const cloudGpuMemory: Record<string, number> = { L4: 24, T4: 16, A100: 40, 'A100-80GB': 80 };
   const runtimeMemory = (item: (typeof runtimes)[number]) =>
@@ -339,7 +343,9 @@ export function useTrainingPanel({
     !!item.model_revision &&
     runtime.training &&
     runtime.device === 'cuda' &&
-    (!item.minimum_gpu_memory_gb || runtimeMemory(runtime) >= item.minimum_gpu_memory_gb) &&
+    (!item.minimum_gpu_memory_gb ||
+      runtimeMemory(runtime) === 0 ||
+      runtimeMemory(runtime) >= item.minimum_gpu_memory_gb) &&
     (runtime.training_model_ids ?? ['smolvla']).includes(item.id) &&
     // The bundled on-demand SmolVLA adapter remains usable before preflight.
     // Older API catalogs describe that state with an empty runtime_ids list.
@@ -399,6 +405,7 @@ export function useTrainingPanel({
         (model.native_full_runtime_ids ?? []).includes(item.id),
     ) &&
     item.enabled !== false &&
+    item.launchable !== false &&
     selectedModels.length > 0 &&
     selectedModels.every((model) => hasAdapter(item, model));
   const gpuChoices = (cloudInstalled ? ['L4', 'T4', 'A100', 'A100-80GB'] : []).filter((gpu) =>
@@ -426,11 +433,13 @@ export function useTrainingPanel({
       : gpuChoices.includes(defaultGpu)
         ? defaultGpu
         : (gpuChoices[0] ?? localRuntimes[0]?.id ?? '');
-  const chosenRuntime = gpuChoices.includes(selectedGpu)
-    ? runtimes.find((item) => item.execution === 'skypilot' && item.accelerator === selectedGpu)
-    : localRuntimes.find((item) => item.id === selectedGpu);
+  const chosenRuntime = configuredTarget
+    ? runtimes.find((item) => item.id === configuredTarget.runtimeId)
+    : gpuChoices.includes(selectedGpu)
+      ? runtimes.find((item) => item.execution === 'skypilot' && item.accelerator === selectedGpu)
+      : localRuntimes.find((item) => item.id === selectedGpu);
   const runtime = chosenRuntime && supportsModel(chosenRuntime) ? chosenRuntime : undefined;
-  const needsAccount = cloudInstalled && !chosenRuntime;
+  const needsAccount = !configuredTarget && cloudInstalled && !chosenRuntime;
   const priorDataset = allInspections.find((job) => job.id === priorRequest?.dataset_job_id);
   const activeDataset = resumeId ? priorDataset : dataset;
   const activeMethod = resumeId ? priorRequest?.training_method : trainingMethod;
@@ -507,45 +516,49 @@ export function useTrainingPanel({
     recipe.validationFraction > 0 &&
     recipe.validationFraction < 1 &&
     positiveInteger(recipe.evalEvery);
-  const blocked = !projectId
-    ? 'Select a project.'
-    : !submission.hydrated
-      ? 'Loading saved request…'
-      : !submission.available
-        ? 'Browser recovery storage is unavailable. Restore it before starting a job.'
-        : attempt
-          ? 'Inspect the earlier training request before submitting another job.'
-          : !batch.hydrated || !batch.available || batch.journal
-            ? 'Resolve the saved multi-model plan before starting another job.'
-            : !resumeId && selectedModels.some((item) => item.status === 'coming_soon')
-              ? 'A selected model is coming soon. Choose an available model before training.'
-              : !resumeId && modelIds.some((id) => !models.some((item) => item.id === id))
-                ? 'A selected model is unavailable. Select your models again.'
-                : !loaded || options.isPending || jobs.isPending
-                  ? 'Loading…'
-                  : options.isError || jobs.isError
-                    ? 'Couldn’t load training options.'
-                    : resumeId && !priorRequest
-                      ? 'The original training recipe is unavailable.'
-                      : !activeDataset
-                        ? 'Select a dataset.'
-                        : !resumeId && datasetIssue(activeDataset.result)
-                          ? datasetIssue(activeDataset.result)
-                          : !resumeId && !selectedCameras.length
-                            ? 'Select at least one camera.'
-                            : !model || !activeMethod
-                              ? 'Select a model and method.'
-                              : mixtureIssue || modelIssue || batchIssue
-                                ? mixtureIssue || modelIssue || batchIssue
-                                : !runtime
-                                  ? 'Choose an available GPU.'
-                                  : accumulationIssue
-                                    ? accumulationIssue
-                                    : timingIssue
-                                      ? timingIssue
-                                      : !resumeId && !recipeValid
-                                        ? 'Check training settings.'
-                                        : null;
+  const blocked = computeSelection.error
+    ? 'Saved compute selection could not be read. Review compute before starting.'
+    : configuredTarget && !chosenRuntime
+      ? 'The selected compute target is unavailable. Review it in Settings.'
+      : !projectId
+        ? 'Select a project.'
+        : !submission.hydrated
+          ? 'Loading saved request…'
+          : !submission.available
+            ? 'Browser recovery storage is unavailable. Restore it before starting a job.'
+            : attempt
+              ? 'Inspect the earlier training request before submitting another job.'
+              : !batch.hydrated || !batch.available || batch.journal
+                ? 'Resolve the saved multi-model plan before starting another job.'
+                : !resumeId && selectedModels.some((item) => item.status === 'coming_soon')
+                  ? 'A selected model is coming soon. Choose an available model before training.'
+                  : !resumeId && modelIds.some((id) => !models.some((item) => item.id === id))
+                    ? 'A selected model is unavailable. Select your models again.'
+                    : !loaded || options.isPending || jobs.isPending
+                      ? 'Loading…'
+                      : options.isError || jobs.isError
+                        ? 'Couldn’t load training options.'
+                        : resumeId && !priorRequest
+                          ? 'The original training recipe is unavailable.'
+                          : !activeDataset
+                            ? 'Select a dataset.'
+                            : !resumeId && datasetIssue(activeDataset.result)
+                              ? datasetIssue(activeDataset.result)
+                              : !resumeId && !selectedCameras.length
+                                ? 'Select at least one camera.'
+                                : !model || !activeMethod
+                                  ? 'Select a model and method.'
+                                  : mixtureIssue || modelIssue || batchIssue
+                                    ? mixtureIssue || modelIssue || batchIssue
+                                    : !runtime
+                                      ? 'Choose an available GPU.'
+                                      : accumulationIssue
+                                        ? accumulationIssue
+                                        : timingIssue
+                                          ? timingIssue
+                                          : !resumeId && !recipeValid
+                                            ? 'Check training settings.'
+                                            : null;
   const mutation = useMutation({
     retry: false,
     mutationFn: async () => {
@@ -756,6 +769,7 @@ export function useTrainingPanel({
     chooseRun,
     cloudGpuMemory,
     cloudInstalled,
+    configuredTarget,
     dataset,
     datasetId,
     datasets,

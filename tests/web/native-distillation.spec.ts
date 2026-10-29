@@ -435,7 +435,7 @@ test('switching project during admission never displays another project job', as
   await selectProject(page, 'beta');
   release();
   await expect(page.getByRole('article', { name: 'Distillation job details' })).toHaveCount(0);
-  await expect(page.getByRole('region', { name: 'Distillation workspace', exact: true })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Distillation setup', exact: true })).toBeVisible();
   await expect(panel(page)).toHaveCount(0);
   await expect(submit(page)).toHaveCount(0);
   await selectProject(page, 'alpha');

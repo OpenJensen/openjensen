@@ -95,8 +95,17 @@ const labels: Record<string, string> = {
 const artifactUrl = (id: string, name: string, jobId?: string) =>
   `${apiOrigin}/api/v1/${jobId ? `jobs/${encodeURIComponent(jobId)}/scene` : `scenes/${encodeURIComponent(id)}`}/artifact?name=${encodeURIComponent(name)}`;
 
-export function SceneGenerationPanel({ projectId }: { projectId?: string }) {
+export function SceneGenerationPanel({
+  projectId,
+  preferredJobId,
+  startNewRequest,
+}: {
+  projectId?: string;
+  preferredJobId?: string;
+  startNewRequest?: number;
+}) {
   const client = useQueryClient();
+  const preferredId = preferredJobId?.replace(/^(?:core|scene|legacy):/, '');
   const options = useQuery({
     queryKey: ['scene-options'],
     queryFn: () => agentRequest<Options>('/scene-generation/options'),
@@ -123,8 +132,10 @@ export function SceneGenerationPanel({ projectId }: { projectId?: string }) {
     enabled: !!projectId,
     retry: false,
   });
-  const [view, setView] = useState<'jobs' | 'new' | 'detail'>('jobs');
-  const [selectedId, setSelectedId] = useState('');
+  const [view, setView] = useState<'jobs' | 'new' | 'detail'>(
+    preferredId ? 'detail' : startNewRequest !== undefined ? 'new' : 'jobs',
+  );
+  const [selectedId, setSelectedId] = useState(preferredId ?? '');
   const [sourceId, setSourceId] = useState('');
   const [attempts, setAttempts] = useState(2);
   const [model, setModel] = useState('');
@@ -135,11 +146,11 @@ export function SceneGenerationPanel({ projectId }: { projectId?: string }) {
   const history = (jobs.data ?? [])
     .filter((job) => job.kind === 'scene.generate' && job.project_id === projectId)
     .sort((a, b) => b.created_at.localeCompare(a.created_at));
-  const selectedJob = history.find((job) => job.id === selectedId);
+  const selectedJob = history.find(
+    (job) => job.id === selectedId || job.request.request_id === selectedId || job.result?.scene_id === selectedId,
+  );
   const savedScenes = (legacy.data ?? []).filter((run) => !run.job_id);
-  const legacyScene = selectedId.startsWith('legacy:')
-    ? savedScenes.find((run) => run.id === selectedId.slice(7))
-    : undefined;
+  const legacyScene = savedScenes.find((run) => run.id === selectedId.replace(/^legacy:/, ''));
   const scene = useQuery({
     // Fetch final media even when the job finishes between scene polls.
     queryKey: ['scene-job', selectedJob?.id, selectedJob?.status],
@@ -173,6 +184,17 @@ export function SceneGenerationPanel({ projectId }: { projectId?: string }) {
       setPending(null);
     }
   }, [storageKey]);
+
+  useEffect(() => {
+    if (preferredId) {
+      setSelectedId(preferredId);
+      setView('detail');
+    } else if (startNewRequest !== undefined) {
+      setError('');
+      setSelectedId('');
+      setView('new');
+    }
+  }, [preferredId, startNewRequest]);
 
   const models = options.data?.models ?? [];
   const selectedModel =
@@ -510,7 +532,9 @@ export function SceneGenerationPanel({ projectId }: { projectId?: string }) {
               {selectedJob
                 ? datasetName(selectedJob.request.source_job_id)
                 : legacyScene
-                  ? datasetName(legacyScene.request.source_job_id)
+                  ? legacyScene.request.episode_index !== undefined && legacyScene.request.episode_index !== null
+                    ? `Episode ${legacyScene.request.episode_index}`
+                    : datasetName(legacyScene.request.source_job_id)
                   : 'Job'}
             </h2>
             {selectedJob && <span className={`status status-${selectedJob.status}`}>{selectedJob.status}</span>}
@@ -604,9 +628,11 @@ export function SceneGenerationPanel({ projectId }: { projectId?: string }) {
               title={
                 selectedJob && isActive(selectedJob)
                   ? 'Simulation results pending'
-                  : scene.isError
-                    ? 'Results unavailable'
-                    : 'Loading results…'
+                  : !selectedJob && !legacyScene && jobs.isSuccess && legacy.isSuccess
+                    ? 'Saved job unavailable'
+                    : scene.isError
+                      ? 'Results unavailable'
+                      : 'Loading results…'
               }
             />
           )}

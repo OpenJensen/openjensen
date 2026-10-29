@@ -213,6 +213,12 @@ def wait(client, session, statuses, *, presence=True):
                 route + "/heartbeat",
                 json={"authority_epoch": session["authority_epoch"], "operator_present": True},
             )
+            if heartbeat.status_code != 200:
+                # Completion can release the lease after GET and before POST.
+                # Accept only the same terminal outcome this waiter requires.
+                current = client.get(route).json()
+                if current["status"] in statuses:
+                    return current
             assert heartbeat.status_code == 200, heartbeat.text
         time.sleep(0.01)
     raise AssertionError(current)

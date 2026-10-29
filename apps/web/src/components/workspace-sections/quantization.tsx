@@ -8,9 +8,11 @@ export default function QuantizationSection() {
     workflowNavigation,
     context,
     workflowProjectId,
+    requestedJobOperation,
     openQuantizationRun,
     quantizeArtifact,
     navigateStage,
+    navigateTask,
     openSavedModel,
     setReplayArtifact,
     chooseRun,
@@ -18,6 +20,7 @@ export default function QuantizationSection() {
   } = useWorkspace();
   return (
     <QuantizationPanel
+      startNew={requestedJobOperation?.id === 'policy.quantize'}
       key={`${workflowProjectId}-${workflowNavigation}`}
       projectId={workflowProjectId}
       preferredJobId={openQuantizationRun?.projectId === workflowProjectId ? openQuantizationRun.id : undefined}
@@ -27,13 +30,13 @@ export default function QuantizationSection() {
       onModel={openSavedModel}
       onPrepare={() => navigateStage('training')}
       onReplay={(artifactId) => {
-        navigateStage('simulation');
+        navigateTask('simulation');
         setReplayArtifact({ projectId: workflowProjectId, artifactId });
         chooseRun('replay', 'handoff');
       }}
       onPrepareSimulation={(source) => {
         if (source.projectId !== workflowProjectId) return;
-        navigateStage('simulation');
+        navigateTask('simulation');
         setSimulationArtifact(source);
         chooseRun('native', 'handoff');
       }}

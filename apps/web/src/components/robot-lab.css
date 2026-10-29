@@ -1050,3 +1050,35 @@
   color: var(--muted);
   font-size: 11px;
 }
+
+.robot-lab-diagnostics {
+  padding: 14px 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  margin-bottom: 18px;
+  overflow-wrap: anywhere;
+}
+.robot-lab-diagnostics summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.robot-lab-diagnostics p {
+  margin: 10px 0;
+}
+.robot-lab-diagnostics small {
+  display: block;
+  color: var(--muted);
+  margin: 8px 0;
+}
+.robot-lab-diagnostics ol {
+  padding-left: 20px;
+  font-size: 13px;
+}
+.robot-lab-diagnostics li {
+  margin: 6px 0;
+}
+.robot-lab-log-stop {
+  border-left: 3px solid var(--line);
+  padding-left: 12px;
+  margin: 14px 0;
+}

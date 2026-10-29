@@ -1,3 +1,4 @@
+import { openModuleTask } from './work-job-controls';
 import { fulfillApplicationUpdateRead } from './application-update-controls';
 import { expect, test, type Page } from '@playwright/test';
 import { selectProject } from './project-controls';
@@ -67,6 +68,33 @@ async function fixture(page: Page) {
       return route.fulfill({ status: 405, json: { detail: 'Navigation must not submit work' } });
     }
     if (path === '/api/v1/modules') return route.fulfill({ json: moduleFixture() });
+    if (path === '/api/v1/module-installations')
+      return route.fulfill({
+        json: {
+          host: 'fixture-server',
+          operation: null,
+          profiles: [
+            {
+              id: 'robot',
+              name: 'Robot Lab',
+              ready: true,
+              installable: false,
+              location: 'companion',
+              host: 'USB computer',
+              message: 'Paired runtime.',
+              minimum_free_gib: 11,
+            },
+            {
+              id: 'datasets',
+              name: 'Dataset tools',
+              ready: true,
+              installable: true,
+              message: 'Installed readers.',
+              minimum_free_gib: 11,
+            },
+          ],
+        },
+      });
     if (path === '/api/v1/projects')
       return route.fulfill({
         json: [
@@ -126,9 +154,9 @@ test('the sidebar lists installed modules and Modules shows how to install the r
   await expect(modules).toHaveCount(13);
   await expect(modules.filter({ hasText: 'Initial setup' })).toContainText('Installed');
   const teaching = modules.filter({ hasText: 'AI teleoperation' });
-  await expect(teaching).toContainText('Not installed');
+  await expect(teaching).toContainText('Disabled');
   await expect(teaching.getByText('Setup required', { exact: true })).toHaveCount(0);
-  await expect(teaching.getByRole('button', { name: 'Install module AI teleoperation', exact: true })).toBeVisible();
+  await expect(teaching.getByRole('button', { name: 'Enable module AI teleoperation', exact: true })).toBeVisible();
   // The legacy teaching URL explains setup without exposing an uninstalled module in navigation.
   await page.goto('/teaching/');
   await expect(nav.getByRole('link', { name: 'AI teleoperation', exact: true })).toHaveCount(0);
@@ -209,6 +237,39 @@ test('legacy teaching URL keeps the canonical AI teleoperation navigation', asyn
       .getByRole('navigation', { name: 'Policy lifecycle' })
       .getByRole('link', { name: 'AI teleoperation', exact: true }),
   ).toHaveAttribute('href', '/ai-teleoperation/');
+  expect(writes).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+test('sidebar preloads routes without mounting their tools or submitting work', async ({ page }) => {
+  const { writes, errors } = await fixture(page);
+  const destinationReads: string[] = [];
+  page.on('request', (request) => {
+    const path = new URL(request.url()).pathname;
+    if (path === '/api/v1/augmentation-options') destinationReads.push(path);
+  });
+  const prefetched = page.waitForResponse((response) => {
+    const path = new URL(response.url()).pathname;
+    return path.startsWith('/augmentation/') && path.endsWith('.txt');
+  });
+  await page.goto('/dashboard/');
+  const link = page
+    .getByRole('navigation', { name: 'Policy lifecycle' })
+    .getByRole('link', { name: 'Augmentation', exact: true });
+  await link.scrollIntoViewIfNeeded();
+  expect((await prefetched).status()).toBe(200);
+  await expect(page).toHaveURL(/\/dashboard\/$/);
+  expect(destinationReads).toEqual([]);
+  expect(writes).toEqual([]);
+  await page.evaluate(() => {
+    (window as any).__preloadedNavigation = 'same document';
+  });
+  await link.click();
+  await expect(page.getByRole('heading', { name: 'Augmentation', level: 1, exact: true })).toBeVisible();
+  expect(destinationReads).toEqual([]);
+  await openModuleTask(page);
+  await expect.poll(() => destinationReads.length).toBeGreaterThan(0);
+  expect(await page.evaluate(() => (window as any).__preloadedNavigation)).toBe('same document');
   expect(writes).toEqual([]);
   expect(errors).toEqual([]);
 });

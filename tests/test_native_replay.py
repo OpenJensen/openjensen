@@ -135,6 +135,7 @@ def fixture(dataset_fixture):
         settings=SimpleNamespace(data_dir=f.data_dir),
         runtime=lambda _: runtime,
         compute=SimpleNamespace(require_enabled=lambda _: None),
+        require_compute=lambda request, runtime: None,
         artifact=AsyncMock(return_value=source),
         execution=f.lifecycle.execution,
         event=AsyncMock(),
