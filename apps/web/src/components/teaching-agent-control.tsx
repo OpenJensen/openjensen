@@ -661,8 +661,8 @@ function AgentControls({
           )}
           {physicalSession && session.control_armed && (
             <p role="status">
-              The physical controller remains armed and holds locally while the task loop is paused. Keep this page
-              focused and operator presence confirmed. Stop disables torque.
+              The physical controller remains armed and holds locally while the task loop is paused. Keep operator
+              presence confirmed. Stop disables torque.
             </p>
           )}
           <dl className="dataset-facts">
@@ -978,7 +978,7 @@ function AgentControls({
           </div>
           <p>
             {physicalSession
-              ? 'Hiding or closing this panel, losing focus or withdrawing operator presence stops this page’s physical control. The local lease also expires independently.'
+              ? 'Switching apps keeps physical control active. Closing this panel or withdrawing operator presence stops control. Lost heartbeats expire the local lease independently.'
               : 'Closing this panel leaves the saved session available. Use Stop agent session to revoke its authority.'}
           </p>
           {reviewObservation && !pending(session) && !session.run_enabled && (

@@ -187,8 +187,10 @@ export function useAiPhysicalConnection(enabled: boolean, onSession: (session: A
     const heartbeat = async () => {
       const active = owner.current;
       if ((!active && !connectingRef.current) || transfer.current || inFlight) return;
-      if (!enabledRef.current || !operatorRef.current || !clearRef.current || !present()) {
-        void stop('Operator presence or page visibility was lost. Physical Stop was requested.');
+      if (!enabledRef.current || !operatorRef.current || !clearRef.current) {
+        void stop(
+          'Physical control was disabled or operator confirmations were withdrawn. Physical Stop was requested.',
+        );
         return;
       }
       if (!active) return;
@@ -224,21 +226,9 @@ export function useAiPhysicalConnection(enabled: boolean, onSession: (session: A
       }
     };
     const timer = setInterval(() => void heartbeat(), 500);
-    const hide = () => {
-      if ((!present() || !enabledRef.current) && (owner.current || connectingRef.current || transfer.current))
-        void stop('The page was hidden or lost focus. Physical Stop was requested.');
-    };
-    const blur = () => {
-      if (owner.current || connectingRef.current || transfer.current)
-        void stop('The page lost focus. Physical Stop was requested.');
-    };
-    document.addEventListener('visibilitychange', hide);
-    window.addEventListener('blur', blur);
     return () => {
       mounted.current = false;
       clearInterval(timer);
-      document.removeEventListener('visibilitychange', hide);
-      window.removeEventListener('blur', blur);
       if (owner.current || connectingRef.current || transfer.current) void stop('AI teleoperation was closed.');
     };
   }, [client, stop]);
@@ -264,7 +254,13 @@ export function useAiPhysicalConnection(enabled: boolean, onSession: (session: A
         joints: robotJoints.map((joint) => joint.name),
         move_to_middle: false,
       });
-      if (!mounted.current || token !== version.current || !present() || !operatorRef.current) {
+      if (
+        !mounted.current ||
+        !enabledRef.current ||
+        token !== version.current ||
+        !operatorRef.current ||
+        !clearRef.current
+      ) {
         await robotApi.stop(true, result.session?.generation ?? pendingGeneration.current ?? undefined, 'manual');
         return;
       }
@@ -290,7 +286,7 @@ export function useAiPhysicalConnection(enabled: boolean, onSession: (session: A
     transfer.current = true;
   }
   function adopt(session: AgentSession) {
-    if (!operatorRef.current || !clearRef.current || !present()) {
+    if (!mounted.current || !enabledRef.current || !operatorRef.current || !clearRef.current) {
       void agentApi.stop(session.id, true);
       void stop('Operator presence changed during arming.');
       return;

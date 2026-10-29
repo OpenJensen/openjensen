@@ -250,7 +250,7 @@ export function RobotLabTeleoperate({ lab }: { lab: RobotLabState }) {
                     : 'Hand guiding is active. Torque is off.'}
               </strong>
               {ownsSession
-                ? 'Tab hidden or disconnected → torque off.'
+                ? 'Switching apps keeps control active. Closing this page or losing the heartbeat stops control.'
                 : 'Session owned by another client. Stop it to take control.'}
             </Notice>
             {session?.mode === 'manual' ? (
@@ -324,7 +324,7 @@ export function RobotLabTeleoperate({ lab }: { lab: RobotLabState }) {
                     }
                     onClick={() =>
                       void perform(
-                        'Returning to rest. Keep this page visible; the motors will hold when it arrives.',
+                        'Returning to rest. The motors will hold when it arrives.',
                         robotApi.returnToRest,
                         undefined,
                         false,

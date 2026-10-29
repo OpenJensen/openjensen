@@ -674,6 +674,24 @@ test('manual control is explicit, jogs are bounded, and navigating away stops th
   await expect.poll(() => writes(state, '/stop').length).toBe(1);
 });
 
+test('manual teleoperation keeps its heartbeat when switching apps and explicit Stop still works', async ({ page }) => {
+  const state = await fixture(page, true);
+  await startManual(page);
+  const heartbeats = writes(state, '/control/heartbeat').length;
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+    Object.defineProperty(document, 'hasFocus', { configurable: true, value: () => false });
+    window.dispatchEvent(new Event('blur'));
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await expect.poll(() => writes(state, '/control/heartbeat').length).toBeGreaterThan(heartbeats + 1);
+  expect(writes(state, '/stop')).toEqual([]);
+  expect(state.status.session.torque_enabled).toBe(true);
+  await page.getByRole('button', { name: 'Stop arm and disable torque', exact: true }).click();
+  await expect.poll(() => writes(state, '/stop').length).toBe(1);
+  expect(state.status.session.torque_enabled).toBe(false);
+});
+
 test('episode recording saves and finalizes before importing into the selected project', async ({ page }, testInfo) => {
   const state = await fixture(page, true);
   await selectProject(page, 'beta');

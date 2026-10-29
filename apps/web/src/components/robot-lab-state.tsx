@@ -380,11 +380,13 @@ export function useRobotLab() {
     };
     const timer = setInterval(() => void heartbeat(), 500);
     const hide = () => {
+      const mode = lastConnectedState.current?.session?.mode;
+      if (mode === 'manual' || mode === 'leader' || mode === 'handguide') return;
       if (document.visibilityState === 'hidden' && ownedRef.current && !localCalibrationRef.current) {
         ownedRef.current = false;
         setOwnsSession(false);
         setNotice(null);
-        setError('Robot Lab was hidden; stopping the session. Keep this page visible during setup or control.');
+        setError('Robot Lab was hidden; stopping the session. Keep this page visible during setup.');
         void robotApi
           .stop(
             true,
