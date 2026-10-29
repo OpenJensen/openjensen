@@ -163,7 +163,7 @@ class EncoderRangeError(HardwareError):
         )
 
 
-def validate_raw(raw, calibration=None, *, calibration_bounds=True):
+def validate_raw(raw, calibration=None, *, calibration_bounds=True, range_tolerance=0):
     if set(raw) != set(calibration if calibration is not None else JOINTS) or any(
         isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 4095
         for value in raw.values()
@@ -172,7 +172,7 @@ def validate_raw(raw, calibration=None, *, calibration_bounds=True):
     if calibration is not None and calibration_bounds:
         for joint, value in raw.items():
             low, high = calibration[joint]["range_min"], calibration[joint]["range_max"]
-            if not low <= value <= high:
+            if not low - range_tolerance <= value <= high + range_tolerance:
                 raise EncoderRangeError(joint, value, low, high)
     return raw
 
@@ -259,7 +259,7 @@ class RobotLab:
                     phase="interrupted",
                     interrupted_stage=draft["state"]["phase"],
                     recoverable=True,
-                    error="Calibration checkpoint recovered on the robot computer",
+                    error=None,
                     robot_id=draft["robot_id"],
                     role=draft["role"],
                     port=draft["port"],

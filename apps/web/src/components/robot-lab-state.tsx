@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Icon } from '@/components/icon';
+import { ApiError } from '@/lib/api';
 import { useWorkspace } from '@/components/workspace-context';
 import {
   robotApi,
@@ -15,6 +16,40 @@ import {
 } from '@/lib/robot-api';
 import { So101JointGuide } from './so101-joint-guide';
 import { steps, setupOrder, statusKey, readable, isStatus } from './robot-lab-shared';
+
+type CalibrationConfirmation = {
+  phase: 'center' | 'ranges' | 'saved';
+  port: string;
+  robotId: string;
+  role: RobotRole;
+  generation?: number;
+  newSession: boolean;
+  label: string | null;
+  failure: string;
+  updatedAt: number;
+  token: number;
+};
+
+function confirmsCalibration(value: RobotStatus | undefined, expected: CalibrationConfirmation) {
+  const session = value?.session;
+  return !!(
+    value?.ok &&
+    value.connected !== false &&
+    session &&
+    value.calibration?.phase === expected.phase &&
+    !value.calibration.error &&
+    !session.error &&
+    session.mode === (expected.phase === 'saved' ? 'idle' : 'calibration') &&
+    session.port === expected.port &&
+    session.robot_id === expected.robotId &&
+    session.role === expected.role &&
+    (expected.generation === undefined ||
+      (typeof session.generation === 'number' &&
+        (expected.newSession
+          ? session.generation !== expected.generation
+          : session.generation === expected.generation)))
+  );
+}
 
 // Robot Lab session state and actions. RobotLab renders each setup step from this
 // in its own component (robot-lab-connect.tsx, robot-lab-motor-ids.tsx, ...).
@@ -64,7 +99,7 @@ export function useRobotLab() {
   const [recordCamera, setRecordCamera] = useState(true);
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [awaitingCalibration, setAwaitingCalibration] = useState<'ranges' | 'saved' | null>(null);
+  const [awaitingCalibration, setAwaitingCalibration] = useState<CalibrationConfirmation | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [ownsSession, setOwnsSession] = useState(false);
   const [imported, setImported] = useState<{ dataset: string; projectId: string } | null>(null);
@@ -104,7 +139,15 @@ export function useRobotLab() {
   const calibration = state?.calibration;
   localCalibrationRef.current = session?.mode === 'calibration' && !!state?.capabilities?.calibration_persistence;
   const calibrationStage = calibration?.phase === 'interrupted' ? calibration.interrupted_stage : calibration?.phase;
-  const calibrationError = step === 2 ? error || calibration?.error || session?.error : null;
+  const calibrationSession = session?.mode === 'calibration' || calibration?.phase === 'interrupted';
+  // Older companions put this informational recovery message in the error field.
+  const recoveredCheckpoint =
+    calibration?.recoverable && calibration.error === 'Calibration checkpoint recovered on the robot computer';
+  const calibrationError =
+    step === 2
+      ? error || (!recoveredCheckpoint && calibration?.error) || (calibrationSession && session?.error) || null
+      : null;
+  const previousSessionError = step === 2 && !calibrationSession && session?.error !== error ? session?.error : null;
   const recording = state?.recording;
   const assembled = state?.assembled?.port === port ? state.assembled : undefined;
   const verification = state?.verification;
@@ -164,7 +207,7 @@ export function useRobotLab() {
       : motorDefinition;
   const availableCameras = devices.data?.cameras ?? [];
   const busy = !!pending;
-  const canAct = online && !busy && !reconnecting;
+  const canAct = online && !busy && !reconnecting && !awaitingCalibration;
   const portConnected =
     online && !!port && !devices.isError && !!devices.data?.ports.some((item) => item.device === port);
   const leaderConnected =
@@ -237,6 +280,9 @@ export function useRobotLab() {
     setProbe(null);
   }, [robotId, role]);
   useEffect(() => {
+    if (session?.error) setNotice(null);
+  }, [session?.error]);
+  useEffect(() => {
     if (session?.mode === 'setup' || session?.mode === 'calibration') setProbe(null);
   }, [session?.mode]);
   useEffect(() => {
@@ -280,25 +326,27 @@ export function useRobotLab() {
   ]);
   useEffect(() => {
     if (
-      awaitingCalibration &&
-      online &&
-      calibration?.phase === awaitingCalibration &&
-      !calibration.error &&
-      !session?.error
-    ) {
+      !awaitingCalibration ||
+      awaitingCalibration.token !== epoch.current ||
+      !online ||
+      status.dataUpdatedAt <= awaitingCalibration.updatedAt
+    )
+      return;
+    if (confirmsCalibration(status.data, awaitingCalibration)) {
       setError(null);
       setAwaitingCalibration(null);
-      setNotice(
-        awaitingCalibration === 'saved'
-          ? 'Calibration saved.'
-          : 'Center recorded. Move each joint through its comfortable range.',
-      );
-      if (awaitingCalibration === 'saved') {
+      setNotice(awaitingCalibration.label);
+      if (awaitingCalibration.phase === 'saved') {
         ownedRef.current = false;
         setOwnsSession(false);
       }
+    } else {
+      // A fresh read did not confirm this arm/stage. Keep a real refusal or fault visible.
+      setError(status.data?.calibration?.error || status.data?.session?.error || awaitingCalibration.failure);
+      setNotice(null);
+      setAwaitingCalibration(null);
     }
-  }, [awaitingCalibration, online, calibration?.phase, calibration?.error, session?.error]);
+  }, [awaitingCalibration, online, status.data, status.dataUpdatedAt]);
   useEffect(() => {
     if (!preview || !online) return;
     setCameraError(false);
@@ -363,9 +411,42 @@ export function useRobotLab() {
     action: () => Promise<T>,
     done?: (result: T) => void,
     announce = true,
-    calibrationTarget?: 'ranges' | 'saved',
+    calibrationTarget?: 'start' | 'resume' | 'ranges' | 'saved',
   ) {
     const token = ++epoch.current;
+    const calibrationExpected = calibrationTarget
+      ? {
+          phase:
+            calibrationTarget === 'start'
+              ? ('center' as const)
+              : calibrationTarget === 'resume'
+                ? (calibration?.interrupted_stage ??
+                  (Object.keys(calibration?.offsets ?? {}).length ? ('ranges' as const) : ('center' as const)))
+                : calibrationTarget,
+          port:
+            calibrationTarget === 'resume'
+              ? (calibration?.port ?? port)
+              : session?.mode === 'calibration'
+                ? (session.port ?? port)
+                : port,
+          robotId:
+            calibrationTarget === 'resume'
+              ? (calibration?.robot_id ?? robotId)
+              : session?.mode === 'calibration'
+                ? (session.robot_id ?? robotId)
+                : robotId,
+          role:
+            calibrationTarget === 'resume'
+              ? (calibration?.role ?? role)
+              : session?.mode === 'calibration'
+                ? (session.role ?? role)
+                : role,
+          generation: session?.generation,
+          newSession: calibrationTarget === 'start' || calibrationTarget === 'resume',
+          label: announce ? label : null,
+          token,
+        }
+      : null;
     setPending(label);
     setError(null);
     setNotice(null);
@@ -383,8 +464,18 @@ export function useRobotLab() {
       void client.invalidateQueries({ queryKey: statusKey });
     } catch (failure) {
       if (mounted.current && token === epoch.current) {
-        setAwaitingCalibration(calibrationTarget ?? null);
-        setError(readable(failure));
+        const uncertain = !(failure instanceof ApiError) || [502, 503, 504].includes(failure.status);
+        if (calibrationExpected && uncertain) {
+          setAwaitingCalibration({
+            ...calibrationExpected,
+            failure: readable(failure),
+            updatedAt: client.getQueryState(statusKey)?.dataUpdatedAt ?? 0,
+          });
+          setNotice('Checking calibration progress on the robot computer…');
+        } else {
+          setError(readable(failure));
+        }
+        // Read status to confirm an uncertain outcome; never replay motor writes.
         void client.invalidateQueries({ queryKey: statusKey });
       }
     } finally {
@@ -852,17 +943,19 @@ export function useRobotLab() {
         profileCheck?.state === 'mismatch',
     },
     {
-      value: controlling
-        ? 'Active'
-        : !portConnected
-          ? 'Needs connection'
-          : role === 'leader'
-            ? 'Needs follower'
-            : selectedCalibrated
-              ? 'Ready'
-              : 'Needs calibration',
-      good: controlling,
-      warn: false,
+      value: session?.error
+        ? 'Needs attention'
+        : controlling
+          ? 'Active'
+          : !portConnected
+            ? 'Needs connection'
+            : role === 'leader'
+              ? 'Needs follower'
+              : selectedCalibrated
+                ? 'Ready'
+                : 'Needs calibration',
+      good: controlling && !session?.error,
+      warn: !!session?.error,
     },
     {
       value: recording?.active ? 'Recording' : controlling && !partialControl ? 'Ready' : 'Needs teleoperation',
@@ -946,6 +1039,7 @@ export function useRobotLab() {
     calibrated,
     calibration,
     calibrationError,
+    previousSessionError,
     calibrationStage,
     calibrationSummary,
     cameraError,

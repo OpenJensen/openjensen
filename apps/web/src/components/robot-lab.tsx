@@ -23,6 +23,7 @@ export function RobotLab() {
     notice,
     online,
     pending,
+    previousSessionError,
     readiness,
     reconnecting,
     recording,
@@ -80,6 +81,13 @@ export function RobotLab() {
       </div>
       {readiness}
       {step !== 2 && (session?.error || error) && <HardwareNotice message={(session?.error || error)!} />}
+      {previousSessionError && (
+        <HardwareNotice
+          label="Previous session error"
+          context="Previous hardware session stopped"
+          message={previousSessionError}
+        />
+      )}
       {(reconnecting || (!online && localCalibrationRef.current)) && (
         <p className="robot-lab-event robot-lab-warning" role="status">
           {localCalibrationRef.current
