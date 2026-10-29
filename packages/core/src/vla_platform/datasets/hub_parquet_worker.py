@@ -182,7 +182,9 @@ def vector(value: Any) -> list[float] | None:
     return [float(item) for item in value]
 
 
-def frame_samples(raw: bytes, episode_index: int) -> list[dict[str, Any]]:
+def frame_samples(
+    raw: bytes, episode_index: int, *, complete: bool = False
+) -> list[dict[str, Any]]:
     file = parquet_file(raw)
     if file.metadata.num_rows > MAX_SAMPLE_ROWS:
         raise DecodeError("Frame shard exceeds the preview row limit")
@@ -205,7 +207,10 @@ def frame_samples(raw: bytes, episode_index: int) -> list[dict[str, Any]]:
             if not pa.types.is_null(batch.column(name).type):
                 list_values(batch.column(name), MAX_VECTOR_LENGTH, "sample vector")
         batch = batch.filter(pc.equal(batch.column("episode_index"), episode_index))
-        batch = batch.slice(0, SAMPLE_COUNT - len(result))
+        if complete and len(result) + batch.num_rows > 18_000:
+            raise DecodeError("Recorded episode exceeds the 18000-frame replay limit")
+        if not complete:
+            batch = batch.slice(0, SAMPLE_COUNT - len(result))
         for row in batch.to_pylist():
             result.append(
                 dict(
@@ -215,7 +220,7 @@ def frame_samples(raw: bytes, episode_index: int) -> list[dict[str, Any]]:
                     state=vector(row.get("observation.state")),
                 )
             )
-            if len(result) == SAMPLE_COUNT:
+            if not complete and len(result) == SAMPLE_COUNT:
                 return result
     return result
 
@@ -225,12 +230,16 @@ def main() -> None:
         if pa.__version__ != READER_VERSION:
             raise DecodeError(f"Expected pyarrow=={READER_VERSION}")
         operation = sys.argv[1]
-        if operation not in {"index", "frames"}:
+        if operation not in {"index", "frames", "trajectory"}:
             raise DecodeError("Unsupported preview operation")
         raw = sys.stdin.buffer.read(MAX_INPUT_BYTES + 1)
         if len(raw) > MAX_INPUT_BYTES:
             raise DecodeError("Dataset file exceeds the preview input size limit")
-        rows = index_rows(raw) if operation == "index" else frame_samples(raw, int(sys.argv[2]))
+        rows = (
+            index_rows(raw)
+            if operation == "index"
+            else frame_samples(raw, int(sys.argv[2]), complete=operation == "trajectory")
+        )
         result = {"schema_version": 1, "rows": rows}
         output = json.dumps(result, allow_nan=False, ensure_ascii=True).encode()
         if len(output) > MAX_OUTPUT_BYTES:

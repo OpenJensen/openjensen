@@ -79,6 +79,7 @@ async def uninstall_feature(ident: ModuleId, request: Request):
         operations = {
             "datasets": ("dataset.inspect", "dataset.inspect.local"),
             "augmentation": ("dataset.augment",),
+            "real-to-sim": ("scene.generate",),
             "training": ("policy.finetune", "policy.workflow"),
             "distillation": ("policy.distill", "policy.workflow"),
             "quantization": ("policy.quantize", "policy.export", "policy.workflow"),
