@@ -1904,6 +1904,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/robot-lab/diagnostics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Robot Lab Get Diagnostics */
+        get: operations["robot_lab_get_diagnostics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/robot-lab/mapping/confirm": {
         parameters: {
             query?: never;
@@ -9186,6 +9203,26 @@ export interface operations {
         };
     };
     robot_lab_get_devices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    robot_lab_get_diagnostics: {
         parameters: {
             query?: never;
             header?: never;

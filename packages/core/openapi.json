@@ -12792,6 +12792,25 @@
         ]
       }
     },
+    "/api/v1/robot-lab/diagnostics": {
+      "get": {
+        "operationId": "robot_lab_get_diagnostics",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Get Diagnostics",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
     "/api/v1/robot-lab/mapping/confirm": {
       "post": {
         "operationId": "robot_lab_post_mapping_confirm",

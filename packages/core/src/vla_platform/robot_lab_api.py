@@ -88,7 +88,7 @@ async def proxy(path: str, request: Request):
 
 
 PROTOCOL = {
-    "GET": {"devices", "datasets", "camera.jpg"},
+    "GET": {"devices", "datasets", "camera.jpg", "diagnostics"},
     "POST": {
         "probe",
         "setup/motor",

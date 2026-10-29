@@ -10,6 +10,14 @@ Open Models or Datasets, or inspect the current resource and connection status.
 
 Connect the computer beside your SO-101, preview its camera, and work through **Connect → Motor IDs → Calibrate → Teleoperate → Record**. USB access stays on that computer; captures stay there until you add them to a project.
 
+### Understanding an unexpected stop
+
+An encoder reading beyond the saved calibration range can stop motor torque. The error names the joint, measured value, allowed range and distance beyond it. Support the arm, then check the physical pose and calibration before enabling control again. The reading alone cannot establish whether the cause is an incomplete calibration sweep or a hardware problem.
+
+Open **Robot logs** to see the last stop and download recent events and readings. Logging is automatic, separate from dataset recording, and survives reconnects and companion restarts. Stops are saved separately from the rolling position history. If saving fails, the panel shows the storage error. Motor checks still run independently of logging.
+
+Control also stops when Robot Lab is hidden or closed, after a two-second browser heartbeat loss, or on a hardware communication fault. Keep the page visible during control. The saved stop reason distinguishes these cases.
+
 ## AI teleoperation
 
 Open **ROBOT LAB → AI teleoperation** for physical SO101 control. **Agent Control** opens with **Physical SO101** selected; choose the USB port, saved calibration and workspace camera before explicitly enabling movement. Describe the task and review the selected provider, current observation and run limits. A proposed action is separate from measured execution and verified task completion.
