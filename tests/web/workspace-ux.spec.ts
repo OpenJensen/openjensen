@@ -88,6 +88,7 @@ test('workspace pages use a single title without introductory subtitles', async 
   const navigation = page.getByRole('navigation', { name: 'Policy lifecycle' });
   for (const name of [
     'Datasets',
+    'Real to sim',
     'Augmentation',
     'AI teleoperation',
     'Fine-tune',
@@ -178,6 +179,12 @@ test('the contextual guide covers every section and keeps API docs separate', as
     .getByRole('link', { name: 'Augmentation', exact: true })
     .click();
   await expect(page).toHaveURL(/#augmentation$/);
+  await page
+    .getByRole('navigation', { name: 'Guide sections' })
+    .getByRole('link', { name: 'Real to sim', exact: true })
+    .click();
+  await expect(page).toHaveURL(/#real-to-sim$/);
+  await expect(page.locator('#real-to-sim')).toContainText('agent model and power');
   await page.getByRole('link', { name: 'API reference', exact: true }).filter({ visible: true }).click();
   await expect(page).toHaveURL(/\/docs\/$/);
   await expect(page.getByRole('heading', { name: 'API reference', exact: true })).toBeVisible();
