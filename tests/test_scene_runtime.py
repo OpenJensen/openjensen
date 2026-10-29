@@ -126,6 +126,8 @@ def test_launch_persists_ownership_before_the_cloud_request(owned):
     assert sky.launch.call_args.kwargs["idle_minutes_to_autostop"] == 5
     assert sky.Resources.call_args.kwargs["accelerators"] == "L4:1"
     assert sky.Resources.call_args.kwargs["memory"] == "48+"
+    assert sky.Resources.call_args.kwargs["infra"] == "gcp/" + owned["config"]["region"]
+    assert "region" not in sky.Resources.call_args.kwargs
     script = sky.Task.call_args.kwargs["run"]
     assert "--network none" in script and "--env ACCEPT_EULA=Y" in script
     assert "OPENAI_API_KEY" not in script and "application_default_credentials" not in script
@@ -305,3 +307,65 @@ async def test_cancellation_still_cleans_up_owned_resources(tmp_path, config, mo
         json.loads((folder / "simulation-runtime/cleanup.json").read_text())["resource_cleanup"]
         == "cluster_removed"
     )
+
+
+def test_preflight_checks_resources_and_status_without_launch_or_ownership(owned, tmp_path):
+    owned["preflight_output"] = str(tmp_path / "preflight-result.json")
+    before = Path(owned["receipt"]).read_bytes()
+    sky = MagicMock()
+    sky.status.return_value = "read-only-status"
+    sky.get.return_value = []
+    runner.preflight(owned, sky)
+    assert json.loads(Path(owned["preflight_output"]).read_text()) == {
+        "passed": True,
+        "skypilot": "0.13.0",
+    }
+    assert Path(owned["receipt"]).read_bytes() == before
+    sky.launch.assert_not_called()
+    assert sky.Resources.call_args.kwargs["infra"] == "gcp/" + owned["config"]["region"]
+
+
+@pytest.mark.anyio
+async def test_production_preflight_fails_before_gpu_snapshot_or_provider_work(
+    tmp_path, config, monkeypatch
+):
+    folder = tmp_path / "preflight-scene"
+    folder.mkdir()
+    scenes = SimpleNamespace(root=ROOT, folder=lambda _: folder)
+    scene = SimpleNamespace(id="f" * 32)
+    calls = []
+
+    async def unavailable(args, **kwargs):
+        calls.append(args[2])
+        assert args[2] == "preflight"
+        assert kwargs["timeout"] == 60
+        assert "OPENAI_API_KEY" not in kwargs["env"]
+        raise SceneError("Synthetic SDK configuration failure")
+
+    monkeypatch.setattr(runtime, "command", unavailable)
+    with pytest.raises(SceneError, match="before starting provider work"):
+        await runtime.preflight(scenes, scene)
+    assert calls == ["preflight"]
+    assert not (folder / "simulation-runtime").exists()
+    assert not (folder / "simulation").exists()
+    request = json.loads((folder / ".simulation-preflight.json").read_text())
+    assert request["run_id"] == scene.id
+    assert "receipt" not in request
+
+
+@pytest.mark.anyio
+async def test_production_preflight_requires_structured_success(tmp_path, config, monkeypatch):
+    folder = tmp_path / "preflight-scene"
+    folder.mkdir()
+    scenes = SimpleNamespace(root=ROOT, folder=lambda _: folder)
+    scene = SimpleNamespace(id="f" * 32)
+
+    async def checked(args, **kwargs):
+        request = json.loads(Path(args[-1]).read_text())
+        Path(request["preflight_output"]).write_text(
+            json.dumps({"passed": True, "skypilot": "0.13.0"})
+        )
+
+    monkeypatch.setattr(runtime, "command", checked)
+    await runtime.preflight(scenes, scene)
+    assert not (folder / "simulation-runtime").exists()

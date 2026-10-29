@@ -223,6 +223,47 @@ async def _finish(task):
     return task.result()
 
 
+async def preflight(scenes, scene):
+    """Check SDK/configuration and read-only account access before provider work."""
+    config = configuration()
+    folder = scenes.folder(scene.id)
+    request_path = folder / ".simulation-preflight.json"
+    output = folder / ".simulation-preflight-result.json"
+    record = {
+        "run_id": scene.id,
+        "cluster": "scene-" + scene.id[:16],
+        "config": config,
+        "inputs": str(folder),
+        "results_prefix": config["results_uri"] + "/" + scene.id,
+        "preflight_output": str(output),
+    }
+    from vla_platform.scenes.service import write
+
+    write(request_path, record)
+    try:
+        await command(
+            [
+                config["sky_python"],
+                scenes.root / "workers/skypilot/scene_runner.py",
+                "preflight",
+                "--request",
+                request_path,
+            ],
+            cwd=folder,
+            env=_environment(config),
+            timeout=60,
+            limit=128 * 1024,
+        )
+        result = _json(output, 4096)
+        if result.get("passed") is not True or result.get("skypilot") != "0.13.0":
+            raise SceneError("Scene compute preflight did not produce a valid result.")
+    except SceneError, OSError, ValueError:
+        raise SceneError(
+            "Scene compute preflight failed. Check the SkyPilot runtime, account "
+            "and private API endpoint before starting provider work."
+        ) from None
+
+
 async def run(scenes, scene, bundle, trajectory):
     config = configuration()
     folder = scenes.folder(scene.id)
