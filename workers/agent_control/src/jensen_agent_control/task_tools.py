@@ -103,7 +103,6 @@ def validate_space(space, joints):
                 "model",
                 "frame",
                 "units",
-                "current_m",
                 "max_step_m",
                 "tolerance_m",
                 "orientation_controlled",
@@ -125,9 +124,6 @@ def validate_space(space, joints):
             or position.get("evidence") != "model_estimate"
             or position.get("orientation_controlled") is not False
             or position.get("camera_to_base_calibrated") is not False
-            or not isinstance(position.get("current_m"), list)
-            or len(position["current_m"]) != 3
-            or not all(number(v, -1, 1) for v in position["current_m"])
             or not number(position.get("max_step_m"), 0.001, 0.02)
             or not number(position.get("tolerance_m"), 0.0001, 0.005)
         ):

@@ -460,7 +460,6 @@ class TaskPlanningTests(unittest.IsolatedAsyncioTestCase):
                 "model": "so101-new-calib-3a65d2d35e68a8d2",
                 "frame": "base_link",
                 "units": "metres",
-                "current_m": [0.39, 0.0, 0.22],
                 "max_step_m": 0.02,
                 "tolerance_m": 0.003,
                 "evidence": "model_estimate",
@@ -476,6 +475,11 @@ class TaskPlanningTests(unittest.IsolatedAsyncioTestCase):
                 "joints": dict.fromkeys(names, 0.0),
                 "joint_units": space["joint_units"],
                 "image_data_url": CHECK_IMAGE,
+                "gripper_position_estimate": {
+                    "frame": "base_link",
+                    "position_m": [0.391, 0.0, 0.226],
+                    "evidence": "model_estimate",
+                },
             },
         )
 
@@ -523,6 +527,42 @@ class TaskPlanningTests(unittest.IsolatedAsyncioTestCase):
                     response("propose_gripper_position", dict(baseline, **changes)),
                     supplied=supplied,
                 )
+
+    async def test_position_continuation_accepts_new_measured_estimates(self):
+        supplied = self.position_request()
+        proposed = {
+            "frame": "base_link",
+            "x_m": 0.30,
+            "y_m": 0.02,
+            "z_m": 0.15,
+            "duration_seconds": 2.0,
+            "purpose": "Continue toward the known endpoint",
+        }
+        first, _ = await self.invoke(
+            response("propose_gripper_position", proposed, call_id="metric-0"), supplied=supplied
+        )
+        next_request = self.position_request()
+        next_request["observation"]["joints"]["shoulder_lift"] = 2.0
+        next_request["observation"]["gripper_position_estimate"]["position_m"] = [0.392, 0.0, 0.215]
+        next_request.update(
+            operation="continue",
+            continuation=first["continuation"],
+            receipt={
+                "status": "completed",
+                "execution_id": "metric-execution",
+                "task_success_verified": False,
+            },
+        )
+        result, sent = await self.invoke(
+            response("propose_gripper_position", proposed, call_id="metric-1"),
+            supplied=next_request,
+        )
+        self.assertEqual(result["skill"], "gripper_position")
+        latest = [item for item in sent["input"] if item.get("role") == "user"][-1]
+        current = json.loads(latest["content"][0]["text"])
+        self.assertEqual(
+            current["observation"]["gripper_position_estimate"]["position_m"], [0.392, 0.0, 0.215]
+        )
 
 
 if __name__ == "__main__":

@@ -194,3 +194,17 @@ def test_mcp_position_tool_preserves_the_scoped_request_envelope():
         assert body["arguments"] is None
 
     asyncio.run(invoke())
+
+
+def test_position_estimate_changes_without_changing_the_action_policy(physical_position):
+    client, robot, session, route, token = physical_position
+    before = context(client, route, token)
+    robot.joints["shoulder_lift"] = 2.0
+    assert client.post(route + "/observe").status_code == 200
+    after = context(client, route, token)
+    assert after["action_space"] == before["action_space"]
+    assert (
+        after["session"]["observation"]["gripper_position_estimate"]["position_m"]
+        != before["session"]["observation"]["gripper_position_estimate"]["position_m"]
+    )
+    assert not robot.executions

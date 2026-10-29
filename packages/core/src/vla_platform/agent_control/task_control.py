@@ -172,7 +172,6 @@ class TaskControl:
                 "model": kinematics.MODEL,
                 "frame": kinematics.FRAME,
                 "units": "metres",
-                "current_m": kinematics.forward(obs.joints),
                 "max_step_m": kinematics.MAX_STEP_M,
                 "tolerance_m": kinematics.TOLERANCE_M,
                 "orientation_controlled": False,
