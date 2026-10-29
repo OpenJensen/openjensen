@@ -317,7 +317,13 @@ export function useRobotLab() {
     state?.capabilities?.calibration_persistence,
   ]);
   useEffect(() => {
-    if (!awaitingCalibration || awaitingCalibration.token !== epoch.current || !online) return;
+    if (
+      !awaitingCalibration ||
+      awaitingCalibration.token !== epoch.current ||
+      !online ||
+      status.dataUpdatedAt <= awaitingCalibration.updatedAt
+    )
+      return;
     if (confirmsCalibration(status.data, awaitingCalibration)) {
       setError(null);
       setAwaitingCalibration(null);
@@ -326,7 +332,7 @@ export function useRobotLab() {
         ownedRef.current = false;
         setOwnsSession(false);
       }
-    } else if (status.dataUpdatedAt > awaitingCalibration.updatedAt) {
+    } else {
       // A fresh read did not confirm this arm/stage. Keep a real refusal or fault visible.
       setError(status.data?.calibration?.error || status.data?.session?.error || awaitingCalibration.failure);
       setNotice(null);
