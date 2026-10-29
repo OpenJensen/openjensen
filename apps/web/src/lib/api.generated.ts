@@ -4951,6 +4951,8 @@ export interface components {
             scope: "dataset";
             /** Source Job Id */
             source_job_id: string;
+            /** Source Scene Id */
+            source_scene_id?: string | null;
         };
         /** SceneRun */
         SceneRun: {

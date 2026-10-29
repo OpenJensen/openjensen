@@ -28,6 +28,7 @@ type Options = {
   models: Model[];
   default_model: string;
   configured: boolean;
+  simulation_available?: boolean;
   codex_available: boolean;
   builder_available: boolean;
   supported_repo: string;
@@ -43,6 +44,7 @@ type Source = {
 type SceneRequest = {
   request_id: string;
   source_job_id: string;
+  source_scene_id?: string | null;
   scope?: 'dataset';
   episode_index?: number;
   camera_key: string;
@@ -72,7 +74,12 @@ type Run = {
   events: { at: string; stage: string; message: string }[];
   artifacts: string[];
   media?: Media[];
-  source?: { total_episodes?: number; inspected_episodes?: number[]; replay_episode?: number };
+  source?: {
+    total_episodes?: number;
+    inspected_episodes?: number[];
+    replay_episode?: number;
+    resource_cleanup?: 'cluster_removed' | 'not_launched' | 'unverified';
+  };
   usage: Record<string, number>;
   agent?: { harness: string; model: string; reasoning_effort: string } | null;
 };
@@ -176,6 +183,12 @@ export function SceneGenerationPanel({ projectId }: { projectId?: string }) {
   const selectedPower = selectedModel?.reasoning_efforts.includes(requestedPower)
     ? requestedPower
     : (selectedModel?.default_reasoning_effort ?? 'medium');
+  const simulationReady = options.data?.simulation_available ?? options.data?.configured ?? false;
+  const retryPending = !!pending?.source_scene_id;
+  const reusedSceneId = selectedJob?.request.source_scene_id ?? run?.request.source_scene_id;
+  const sourceJob = reusedSceneId
+    ? history.find((job) => job.result?.scene_id === reusedSceneId || job.request.request_id === reusedSceneId)
+    : undefined;
   const locked = busy || !!pending;
   const datasetName = (source: string) => sources.data?.find((item) => item.job_id === source)?.name ?? 'Dataset';
   const openNew = () => {
@@ -183,15 +196,22 @@ export function SceneGenerationPanel({ projectId }: { projectId?: string }) {
     setView('new');
   };
 
-  async function generate() {
-    if (!projectId || busy || (!pending && (!selected || !selectedModel || running))) return;
+  async function generate(reuse?: SceneRequest) {
+    if (
+      !projectId ||
+      busy ||
+      (reuse && running) ||
+      ((reuse || retryPending) && !simulationReady) ||
+      (!pending && !reuse && (!selected || !selectedModel || running))
+    )
+      return;
     setBusy(true);
     setError('');
     try {
       const saved = localStorage.getItem(storageKey);
       const body: SceneRequest = saved
         ? JSON.parse(saved)
-        : {
+        : (reuse ?? {
             request_id: crypto.randomUUID().replaceAll('-', ''),
             source_job_id: selected!.job_id!,
             scope: 'dataset',
@@ -199,7 +219,7 @@ export function SceneGenerationPanel({ projectId }: { projectId?: string }) {
             max_attempts: attempts,
             model: selectedModel!.id,
             reasoning_effort: selectedPower,
-          };
+          });
       localStorage.setItem(storageKey, JSON.stringify(body));
       setPending(body);
       const created = await agentRequest<SceneJob>(
@@ -214,6 +234,7 @@ export function SceneGenerationPanel({ projectId }: { projectId?: string }) {
         created.kind !== 'scene.generate' ||
         created.request?.request_id !== body.request_id ||
         created.request?.source_job_id !== body.source_job_id ||
+        (created.request?.source_scene_id ?? null) !== (body.source_scene_id ?? null) ||
         created.request?.scope !== 'dataset' ||
         created.request?.camera_key !== body.camera_key ||
         created.request?.max_attempts !== body.max_attempts ||
@@ -317,13 +338,13 @@ export function SceneGenerationPanel({ projectId }: { projectId?: string }) {
             <button type="button" className="text-button" onClick={() => setView('jobs')}>
               ← Back to jobs
             </button>
-            <h2>New job</h2>
+            <h2>{pending?.source_scene_id ? 'Retry simulation' : 'New job'}</h2>
           </header>
           {options.isError && <Notice tone="danger" title="Scene setup unavailable" live="alert" />}
-          {options.data && !options.data.configured && (
+          {options.data && !(retryPending ? simulationReady : options.data.configured) && (
             <Notice
               tone="warning"
-              title="Scene setup required"
+              title={retryPending ? 'Simulation setup required' : 'Scene setup required'}
               live="status"
               actions={
                 <Link className="secondary-button" href="/guide/#real-to-sim">
@@ -450,7 +471,11 @@ export function SceneGenerationPanel({ projectId }: { projectId?: string }) {
               <button
                 type="submit"
                 className="primary-button"
-                disabled={busy || (!pending && (running || !selected || !selectedModel || !options.data?.configured))}
+                disabled={
+                  busy ||
+                  (retryPending && !simulationReady) ||
+                  (!pending && (running || !selected || !selectedModel || !options.data?.configured))
+                }
               >
                 {busy ? 'Starting…' : pending ? 'Check request' : 'Start job'}
               </button>
@@ -519,9 +544,61 @@ export function SceneGenerationPanel({ projectId }: { projectId?: string }) {
               {busy ? 'Cancelling…' : 'Cancel job'}
             </button>
           )}
+          {selectedJob &&
+            run &&
+            ['failed', 'interrupted'].includes(selectedJob.status) &&
+            ['source_evidence', 'agent_review', 'usd_structure'].every((gate) => run.gates[gate] === true) && (
+              <button
+                type="button"
+                className="primary-button"
+                disabled={busy || running || !!pending || !simulationReady}
+                onClick={() =>
+                  void generate({
+                    request_id: crypto.randomUUID().replaceAll('-', ''),
+                    source_scene_id: run.id,
+                    source_job_id: selectedJob.request.source_job_id,
+                    scope: 'dataset',
+                    camera_key: selectedJob.request.camera_key,
+                    max_attempts: selectedJob.request.max_attempts,
+                    model: selectedJob.request.model,
+                    reasoning_effort: selectedJob.request.reasoning_effort ?? 'medium',
+                  })
+                }
+              >
+                Retry simulation
+              </button>
+            )}
+          {pending && (
+            <Notice
+              tone="warning"
+              title="Unconfirmed request"
+              live="status"
+              actions={
+                <button
+                  type="button"
+                  className="secondary-button"
+                  disabled={busy || (retryPending && !simulationReady)}
+                  onClick={() => void generate()}
+                >
+                  Check request
+                </button>
+              }
+            />
+          )}
           {error && <Notice tone="danger" title="Request failed" details={error} live="alert" />}
           {run ? (
-            <SceneResults run={run} job={selectedJob} />
+            <SceneResults
+              run={run}
+              job={selectedJob}
+              onSourceJob={
+                sourceJob
+                  ? () => {
+                      setSelectedId(sourceJob.id);
+                      setError('');
+                    }
+                  : undefined
+              }
+            />
           ) : (
             <Notice
               title={
@@ -539,7 +616,7 @@ export function SceneGenerationPanel({ projectId }: { projectId?: string }) {
   );
 }
 
-function SceneResults({ run, job }: { run: Run; job?: SceneJob }) {
+function SceneResults({ run, job, onSourceJob }: { run: Run; job?: SceneJob; onSourceJob?: () => void }) {
   const media = run.media ?? [];
   const images = media.filter((item) => item.role === 'environment_image');
   const replays = media.filter((item) => item.role === 'episode_replay');
@@ -559,6 +636,9 @@ function SceneResults({ run, job }: { run: Run; job?: SceneJob }) {
           </a>
         )}
       </div>
+      {run.source?.resource_cleanup === 'unverified' && (
+        <Notice tone="warning" title="Compute cleanup unverified" live="status" />
+      )}
       {!!images.length && (
         <section aria-label="Environment images">
           <h3>Environment</h3>
@@ -599,9 +679,31 @@ function SceneResults({ run, job }: { run: Run; job?: SceneJob }) {
       <details className="scene-details">
         <summary>Details</summary>
         <p>{run.message}</p>
+        {(job?.request.source_scene_id ?? run.request.source_scene_id) && (
+          <p>
+            Reused reconstruction
+            {onSourceJob && (
+              <>
+                {' '}
+                ·{' '}
+                <button type="button" className="text-button" onClick={onSourceJob}>
+                  Original job
+                </button>
+              </>
+            )}
+          </p>
+        )}
         <p>
           Agent: {run.agent?.model ?? run.request.model ?? 'Codex default'} · Power:{' '}
           {powerLabels[run.agent?.reasoning_effort ?? run.request.reasoning_effort ?? 'medium']} · Codex CLI
+        </p>
+        <p>
+          Compute:{' '}
+          {run.source?.resource_cleanup === 'cluster_removed'
+            ? 'Released'
+            : run.source?.resource_cleanup === 'not_launched'
+              ? 'Not allocated'
+              : 'Unverified'}
         </p>
         {run.source?.total_episodes !== undefined && (
           <p>
