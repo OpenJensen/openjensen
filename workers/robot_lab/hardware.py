@@ -22,6 +22,7 @@ REGISTERS = {
     "Max_Position_Limit": (11, 2),
     "Homing_Offset": (31, 2),
     "Operating_Mode": (33, 1),
+    "Phase": (18, 1),
     "P_Coefficient": (21, 1),
     "D_Coefficient": (22, 1),
     "I_Coefficient": (23, 1),
@@ -58,7 +59,7 @@ def normalized(joint: str, raw: int, calibration: dict) -> float:
     entry = calibration[joint]
     low, high = entry["range_min"], entry["range_max"]
     if joint == "gripper":
-        return max(0.0, min(100.0, (raw - low) * 100 / (high - low)))
+        return (min(high, max(low, raw)) - low) / (high - low) * 100
     return (raw - (low + high) / 2) * 360 / 4095
 
 
@@ -68,7 +69,7 @@ def denormalized(joint: str, value: float, calibration: dict) -> int:
     entry = calibration[joint]
     low, high = entry["range_min"], entry["range_max"]
     raw = (
-        value * (high - low) / 100 + low
+        (min(100.0, max(0.0, value)) / 100) * (high - low) + low
         if joint == "gripper"
         else value * 4095 / 360 + (low + high) / 2
     )
@@ -228,6 +229,7 @@ class ServoBus:
                 "Min_Position_Limit",
                 "Max_Position_Limit",
                 "Operating_Mode",
+                "Phase",
                 "Lock",
                 "Max_Torque_Limit",
                 "Torque_Limit",
