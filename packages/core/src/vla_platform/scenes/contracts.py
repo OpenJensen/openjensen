@@ -16,12 +16,24 @@ Size = Annotated[list[Dimension], Field(min_length=3, max_length=3)]
 Note = Annotated[str, Field(min_length=1, max_length=2000)]
 
 
+Effort = Literal["low", "medium", "high", "xhigh", "max", "ultra"]
+Model = Annotated[str, Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")]
+
+
+class AgentSettings(Strict):
+    harness: Literal["codex_cli"] = "codex_cli"
+    model: Model
+    reasoning_effort: Effort = "medium"
+
+
 class SceneRequest(Strict):
     request_id: str = Field(pattern=r"^[a-f0-9]{32}$")
     source_job_id: str = Field(min_length=1, max_length=64)
     episode_index: int = Field(default=3, ge=0, le=99999, strict=True)
     camera_key: str = Field(default="observation.images.front", min_length=1, max_length=128)
     max_attempts: int = Field(default=2, ge=1, le=3, strict=True)
+    model: Model | None = None
+    reasoning_effort: Effort = "medium"
 
 
 class Camera(Strict):
@@ -108,4 +120,5 @@ class SceneRun(Strict):
     artifacts: list[str] = Field(default_factory=list)
     usage: dict[str, int] = Field(default_factory=dict)
     source: dict = Field(default_factory=dict)
+    agent: AgentSettings | None = None
     gates: dict = Field(default_factory=dict)

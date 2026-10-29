@@ -15,6 +15,7 @@ from vla_platform.augmentation.source import download_video
 from vla_platform.datasets.explore import ExplorationError, source_profile
 from vla_platform.scenes.agent import SceneError, codex_binary, command, run_role
 from vla_platform.scenes.contracts import Proposal, Review, SceneRun
+from vla_platform.scenes.models import catalog, resolve
 
 ACTIVE = {"queued", "running"}
 SOURCE = "codywang/so101_pickup_test"
@@ -137,6 +138,7 @@ class Scenes:
             "supported_repo": SOURCE,
             "supported_revision": REVISION,
             "max_attempts": 3,
+            **catalog(),
             "isaac_verified": False,
             "message": (
                 "Codex proposes and reviews parameters; OpenUSD checks structure. "
@@ -165,17 +167,20 @@ class Scenes:
                 )
             if request.episode_index >= profile.total_episodes:
                 raise SceneError("Episode is outside this dataset.")
-            if not self.options()["configured"]:
+            options = self.options()
+            if not options["configured"]:
                 raise SceneError(
                     "Scene runtime is not configured. Install Codex and set "
                     "JENSEN_SCENE_PYTHON to an OpenUSD Python."
                 )
+            agent = resolve(request, options)
             folder = self.folder(request.request_id)
             folder.mkdir(mode=0o700, parents=True, exist_ok=False)
             run = SceneRun(
                 id=request.request_id,
                 project_id=project,
                 request=request,
+                agent=agent,
                 status="queued",
                 stage="queued",
                 created_at=now(),
@@ -314,6 +319,8 @@ class Scenes:
                     + json.dumps(evidence),
                     frames,
                     self.data_dir,
+                    model=run.agent.model,
+                    reasoning_effort=run.agent.reasoning_effort,
                 )
                 for key, value in usage.items():
                     run.usage[key] = run.usage.get(key, 0) + value
@@ -339,6 +346,8 @@ class Scenes:
                     + json.dumps(evidence),
                     frames,
                     self.data_dir,
+                    model=run.agent.model,
+                    reasoning_effort=run.agent.reasoning_effort,
                 )
                 for key, value in usage.items():
                     run.usage[key] = run.usage.get(key, 0) + value
@@ -417,6 +426,7 @@ class Scenes:
                 write(
                     bundle / "acceptance.json",
                     {
+                        "agent": run.agent.model_dump(),
                         "gates": run.gates,
                         "status": "needs_simulation",
                         "required": [

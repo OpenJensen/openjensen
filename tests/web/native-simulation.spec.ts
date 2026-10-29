@@ -3,6 +3,20 @@ import { selectProject } from './project-controls';
 import { createServer } from 'node:http';
 import { expect, test, type Page } from '@playwright/test';
 
+const sceneModels = [
+  {
+    id: 'gpt-6.1-sol',
+    label: 'GPT-6.1 Sol',
+    reasoning_efforts: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
+    default_reasoning_effort: 'medium',
+  },
+  {
+    id: 'gpt-6-luna',
+    label: 'GPT-6 Luna',
+    reasoning_efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
+    default_reasoning_effort: 'medium',
+  },
+];
 const timestamp = '2026-09-27T12:00:00Z';
 const profile = {
   id: 'cup-fixture',
@@ -1209,6 +1223,8 @@ test('generated USD keeps unverified simulator gates visible and bundles downloa
         configured: true,
         codex_available: true,
         builder_available: true,
+        models: sceneModels,
+        default_model: sceneModels[0].id,
         supported_repo: 'codywang/so101_pickup_test',
         supported_revision: revision,
         message: '',
@@ -1239,4 +1255,91 @@ test('generated USD keeps unverified simulator gates visible and bundles downloa
     /scene-bundle.zip$/,
   );
   await expect(scene.getByRole('button', { name: 'Generate scene', exact: true })).toBeEnabled();
+});
+
+test('scene model and power choices reach the request and remain pinned on retry', async ({ page }) => {
+  await fixture(page);
+  const revision = 'ecef85bc07005f771ad86deeff1427f9d72953ed';
+  await page.route('**/api/v1/scene-generation/options', (route) =>
+    route.fulfill({
+      json: {
+        configured: true,
+        codex_available: true,
+        builder_available: true,
+        supported_repo: 'codywang/so101_pickup_test',
+        supported_revision: revision,
+        models: sceneModels,
+        default_model: sceneModels[0].id,
+        message: '',
+      },
+    }),
+  );
+  await page.route('**/api/v1/datasets?*', (route) =>
+    route.fulfill({
+      json: [
+        {
+          id: 'inspection:source',
+          job_id: 'source',
+          name: 'Real episodes',
+          status: 'ready',
+          profile: { repo_id: 'codywang/so101_pickup_test', revision, total_episodes: 30 },
+        },
+      ],
+    }),
+  );
+  const requests: Record<string, unknown>[] = [];
+  let rejectNext = false;
+  let saved: Record<string, unknown>[] = [];
+  await page.route('**/api/v1/projects/alpha/scenes', async (route) => {
+    if (route.request().method() === 'GET') return route.fulfill({ json: saved });
+    const request = route.request().postDataJSON();
+    requests.push(request);
+    if (rejectNext) return route.fulfill({ status: 409, json: { detail: 'Model choice is no longer available' } });
+    if (requests.length === 1) return route.fulfill({ status: 503, json: { detail: 'Reply unavailable' } });
+    saved = [
+      {
+        id: request.request_id,
+        request,
+        agent: { harness: 'codex_cli', model: request.model, reasoning_effort: request.reasoning_effort },
+        status: 'needs_simulation',
+        attempt: 1,
+        message: 'USD saved',
+        gates: {},
+        events: [],
+        artifacts: [],
+        usage: {},
+      },
+    ];
+    return route.fulfill({ status: 202, json: saved[0] });
+  });
+  await page.reload();
+  const scene = page.getByRole('region', { name: 'Scene generation', exact: true });
+  const model = scene.getByLabel('Scene agent model', { exact: true });
+  const power = scene.getByLabel('Scene agent power', { exact: true });
+  await expect(model).toHaveValue('gpt-6.1-sol');
+  await power.selectOption('ultra');
+  await model.selectOption('gpt-6-luna');
+  await expect(power).toHaveValue('medium');
+  await expect(power.locator('option[value="ultra"]')).toHaveCount(0);
+  await power.selectOption('high');
+  await scene.getByRole('button', { name: 'Generate scene', exact: true }).click();
+  await expect(scene.getByRole('alert')).toContainText('Reply unavailable');
+  await expect(model).toBeDisabled();
+  await expect(power).toBeDisabled();
+  await page.reload();
+  await expect(scene.getByRole('status')).toContainText('gpt-6-luna · High');
+  await scene.getByRole('button', { name: 'Generate scene', exact: true }).click();
+  await expect(scene).toContainText('Agent: gpt-6-luna · Power: High · Codex CLI');
+  expect(requests).toHaveLength(2);
+  expect(requests[0]).toMatchObject({ model: 'gpt-6-luna', reasoning_effort: 'high' });
+  expect(requests[1]).toEqual(requests[0]);
+  await page.reload();
+  await expect(power).toHaveValue('high');
+  await expect(model).toBeEnabled();
+  rejectNext = true;
+  await scene.getByRole('button', { name: 'Generate scene', exact: true }).click();
+  await expect(scene.getByRole('alert')).toContainText('Model choice is no longer available');
+  await expect(model).toBeEnabled();
+  await expect(power).toBeEnabled();
+  await expect(scene.getByRole('status')).toHaveCount(0);
 });

@@ -2586,6 +2586,23 @@ export interface components {
              */
             schema_version: 1;
         };
+        /** AgentSettings */
+        AgentSettings: {
+            /**
+             * Harness
+             * @default codex_cli
+             * @constant
+             */
+            harness: "codex_cli";
+            /** Model */
+            model: string;
+            /**
+             * Reasoning Effort
+             * @default medium
+             * @enum {string}
+             */
+            reasoning_effort: "low" | "medium" | "high" | "xhigh" | "max" | "ultra";
+        };
         /** ApiConnectionStatus */
         ApiConnectionStatus: {
             /**
@@ -4816,6 +4833,14 @@ export interface components {
              * @default 2
              */
             max_attempts: number;
+            /** Model */
+            model?: string | null;
+            /**
+             * Reasoning Effort
+             * @default medium
+             * @enum {string}
+             */
+            reasoning_effort: "low" | "medium" | "high" | "xhigh" | "max" | "ultra";
             /** Request Id */
             request_id: string;
             /** Source Job Id */
@@ -4823,6 +4848,7 @@ export interface components {
         };
         /** SceneRun */
         SceneRun: {
+            agent?: components["schemas"]["AgentSettings"] | null;
             /** Artifacts */
             artifacts?: string[];
             /**

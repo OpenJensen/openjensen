@@ -1,12 +1,28 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { agentRequest } from '@/lib/agent-api';
+import { AgentRequestError, agentRequest } from '@/lib/agent-api';
 import { apiOrigin } from '@/lib/api';
 import './scene-generation-panel.css';
 
+type Model = {
+  id: string;
+  label: string;
+  reasoning_efforts: string[];
+  default_reasoning_effort: string;
+};
+const powerLabels: Record<string, string> = {
+  low: 'Low',
+  medium: 'Medium',
+  high: 'High',
+  xhigh: 'Extra high',
+  max: 'Max',
+  ultra: 'Ultra',
+};
 type Options = {
+  models: Model[];
+  default_model: string;
   configured: boolean;
   codex_available: boolean;
   builder_available: boolean;
@@ -27,6 +43,8 @@ type SceneRequest = {
   episode_index: number;
   camera_key: string;
   max_attempts: number;
+  model?: string | null;
+  reasoning_effort?: string;
 };
 type Run = {
   id: string;
@@ -39,6 +57,7 @@ type Run = {
   events: { at: string; stage: string; message: string }[];
   artifacts: string[];
   usage: Record<string, number>;
+  agent?: { harness: string; model: string; reasoning_effort: string } | null;
 };
 const active = (run: Run) => run.status === 'queued' || run.status === 'running';
 const labels: Record<string, string> = {
@@ -74,6 +93,9 @@ export function SceneGenerationPanel({ projectId }: { projectId?: string }) {
   const [sourceId, setSourceId] = useState('');
   const [episode, setEpisode] = useState(3);
   const [attempts, setAttempts] = useState(2);
+  const [model, setModel] = useState('');
+  const [power, setPower] = useState('');
+  const [pending, setPending] = useState<SceneRequest | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const candidates =
@@ -84,13 +106,32 @@ export function SceneGenerationPanel({ projectId }: { projectId?: string }) {
         item.profile?.repo_id === options.data?.supported_repo &&
         item.profile?.revision === options.data?.supported_revision,
     ) ?? [];
-  const selected = candidates.find((item) => item.job_id === sourceId) ?? candidates[0];
+  const selected = candidates.find((item) => item.job_id === (pending?.source_job_id ?? sourceId)) ?? candidates[0];
   const latest = runs.data?.[0];
   const running = runs.data?.some(active);
   const storageKey = `jensen-scene-request:${projectId}`;
 
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(storageKey);
+      setPending(saved ? JSON.parse(saved) : null);
+    } catch {
+      setPending(null);
+    }
+  }, [storageKey]);
+  const models = options.data?.models ?? [];
+  const selectedModel =
+    models.find((item) => item.id === (pending?.model ?? model)) ??
+    models.find((item) => item.id === (latest?.agent?.model ?? options.data?.default_model)) ??
+    models[0];
+  const requestedPower = pending?.reasoning_effort ?? (power || latest?.agent?.reasoning_effort || '');
+  const selectedPower = selectedModel?.reasoning_efforts.includes(requestedPower)
+    ? requestedPower
+    : (selectedModel?.default_reasoning_effort ?? 'medium');
+  const locked = busy || running || !!pending;
+
   async function generate() {
-    if (!projectId || !selected || busy || running) return;
+    if (!projectId || !selected || !selectedModel || busy || running) return;
     setBusy(true);
     setError('');
     try {
@@ -103,13 +144,21 @@ export function SceneGenerationPanel({ projectId }: { projectId?: string }) {
             episode_index: episode,
             camera_key: 'observation.images.front',
             max_attempts: attempts,
+            model: selectedModel.id,
+            reasoning_effort: selectedPower,
           };
       // Retain exact request before the mutation. A retry reconciles the same durable run.
       localStorage.setItem(storageKey, JSON.stringify(body));
+      setPending(body);
       await agentRequest<Run>(`/projects/${encodeURIComponent(projectId)}/scenes`, 'POST', body);
       localStorage.removeItem(storageKey);
+      setPending(null);
       await runs.refetch();
     } catch (problem) {
+      if (problem instanceof AgentRequestError && problem.status >= 400 && problem.status < 500) {
+        localStorage.removeItem(storageKey);
+        setPending(null);
+      }
       setError(problem instanceof Error ? problem.message : 'Scene request could not be verified.');
       await runs.refetch();
     } finally {
@@ -128,7 +177,7 @@ export function SceneGenerationPanel({ projectId }: { projectId?: string }) {
       </div>
       <p>
         Agents fit and review the camera and object layout. A trusted builder creates the robot, colliders and USD
-        assets. Each validation step stays visible.
+        assets. Isaac rendering and physics validation run separately on a simulation worker.
       </p>
       {options.isError && <p role="alert">Scene runtime status could not be loaded.</p>}
       {options.data && !options.data.configured && (
@@ -157,7 +206,7 @@ export function SceneGenerationPanel({ projectId }: { projectId?: string }) {
           <select
             aria-label="Scene dataset"
             value={selected?.job_id ?? ''}
-            disabled={busy || running || !candidates.length}
+            disabled={locked || !candidates.length}
             onChange={(event) => setSourceId(event.target.value)}
           >
             {candidates.length ? (
@@ -178,8 +227,8 @@ export function SceneGenerationPanel({ projectId }: { projectId?: string }) {
             type="number"
             min={0}
             max={(selected?.profile?.total_episodes ?? 1) - 1}
-            value={episode}
-            disabled={busy || running}
+            value={pending?.episode_index ?? episode}
+            disabled={locked}
             onChange={(event) => setEpisode(Number(event.target.value))}
           />
         </label>
@@ -187,13 +236,55 @@ export function SceneGenerationPanel({ projectId }: { projectId?: string }) {
           Attempt limit
           <select
             aria-label="Scene attempt limit"
-            value={attempts}
-            disabled={busy || running}
+            value={pending?.max_attempts ?? attempts}
+            disabled={locked}
             onChange={(event) => setAttempts(Number(event.target.value))}
           >
             {[1, 2, 3].map((value) => (
               <option key={value} value={value}>
                 {value}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Model
+          <select
+            aria-label="Scene agent model"
+            value={selectedModel?.id ?? ''}
+            disabled={locked || !models.length}
+            onChange={(event) => {
+              const next = models.find((item) => item.id === event.target.value);
+              setModel(event.target.value);
+              setPower(
+                next?.reasoning_efforts.includes(selectedPower)
+                  ? selectedPower
+                  : (next?.default_reasoning_effort ?? 'medium'),
+              );
+            }}
+          >
+            {models.length ? (
+              models.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.label}
+                </option>
+              ))
+            ) : (
+              <option value="">Loading models…</option>
+            )}
+          </select>
+        </label>
+        <label>
+          Power
+          <select
+            aria-label="Scene agent power"
+            value={selectedPower}
+            disabled={locked || !selectedModel}
+            onChange={(event) => setPower(event.target.value)}
+          >
+            {selectedModel?.reasoning_efforts.map((effort) => (
+              <option key={effort} value={effort}>
+                {powerLabels[effort] ?? effort}
               </option>
             ))}
           </select>
@@ -204,6 +295,7 @@ export function SceneGenerationPanel({ projectId }: { projectId?: string }) {
             busy ||
             running ||
             !selected ||
+            !selectedModel ||
             !options.data?.configured ||
             episode < 0 ||
             episode >= (selected?.profile?.total_episodes ?? 0)
@@ -213,10 +305,26 @@ export function SceneGenerationPanel({ projectId }: { projectId?: string }) {
         </button>
       </form>
       <p className="scene-generation-note">
+        Model and power apply to both reconstruction and review. Higher power spends more time and tokens reasoning; it
+        does not change the simulation GPU. Choices follow the installed Codex catalog; API access depends on your
+        account.
+      </p>
+      {pending && (
+        <p role="status">
+          Unconfirmed request: {pending.model ?? 'Codex default'} ·{' '}
+          {powerLabels[pending.reasoning_effort ?? 'medium'] ?? pending.reasoning_effort}. Retry keeps these saved
+          settings.
+        </p>
+      )}
+      <p className="scene-generation-note">
         Sends five source frames and joint samples to OpenAI through Codex. Each attempt uses a reconstruction role and
         an independent review role. Generation uses your configured API key or the service host’s Codex login.
       </p>
-      {error && <p role="alert">{error} Retry reconciles the saved request.</p>}
+      {error && (
+        <p role="alert">
+          {error} {pending && 'Retry reconciles the saved request.'}
+        </p>
+      )}
       {runs.isError && <p role="alert">Saved scene runs could not be loaded.</p>}
       {latest && (
         <div className="scene-run" aria-live="polite">
@@ -249,6 +357,10 @@ export function SceneGenerationPanel({ projectId }: { projectId?: string }) {
             )}
           </div>
           <p>{latest.message}</p>
+          <p className="scene-generation-note">
+            Agent: {latest.agent?.model ?? latest.request.model ?? 'Codex default (legacy run)'} · Power:{' '}
+            {powerLabels[latest.agent?.reasoning_effort ?? latest.request.reasoning_effort ?? 'medium']} · Codex CLI
+          </p>
           <ul className="scene-gates">
             {Object.entries(latest.gates).map(([key, passed]) => (
               <li key={key} data-passed={passed}>
