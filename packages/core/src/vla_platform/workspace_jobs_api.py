@@ -219,7 +219,21 @@ async def cancel(project_id: str, key: str, request: Request):
     if key.startswith("core:"):
         await state.execution.cancel(job.source_id)
     elif key.startswith("scene:"):
-        await state.scenes.cancel(job.source_id)
+        run = state.scenes.get(job.source_id)
+        if run.job_id:
+            owner = await state.execution.get(run.job_id)
+            if (
+                owner is None
+                or owner.project_id != project_id
+                or not isinstance(owner.request, SceneRequest)
+                or owner.request.request_id != run.id
+            ):
+                raise HTTPException(404, "Scene job owner not found in this project")
+            if not core_job(owner).can_cancel:
+                raise HTTPException(409, "This job cannot be cancelled in its current state")
+            await state.execution.cancel(owner.id)
+        else:
+            await state.scenes.cancel(job.source_id)
     elif key.startswith("agent:"):
         await state.agent_control.interrupt(job.source_id, "stop")
     elif key.startswith("dataset:"):
