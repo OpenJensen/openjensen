@@ -44,6 +44,7 @@ function initialStatus(calibrated = false): any {
       recording: true,
     },
     session: {
+      generation: 1,
       mode: 'idle',
       robot_id: null,
       port: null,
@@ -91,6 +92,9 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin') 
     heartbeatFailures: 0,
     statusFailures: false,
     dropCalibrationReply: false,
+    dropCalibrationStartReply: false,
+    calibrationStartTransportFailure: false,
+    releaseCalibrationStartReply: null as (() => void) | null,
   };
   if (hostPlatform === 'Linux') {
     state.status.platform = 'Linux';
@@ -231,14 +235,16 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin') 
         state.status.assembled.phase = 'stopped';
         state.status.session.mode = 'idle';
       } else if (action === '/calibration/start') {
+        if (state.calibrationStartTransportFailure) return route.abort('failed');
         if (state.calibrationStartError)
           return route.fulfill({ status: 409, json: { detail: state.calibrationStartError } });
         state.status.session = {
           ...state.status.session,
           mode: 'calibration',
-          port: body.port,
-          robot_id: body.robot_id,
-          role: body.role,
+          port: body.resume ? state.status.calibration.port : body.port,
+          robot_id: body.resume ? state.status.calibration.robot_id : body.robot_id,
+          role: body.resume ? state.status.calibration.role : body.role,
+          generation: (state.status.session.generation ?? 0) + 1,
           positions: values(2048),
         };
         state.status.calibration = {
@@ -369,6 +375,12 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin') 
         ];
         state.status.recording = { ...current, active: false, episode_active: false, frames: 0 };
       } else return route.fulfill({ status: 404, json: { detail: `Unexpected robot route ${action}` } });
+      if (state.dropCalibrationStartReply && action === '/calibration/start') {
+        await new Promise<void>((resolve) => {
+          state.releaseCalibrationStartReply = resolve;
+        });
+        return route.abort('failed');
+      }
       if (state.dropCalibrationReply && ['/calibration/center', '/calibration/finish'].includes(action))
         return route.abort('failed');
       return route.fulfill({ json: state.status });
@@ -1430,6 +1442,79 @@ test('calibration recovery is informational and resumes without repeating middle
   expect(writes(state, '/calibration/start')[0].body).toEqual({ resume: true, confirm: 'START CALIBRATION' });
   expect(writes(state, '/calibration/center')).toHaveLength(0);
   await expect(page.getByRole('region', { name: 'Calibrate', exact: true })).toContainText('777');
+});
+
+for (const action of ['start', 'resume'] as const) {
+  test(`a lost calibration ${action} reply after polling does not leave a false error`, async ({ page }) => {
+    const state = await fixture(page);
+    state.dropCalibrationStartReply = true;
+    if (action === 'resume') {
+      state.status.calibration = {
+        ...state.status.calibration,
+        phase: 'interrupted',
+        interrupted_stage: 'ranges',
+        recoverable: true,
+        port,
+        robot_id: 'my-so101',
+        role: 'follower',
+        mins: values(777),
+        maxes: values(3000),
+        offsets: values(10),
+      };
+    }
+    await tab(page, 'Calibrate').click();
+    await page
+      .getByRole('button', {
+        name: action === 'start' ? 'Begin calibration' : 'Resume captured calibration',
+        exact: true,
+      })
+      .click();
+    // Polling can observe the completed operation before its POST reply is lost.
+    const next = page.getByRole('button', {
+      name: action === 'start' ? 'Record middle position' : 'Save calibration',
+      exact: true,
+    });
+    await expect(next).toBeVisible({ timeout: 10_000 });
+    const working = page.getByText('Working… Keep this page open.', { exact: true });
+    await expect(working).toBeVisible();
+    expect(state.releaseCalibrationStartReply).not.toBeNull();
+    state.releaseCalibrationStartReply!();
+    await expect(working).toHaveCount(0);
+    await expect(next).toBeEnabled();
+    await expect(page.getByRole('alert', { name: 'Calibration error' })).toHaveCount(0);
+    expect(writes(state, '/calibration/start')).toHaveLength(1);
+    expect(writes(state, '/stop')).toHaveLength(0);
+    expect(state.errors).toEqual([]);
+  });
+}
+
+test('an unconfirmed calibration start remains an error and never retries motor writes', async ({ page }) => {
+  const state = await fixture(page);
+  state.calibrationStartTransportFailure = true;
+  await tab(page, 'Calibrate').click();
+  const begin = page.getByRole('button', { name: 'Begin calibration', exact: true });
+  await begin.click();
+  await expect(page.getByRole('alert', { name: 'Calibration error' })).toBeVisible();
+  await expect(begin).toBeEnabled();
+  await expect(page.getByText('Checking calibration progress on the robot computer…', { exact: true })).toHaveCount(0);
+  expect(writes(state, '/calibration/start')).toHaveLength(1);
+  expect(writes(state, '/stop')).toHaveLength(0);
+});
+
+test('calibration from a different arm cannot confirm a lost start reply', async ({ page }) => {
+  const state = await fixture(page);
+  state.dropCalibrationStartReply = true;
+  await tab(page, 'Calibrate').click();
+  await page.getByRole('button', { name: 'Begin calibration', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Record middle position', exact: true })).toBeVisible({
+    timeout: 10_000,
+  });
+  state.status.session.robot_id = 'different-arm';
+  state.releaseCalibrationStartReply!();
+  await expect(page.getByText('Working… Keep this page open.', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('alert', { name: 'Calibration error' })).toBeVisible();
+  expect(writes(state, '/calibration/start')).toHaveLength(1);
+  expect(writes(state, '/stop')).toHaveLength(0);
 });
 
 test('one failed heartbeat is retried and does not abandon powered-session ownership', async ({ page }) => {
