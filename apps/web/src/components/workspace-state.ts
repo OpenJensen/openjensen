@@ -36,6 +36,7 @@ export function useWorkbenchState() {
   const [workNavigationError, setWorkNavigationError] = useState('');
   const [selectedJobId, setSelectedJobId] = useState('');
   const [requestedWorkJob, setRequestedWorkJob] = useState<WorkJob | null>(null);
+  const [manualTeachingInstruction, setManualTeachingInstruction] = useState('');
   const [moduleJobViewOverride, setModuleJobView] = useState<'workspace' | 'jobs' | null>(null);
   const [requestedJobOperation, setRequestedJobOperation] = useState<JobOperation | null>(null);
   const router = useRouter();
@@ -473,6 +474,8 @@ export function useWorkbenchState() {
   return {
     projectId,
     requestedWorkJob,
+    manualTeachingInstruction,
+    setManualTeachingInstruction,
     workNavigationError,
     requestedJobOperation,
     moduleJobView,

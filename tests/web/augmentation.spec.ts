@@ -861,6 +861,7 @@ test('keeps the original and all variants together when generating or changing r
   await page.getByRole('button', { name: 'View run 1', exact: true }).click();
   await expect(gallery.locator('video')).toHaveCount(3);
   await page.reload();
+  await openModuleWorkspace(page);
   await expect(page.getByRole('region', { name: 'Episode experiments' }).locator('video')).toHaveCount(3);
   await expect(page.getByRole('button', { name: 'Play all', exact: true })).toBeVisible();
   await noOverflow(page);

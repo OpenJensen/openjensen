@@ -11,6 +11,8 @@ export default function TeachingSection() {
   const [agentTarget, setAgentTarget] = useState<AgentTarget>('robot_lab');
   const {
     teachingMode,
+    manualTeachingInstruction,
+    setManualTeachingInstruction,
     requestedWorkJob,
     requestedJobOperation,
     setTeachingCapture,
@@ -89,7 +91,10 @@ export default function TeachingSection() {
               onPublishedCapture={reviewTeachingCapture}
             />
           ) : (
-            <TeachingPanel key="manual-teaching" />
+            <TeachingPanel
+              key="manual-teaching"
+              instructionDraft={{ value: manualTeachingInstruction, onChange: setManualTeachingInstruction }}
+            />
           )}
           <RecordingPreparationPanel
             isActive={() => isSectionCurrent('teaching')}
