@@ -8,6 +8,8 @@ from vla_platform.agent_control.contracts import (
     Approval,
     Event,
     Heartbeat,
+    LocalAgentAccess,
+    LocalAgentResult,
     PlanRequest,
     ProviderInput,
     ProviderStatus,
@@ -178,3 +180,47 @@ async def observation_image(session_id: str, observation_id: str, agent: AgentDe
 @router.post("/agent-sessions/{session_id}/review", response_model=Session)
 async def review_task(session_id: str, payload: TaskReview, agent: AgentDep):
     return await agent.review_task(session_id, payload)
+
+
+def local_token(request: Request):
+    value = request.headers.get("authorization", "")
+    return value[7:] if value.startswith("Bearer ") else ""
+
+
+@router.post("/agent-sessions/{session_id}/local/access", response_model=LocalAgentAccess)
+async def local_access(session_id: str, agent: AgentDep):
+    return await agent.local_access(session_id)
+
+
+@router.delete("/agent-sessions/{session_id}/local/access", response_model=Session)
+async def local_revoke(session_id: str, agent: AgentDep):
+    return await agent.local_revoke(session_id)
+
+
+@router.get("/agent-sessions/{session_id}/local/context")
+async def local_context(session_id: str, request: Request, agent: AgentDep):
+    return await agent.local_context(session_id, local_token(request))
+
+
+@router.get("/agent-sessions/{session_id}/local/image")
+async def local_image(session_id: str, observation_id: str, request: Request, agent: AgentDep):
+    from fastapi import Response
+
+    data, mime = await agent.local_image(session_id, local_token(request), observation_id)
+    return Response(
+        data,
+        media_type=mime,
+        headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
+    )
+
+
+@router.post("/agent-sessions/{session_id}/local/result", response_model=Session, status_code=202)
+async def local_result(
+    session_id: str, payload: LocalAgentResult, request: Request, agent: AgentDep
+):
+    return await agent.local_submit(session_id, local_token(request), payload)
+
+
+@router.post("/agent-sessions/{session_id}/local/stop", response_model=Session)
+async def local_stop(session_id: str, request: Request, agent: AgentDep):
+    return await agent.local_stop(session_id, local_token(request))

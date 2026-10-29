@@ -47,6 +47,7 @@ export function ProviderSettings() {
     }
   }
   function edit(profile: AgentProvider) {
+    if (profile.provider === 'local_mcp') return;
     setId(profile.id);
     setProvider(profile.provider);
     setModel(profile.model);
@@ -222,36 +223,43 @@ export function ProviderSettings() {
           </h3>
           <p>
             {profile.saved ? 'Saved' : 'Built-in'} ·{' '}
-            {profile.checked ? 'Capability check passed' : 'Capabilities unverified'} · {profile.provider}
+            {profile.provider === 'local_mcp'
+              ? 'Connect in AI teleoperation'
+              : profile.checked
+                ? 'Capability check passed'
+                : 'Capabilities unverified'}{' '}
+            · {profile.provider}
           </p>
           <p>{profile.message}</p>
           <p>Capabilities: {profile.capabilities.length ? profile.capabilities.join(', ') : 'Not verified'}</p>
-          <div className="workbench-actions">
-            <button type="button" className="secondary-button" disabled={busy} onClick={() => edit(profile)}>
-              Edit {profile.id}
-            </button>
-            <button
-              type="button"
-              className="secondary-button"
-              disabled={busy || (profile.provider !== 'mock' && !checkConsent)}
-              onClick={() => {
-                setCheckConsent(false);
-                void run(() => agentApi.checkProvider(profile.id), `Capability check completed for ${profile.id}.`);
-              }}
-            >
-              Check {profile.id}
-            </button>
-            {profile.saved && (
+          {profile.provider !== 'local_mcp' && (
+            <div className="workbench-actions">
+              <button type="button" className="secondary-button" disabled={busy} onClick={() => edit(profile)}>
+                Edit {profile.id}
+              </button>
               <button
                 type="button"
-                className="text-link"
-                disabled={busy}
-                onClick={() => void run(() => agentApi.deleteProvider(profile.id), `Profile ${profile.id} removed.`)}
+                className="secondary-button"
+                disabled={busy || (profile.provider !== 'mock' && !checkConsent)}
+                onClick={() => {
+                  setCheckConsent(false);
+                  void run(() => agentApi.checkProvider(profile.id), `Capability check completed for ${profile.id}.`);
+                }}
               >
-                Remove {profile.id}
+                Check {profile.id}
               </button>
-            )}
-          </div>
+              {profile.saved && (
+                <button
+                  type="button"
+                  className="text-link"
+                  disabled={busy}
+                  onClick={() => void run(() => agentApi.deleteProvider(profile.id), `Profile ${profile.id} removed.`)}
+                >
+                  Remove {profile.id}
+                </button>
+              )}
+            </div>
+          )}
         </section>
       ))}
       {busy && <p role="status">Provider request in progress…</p>}

@@ -31,6 +31,7 @@ from .contracts import (
     Session,
     SessionCreate,
 )
+from .local_agents import LocalAgents
 from .settings import Profiles
 from .task_control import TaskControl
 
@@ -55,13 +56,17 @@ def digest(value):
     return hashlib.sha256(canonical(value)).hexdigest()
 
 
-class AgentControl(TaskControl):
+class AgentControl(TaskControl, LocalAgents):
     def __init__(self, storage, settings, execution, planner=None, *, robot_bridge=None):
         self.storage = storage
         self.settings = settings
         self.execution = execution
         self.profiles = Profiles(settings.data_dir)
         self.planner = planner or runtime.run
+        from vla_platform.application_updates import installed_commit
+
+        self.local_source_commit = installed_commit()
+        self.local_pending = {}
         self.tasks = {}
         self.runners = {}
         self.supervisors = {}
@@ -294,6 +299,8 @@ class AgentControl(TaskControl):
         if self.closed:
             raise AgentError("Agent service is closing")
         profile = self.profiles.get(identity)
+        if profile["provider"] == "local_mcp":
+            return self.profiles.public(identity)
         task = asyncio.current_task()
         self.checks.add(task)
         try:
@@ -355,13 +362,15 @@ class AgentControl(TaskControl):
             if self.closed:
                 raise AgentError("Agent service is closing")
             profile = self.profiles.get(payload.provider_id)
-            if profile["provider"] != "mock" and (
+            if profile["provider"] == "openai_responses" and (
                 not profile.get("checked") or not payload.cloud_consent
             ):
                 raise AgentError(
                     "Check provider capabilities and explicitly consent to sending "
                     "task/state and any admitted image to OpenAI."
                 )
+            if profile["provider"] == "local_mcp" and payload.target_kind != "robot_lab":
+                raise AgentError("Local MCP currently requires a supervised physical session")
             if payload.target_kind == "teaching":
                 active = await self.list(project_id)
                 if any(
@@ -641,6 +650,9 @@ class AgentControl(TaskControl):
         if s.calls_used >= s.max_calls:
             raise AgentError("Provider call budget exhausted")
 
+        if s.provider_id == "local-mcp":
+            return 0  # Model usage belongs to the external agent, not an OpenAI API request here.
+
         # Reserve the exact serialized input estimate plus maximum output before dispatch.
         def input_bound(value):
             # Inline image pixels are sent through input_image detail=low, not as text.
@@ -798,7 +810,11 @@ class AgentControl(TaskControl):
                     continuation=private["continuation"], receipt=snapshot.receipts[-1].model_dump()
                 )
             started = time.monotonic()
-            result = await self.planner(profile, payload)
+            result = (
+                await self.local_plan(snapshot, request_id, payload["timeout_seconds"])
+                if profile["provider"] == "local_mcp"
+                else await self.planner(profile, payload)
+            )
             elapsed = time.monotonic() - started
             async with self.lock(identity):
                 s, p = await self.load(identity)

@@ -30,7 +30,7 @@ class ProviderInput(Strict):
 
 class ProviderStatus(Strict):
     id: str
-    provider: Literal["mock", "openai_responses"]
+    provider: Literal["mock", "openai_responses", "local_mcp"]
     model: str
     reasoning_effort: str
     revision: str
@@ -297,3 +297,26 @@ class Event(Strict):
     kind: str
     created_at: str
     record: dict
+
+
+class LocalAgentAccess(Strict):
+    session_id: str
+    access_token: str
+    source_commit: str | None = None
+
+
+class LocalAgentResult(Strict):
+    request_id: str = Field(pattern=IDENTITY)
+    authority_epoch: int = Field(ge=1)
+    observation_id: str = Field(pattern=IDENTITY)
+    observation_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    agent_name: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9._ :/-]+$")
+    arguments: SegmentArguments | None = None
+    assessment: Assessment | None = None
+    purpose: str = Field(default="", max_length=512)
+
+    @model_validator(mode="after")
+    def one_result(self):
+        if (self.arguments is None) == (self.assessment is None):
+            raise ValueError("Submit either one bounded action or one assessment")
+        return self

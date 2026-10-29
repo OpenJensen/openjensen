@@ -59,7 +59,7 @@ class Profiles:
             if not isinstance(value, dict) or len(value) > 16:
                 raise ValueError
             for key, item in value.items():
-                if not re.fullmatch(r"[A-Za-z0-9_-]{1,96}", key) or key == "mock":
+                if not re.fullmatch(r"[A-Za-z0-9_-]{1,96}", key) or key in {"mock", "local-mcp"}:
                     raise ValueError
                 ProviderInput.model_validate(
                     {k: item[k] for k in ("provider", "model", "reasoning_effort", "api_key")}
@@ -116,6 +116,21 @@ class Profiles:
             Path(tmp).unlink(missing_ok=True)
 
     def get(self, identity):
+        if identity == "local-mcp":
+            return dict(
+                provider="local_mcp",
+                model="local-agent",
+                reasoning_effort="low",
+                revision="local-mcp-v1",
+                api_key=None,
+                checked=True,
+                capabilities=[
+                    "session_observations",
+                    "admitted_images",
+                    "joint_segment_proposals",
+                    "stop",
+                ],
+            )
         if identity == "mock":
             return dict(
                 provider="mock",
@@ -141,10 +156,12 @@ class Profiles:
             model=item["model"],
             reasoning_effort=item["reasoning_effort"],
             revision=item["revision"],
-            saved=identity != "mock",
+            saved=identity not in {"mock", "local-mcp"},
             checked=item.get("checked", False),
             capabilities=item.get("capabilities", []),
-            message="Transport capability check passed; target admission is separate."
+            message="Local MCP transport available. Connect Codex or Claude in AI teleoperation."
+            if identity == "local-mcp"
+            else "Transport capability check passed; target admission is separate."
             if item.get("checked")
             else "Saved privately. Provider access and capabilities have not been checked.",
         )
@@ -156,13 +173,13 @@ class Profiles:
             for key in sorted(profiles)
             if profiles[key]["provider"] != "openai_responses" or self.integration_installed()
         ]
-        return [self.public(key) for key in ["mock", *identities]]
+        return [self.public(key) for key in ["mock", "local-mcp", *identities]]
 
     def save(self, identity, payload):
         if not isinstance(identity, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,96}", identity):
             raise ProfileError("Invalid provider profile identity")
-        if identity == "mock":
-            raise ProfileError("The built-in mock profile cannot be changed")
+        if identity in {"mock", "local-mcp"}:
+            raise ProfileError("Built-in provider profiles cannot be changed")
         if payload.provider == "openai_responses" and not self.integration_installed():
             raise ProfileError("Install OpenAI in Modules before configuring this provider")
         value = self.read()
@@ -202,8 +219,8 @@ class Profiles:
         return self.public(identity)
 
     def remove(self, identity):
-        if identity == "mock":
-            raise ProfileError("The built-in mock profile cannot be removed")
+        if identity in {"mock", "local-mcp"}:
+            raise ProfileError("Built-in provider profiles cannot be removed")
         value = self.read()
         value.pop(identity, None)
         self.write(value)
