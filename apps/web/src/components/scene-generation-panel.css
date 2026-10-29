@@ -1,0 +1,238 @@
+.scene-generation {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+.scene-generation .panel {
+  margin-bottom: 0;
+  min-width: 0;
+}
+.scene-heading,
+.scene-run-title,
+.scene-actions,
+.scene-form-footer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.scene-heading,
+.scene-form-footer {
+  justify-content: space-between;
+}
+.scene-heading h2 {
+  margin: 0;
+  font-size: var(--text-section);
+  font-weight: 600;
+  letter-spacing: -0.3px;
+}
+.scene-compose .notice {
+  margin-top: 18px;
+}
+.scene-compose form {
+  margin-top: 22px;
+}
+.scene-fields {
+  display: grid;
+  grid-template-columns: minmax(220px, 2fr) minmax(180px, 1.5fr) 120px;
+  gap: 14px;
+}
+.scene-generation label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 500;
+}
+.scene-generation select,
+.scene-generation input {
+  width: 100%;
+  min-width: 0;
+}
+.scene-form-footer {
+  margin-top: 20px;
+  align-items: flex-end;
+}
+.scene-form-footer .primary-button {
+  min-width: 150px;
+}
+.scene-generation summary {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.scene-options label {
+  width: 140px;
+  margin-top: 12px;
+}
+.scene-progress {
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: capitalize;
+}
+.scene-gates {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0 22px;
+  list-style: none;
+  padding: 0;
+  margin: 18px 0;
+}
+.scene-gates li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+}
+.scene-gates li > span:first-child {
+  color: var(--muted);
+}
+.scene-evidence {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  margin: 20px 0;
+}
+.scene-evidence img,
+.scene-evidence video {
+  display: block;
+  width: 100%;
+  border-radius: 8px;
+}
+.scene-details {
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.scene-details p,
+.scene-details li {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+.scene-details h3 {
+  margin: 20px 0 10px;
+  font-size: 13px;
+  font-weight: 550;
+}
+.scene-artifacts {
+  display: flex;
+  gap: 10px 18px;
+  flex-wrap: wrap;
+  padding: 0;
+  list-style: none;
+}
+.scene-previous ul {
+  list-style: none;
+  padding: 0;
+  margin-bottom: 0;
+}
+.scene-previous li {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  align-items: center;
+  padding: 12px 0;
+  font-size: 13px;
+}
+@media (max-width: 1100px) {
+  .scene-fields,
+  .scene-gates {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 600px) {
+  .scene-fields,
+  .scene-gates {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .scene-form-footer .primary-button {
+    width: 100%;
+  }
+  .scene-evidence {
+    display: flex;
+    overflow-x: auto;
+  }
+  .scene-evidence a {
+    flex: 0 0 120px;
+  }
+}
+
+.scene-field-meta {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+.scene-job-heading,
+.scene-result-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 24px 0 18px;
+}
+.scene-job-heading h2,
+.scene-result-heading h3 {
+  margin: 0;
+}
+.scene-run h3 {
+  font-size: 14px;
+  font-weight: 600;
+}
+.scene-current-stage {
+  display: grid;
+  gap: 12px;
+  margin: 18px 0;
+  color: var(--muted);
+  font-size: 13px;
+  text-transform: capitalize;
+}
+.scene-current-stage progress {
+  width: 100%;
+  accent-color: var(--accent);
+}
+.scene-environment {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.scene-environment figure,
+.scene-replays figure {
+  margin: 0;
+  min-width: 0;
+}
+.scene-environment img,
+.scene-replays video {
+  display: block;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.scene-environment img {
+  aspect-ratio: 4 / 3;
+  object-fit: contain;
+}
+.scene-environment figcaption,
+.scene-replays figcaption {
+  margin: 8px 0 16px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.scene-replays {
+  margin: 22px 0;
+}
+.scene-replays video {
+  max-height: 500px;
+}
+@media (max-width: 600px) {
+  .scene-environment {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

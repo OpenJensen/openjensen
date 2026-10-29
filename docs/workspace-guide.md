@@ -26,6 +26,10 @@ Open **ROBOT LAB → AI teleoperation** for physical SO101 control. **Agent Cont
 
 Inspect a public dataset or import local files. Open an episode to play its cameras, inspect samples, and edit labels before exporting.
 
+## Real to sim
+
+Open **Real to sim** under **Data**. Choose a dataset, agent model and power, then start a job. Codex can inspect episodes across the full dataset. Open the saved job for environment images, a recorded-episode replay video and the scene bundle. Use **Retry simulation** to create a new job from the saved scene and evidence without repeating model work. Physical calibration remains a separate validation step.
+
 ## Augmentation
 
 Select a dataset, camera and clip interval. Choose an appearance edit, review the request, and compare the returned clips before downloading.

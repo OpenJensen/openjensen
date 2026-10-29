@@ -118,6 +118,40 @@
         "title": "AdviceResult",
         "type": "object"
       },
+      "AgentSettings": {
+        "additionalProperties": false,
+        "properties": {
+          "harness": {
+            "const": "codex_cli",
+            "default": "codex_cli",
+            "title": "Harness",
+            "type": "string"
+          },
+          "model": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+            "title": "Model",
+            "type": "string"
+          },
+          "reasoning_effort": {
+            "default": "medium",
+            "enum": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max",
+              "ultra"
+            ],
+            "title": "Reasoning Effort",
+            "type": "string"
+          }
+        },
+        "required": [
+          "model"
+        ],
+        "title": "AgentSettings",
+        "type": "object"
+      },
       "ApiConnectionStatus": {
         "properties": {
           "configured": {
@@ -1055,6 +1089,7 @@
               "dataset.inspect",
               "dataset.inspect.local",
               "dataset.augment",
+              "scene.generate",
               "policy.finetune",
               "policy.distill",
               "policy.export",
@@ -3261,6 +3296,9 @@
               },
               {
                 "$ref": "#/components/schemas/TeachingCaptureRequest"
+              },
+              {
+                "$ref": "#/components/schemas/SceneRequest"
               }
             ],
             "title": "Request"
@@ -3278,6 +3316,9 @@
               },
               {
                 "$ref": "#/components/schemas/TeachingCaptureResult"
+              },
+              {
+                "$ref": "#/components/schemas/SceneJobResult"
               },
               {
                 "type": "null"
@@ -5950,6 +5991,303 @@
         "title": "RuntimePackage",
         "type": "object"
       },
+      "SceneJobResult": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "const": "scene_generation",
+            "default": "scene_generation",
+            "title": "Kind",
+            "type": "string"
+          },
+          "scene_artifacts": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Scene Artifacts",
+            "type": "array"
+          },
+          "scene_id": {
+            "title": "Scene Id",
+            "type": "string"
+          },
+          "validation_status": {
+            "title": "Validation Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "scene_id",
+          "validation_status"
+        ],
+        "title": "SceneJobResult",
+        "type": "object"
+      },
+      "SceneMedia": {
+        "additionalProperties": false,
+        "properties": {
+          "episode_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Episode Index"
+          },
+          "label": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "path": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Path",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "environment_image",
+              "episode_replay",
+              "source_image",
+              "source_video"
+            ],
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "role",
+          "path",
+          "label"
+        ],
+        "title": "SceneMedia",
+        "type": "object"
+      },
+      "SceneRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "camera_key": {
+            "default": "observation.images.front",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Camera Key",
+            "type": "string"
+          },
+          "episode_index": {
+            "anyOf": [
+              {
+                "maximum": 99999.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Episode Index"
+          },
+          "max_attempts": {
+            "default": 2,
+            "maximum": 3.0,
+            "minimum": 1.0,
+            "title": "Max Attempts",
+            "type": "integer"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "operation": {
+            "const": "scene.generate",
+            "default": "scene.generate",
+            "title": "Operation",
+            "type": "string"
+          },
+          "reasoning_effort": {
+            "default": "medium",
+            "enum": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max",
+              "ultra"
+            ],
+            "title": "Reasoning Effort",
+            "type": "string"
+          },
+          "request_id": {
+            "pattern": "^[a-f0-9]{32}$",
+            "title": "Request Id",
+            "type": "string"
+          },
+          "scope": {
+            "const": "dataset",
+            "default": "dataset",
+            "title": "Scope",
+            "type": "string"
+          },
+          "source_job_id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Source Job Id",
+            "type": "string"
+          },
+          "source_scene_id": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{32}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Scene Id"
+          }
+        },
+        "required": [
+          "request_id",
+          "source_job_id"
+        ],
+        "title": "SceneRequest",
+        "type": "object"
+      },
+      "SceneRun": {
+        "additionalProperties": false,
+        "properties": {
+          "agent": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AgentSettings"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "artifacts": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Artifacts",
+            "type": "array"
+          },
+          "attempt": {
+            "default": 0,
+            "title": "Attempt",
+            "type": "integer"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "events": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "gates": {
+            "additionalProperties": true,
+            "title": "Gates",
+            "type": "object"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "media": {
+            "items": {
+              "$ref": "#/components/schemas/SceneMedia"
+            },
+            "title": "Media",
+            "type": "array"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "request": {
+            "$ref": "#/components/schemas/SceneRequest"
+          },
+          "source": {
+            "additionalProperties": true,
+            "title": "Source",
+            "type": "object"
+          },
+          "stage": {
+            "title": "Stage",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "needs_simulation",
+              "needs_review",
+              "failed",
+              "cancelled",
+              "interrupted"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "usage": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Usage",
+            "type": "object"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "request",
+          "status",
+          "stage",
+          "created_at",
+          "updated_at",
+          "message"
+        ],
+        "title": "SceneRun",
+        "type": "object"
+      },
       "Score": {
         "additionalProperties": false,
         "properties": {
@@ -7520,6 +7858,7 @@
               "robot-lab",
               "teaching",
               "augmentation",
+              "real-to-sim",
               "training",
               "distillation",
               "quantization",
@@ -10188,6 +10527,97 @@
         "summary": "Job Events"
       }
     },
+    "/api/v1/jobs/{job_id}/scene": {
+      "get": {
+        "operationId": "job_scene_api_v1_jobs__job_id__scene_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SceneRun"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Job Scene",
+        "tags": [
+          "Scene generation"
+        ]
+      }
+    },
+    "/api/v1/jobs/{job_id}/scene/artifact": {
+      "get": {
+        "operationId": "job_artifact_api_v1_jobs__job_id__scene_artifact_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Job Artifact",
+        "tags": [
+          "Scene generation"
+        ]
+      }
+    },
     "/api/v1/jobs/{job_id}/simulation-media/video": {
       "get": {
         "operationId": "simulation_video_api_v1_jobs__job_id__simulation_media_video_get",
@@ -10428,6 +10858,7 @@
                 "robot-lab",
                 "teaching",
                 "augmentation",
+                "real-to-sim",
                 "training",
                 "distillation",
                 "quantization",
@@ -10484,6 +10915,7 @@
                 "robot-lab",
                 "teaching",
                 "augmentation",
+                "real-to-sim",
                 "training",
                 "distillation",
                 "quantization",
@@ -10552,6 +10984,7 @@
                 "robot-lab",
                 "teaching",
                 "augmentation",
+                "real-to-sim",
                 "training",
                 "distillation",
                 "quantization",
@@ -11548,6 +11981,176 @@
         ]
       }
     },
+    "/api/v1/projects/{project_id}/scene-jobs": {
+      "post": {
+        "operationId": "create_job_api_v1_projects__project_id__scene_jobs_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SceneRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "description": "Submission conflicts with an accepted request or runtime setup"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "Saved acceptance cannot be verified; no replacement work is submitted"
+          }
+        },
+        "summary": "Create Job",
+        "tags": [
+          "Scene generation"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/scenes": {
+      "get": {
+        "operationId": "scenes_api_v1_projects__project_id__scenes_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SceneRun"
+                  },
+                  "title": "Response Scenes Api V1 Projects  Project Id  Scenes Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Scenes",
+        "tags": [
+          "Scene generation"
+        ]
+      },
+      "post": {
+        "operationId": "create_api_v1_projects__project_id__scenes_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SceneRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SceneRun"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create",
+        "tags": [
+          "Scene generation"
+        ]
+      }
+    },
     "/api/v1/projects/{project_id}/submissions/{key}": {
       "get": {
         "description": "Observe an accepted job without resolving inputs, dispatching or retrying it.",
@@ -11581,6 +12184,7 @@
                 "teaching.capture",
                 "dataset.inspect",
                 "dataset.augment",
+                "scene.generate",
                 "policy.finetune",
                 "policy.distill",
                 "policy.quantize",
@@ -12880,6 +13484,158 @@
         "summary": "Robot Lab Post Stop",
         "tags": [
           "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/scene-generation/options": {
+      "get": {
+        "operationId": "options_api_v1_scene_generation_options_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Options",
+        "tags": [
+          "Scene generation"
+        ]
+      }
+    },
+    "/api/v1/scenes/{ident}": {
+      "get": {
+        "operationId": "scene_api_v1_scenes__ident__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ident",
+            "required": true,
+            "schema": {
+              "title": "Ident",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SceneRun"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Scene",
+        "tags": [
+          "Scene generation"
+        ]
+      }
+    },
+    "/api/v1/scenes/{ident}/artifact": {
+      "get": {
+        "operationId": "artifact_api_v1_scenes__ident__artifact_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ident",
+            "required": true,
+            "schema": {
+              "title": "Ident",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Artifact",
+        "tags": [
+          "Scene generation"
+        ]
+      }
+    },
+    "/api/v1/scenes/{ident}/cancel": {
+      "post": {
+        "operationId": "cancel_api_v1_scenes__ident__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ident",
+            "required": true,
+            "schema": {
+              "title": "Ident",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SceneRun"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel",
+        "tags": [
+          "Scene generation"
         ]
       }
     },

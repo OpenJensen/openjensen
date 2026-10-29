@@ -752,9 +752,12 @@ def test_actual_job_cancel_reaps_writer_and_never_registers_dataset(tmp_path):
     selected = capture(root)
     pidfile = tmp_path / "owned-pid"
     executable = tmp_path / "python"
+    # Final-file existence signals that the PID write has completed and closed.
     executable.write_text(
         f"#!{sys.executable}\nimport os,time\nfrom pathlib import Path\n"
-        f"Path({str(pidfile)!r}).write_text(str(os.getpid()))\ntime.sleep(60)\n"
+        f"pidfile=Path({str(pidfile)!r})\n"
+        "pending=pidfile.with_name(pidfile.name+'.tmp')\n"
+        "pending.write_text(str(os.getpid()))\npending.replace(pidfile)\ntime.sleep(60)\n"
     )
     with TestClient(
         create_app(Settings(data_dir=tmp_path / "app", recording_config=config))

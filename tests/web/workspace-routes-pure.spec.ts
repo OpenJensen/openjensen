@@ -18,3 +18,10 @@ test('renamed robot pages retain shared guide anchors', () => {
   expect(guideSectionId('Initial setup')).toBe('robot-lab');
   expect(guideSectionId('Fine-tune')).toBe('fine-tune');
 });
+
+test('real to sim belongs to Data and has its own route', () => {
+  expect(workspaceStage('/real-to-sim/')).toBe('real-to-sim');
+  expect(navigationGroups.find((group) => group.name === 'Data')?.items).toContain('real-to-sim');
+  expect(navigationGroups.find((group) => group.name === 'Test')?.items).not.toContain('real-to-sim');
+  expect(guideSectionId('Real to sim')).toBe('real-to-sim');
+});

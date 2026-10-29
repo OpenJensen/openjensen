@@ -18,9 +18,13 @@ from vla_platform.environment import getenv
 from vla_platform.frozen_commands import intake_command
 from vla_platform.lifecycle.contracts import PolicyRequest, SimulationTarget
 from vla_platform.lifecycle.service import Lifecycle
+from vla_platform.scenes.agent import SceneError
+from vla_platform.scenes.contracts import AgentSettings, SceneRequest
+from vla_platform.scenes.models import resolve as resolve_scene_agent
+from vla_platform.scenes.service import Scenes
 from vla_platform.settings import Settings
 from vla_platform.storage import Storage, job_submissions, jobs
-from vla_platform.submissions import Submission, SubmissionRequest, lookup
+from vla_platform.submissions import Submission, SubmissionConflict, SubmissionRequest, lookup
 from vla_platform.teaching_sessions.contracts import TeachingCaptureRequest
 from vla_platform.teaching_sessions.service import TeachingSessions
 
@@ -46,6 +50,10 @@ class Execution:
         self.inspections = Inspections(self)
         self.recordings = Recordings(self)
         self.teaching = TeachingSessions(self)
+        self.scenes = Scenes(settings.data_dir)
+        self.scene_explorer = None
+        self.scene_slots = asyncio.Semaphore(1)
+        self._scene_admission_lock = asyncio.Lock()
         self.slots = asyncio.Semaphore(2)  # Metadata jobs only; not a GPU admission policy.
         self._submission_locks = [asyncio.Lock() for _ in range(64)]
         self._accepting: set[asyncio.Task] = set()
@@ -82,6 +90,20 @@ class Execution:
     async def submit(
         self, project_id: str, request: SubmissionRequest, *, idempotency_key: str | None = None
     ) -> Job:
+        if isinstance(request, SceneRequest):
+            # Scene artifact identities are global. Serialize admission across
+            # client keys and projects before reserving that identity durably.
+            async with self._scene_admission_lock:
+                return await self._submit_registered(
+                    project_id, request, idempotency_key=idempotency_key
+                )
+        return await self._submit_registered(project_id, request, idempotency_key=idempotency_key)
+
+    async def _submit_registered(
+        self, project_id: str, request: SubmissionRequest, *, idempotency_key: str | None
+    ) -> Job:
+        if isinstance(request, SceneRequest) and idempotency_key is None:
+            idempotency_key = request.request_id
         if idempotency_key is None:
             return await self._submit(project_id, request)
         submission = Submission.create(project_id, request, idempotency_key)
@@ -123,7 +145,37 @@ class Execution:
         self, project_id: str, request: SubmissionRequest, submission: Submission | None = None
     ) -> Job:
         compute_target = None
-        if isinstance(request, TeachingCaptureRequest):
+        if isinstance(request, SceneRequest):
+            async with self.storage.engine.connect() as connection:
+                accepted = (
+                    await connection.execute(
+                        select(jobs.c.id)
+                        .where(
+                            jobs.c.record["kind"].as_string() == "scene.generate",
+                            jobs.c.record["request"]["request_id"].as_string()
+                            == request.request_id,
+                        )
+                        .limit(1)
+                    )
+                ).scalar_one_or_none()
+            if accepted is not None:
+                raise SubmissionConflict(
+                    "Scene request ID already belongs to an accepted job. "
+                    "Retry with the original submission key or start a new request."
+                )
+            source = await self.get(request.source_job_id)
+            if source is None or source.project_id != project_id:
+                raise ValueError("Choose an inspected dataset in this project")
+            await self.scenes.validate(project_id, request, source)
+            agent = (
+                AgentSettings(model=request.model, reasoning_effort=request.reasoning_effort)
+                if request.source_scene_id
+                else resolve_scene_agent(request, self.scenes.options())
+            )
+            # Freeze the selected catalog default into the accepted job, so a
+            # later configuration change cannot change an already queued run.
+            request = request.model_copy(update={"model": agent.model})
+        elif isinstance(request, TeachingCaptureRequest):
             await self.teaching.validate(project_id, request)
         elif isinstance(request, PolicyRequest):
             compute_target = await self.lifecycle.validate(project_id, request)
@@ -141,7 +193,9 @@ class Execution:
             id=str(uuid4()),
             project_id=project_id,
             kind=request.operation
-            if isinstance(request, (PolicyRequest, AugmentationRequest, TeachingCaptureRequest))
+            if isinstance(
+                request, (PolicyRequest, AugmentationRequest, TeachingCaptureRequest, SceneRequest)
+            )
             else "dataset.inspect",
             request=request,
             compute_target=None if isinstance(compute_target, SimulationTarget) else compute_target,
@@ -282,6 +336,9 @@ class Execution:
 
     async def run(self, job_id: str) -> None:
         initial = await self.get(job_id)
+        if initial and isinstance(initial.request, SceneRequest):
+            await self.run_scene(initial)
+            return
         if initial and isinstance(initial.request, TeachingCaptureRequest):
             await self.teaching.run(initial)
             return
@@ -339,6 +396,56 @@ class Execution:
                     await process.wait()
                 except ProcessLookupError:
                     pass
+
+    async def run_scene(self, job: Job) -> None:
+        from vla_platform.datasets.explore import DatasetExplorer
+
+        explorer = self.scene_explorer
+        owned_explorer = False
+        try:
+            async with self.scene_slots:
+                async with self.lock:
+                    current = await self.get(job.id)
+                    if current is None or current.status in TERMINAL:
+                        return
+                    current.status = "running"
+                    await self.save(current)
+                source = await self.get(current.request.source_job_id)
+                if source is None or source.project_id != current.project_id:
+                    raise SceneError("The inspected source dataset is unavailable.")
+                if explorer is None:
+                    explorer = DatasetExplorer(data_dir=self.settings.data_dir)
+                    owned_explorer = True
+                await self.scenes.run_job(current, source, explorer, self)
+                latest = await self.get(job.id)
+                if latest is not None and latest.status not in TERMINAL:
+                    raise SceneError("Scene processing stopped before publishing its result.")
+        except asyncio.CancelledError:
+            async with self.lock:
+                current = await self.get(job.id)
+                if current and current.status not in TERMINAL:
+                    current.status = "interrupted"
+                    current.error = (
+                        "Application stopped during scene generation. Evidence is retained; "
+                        "no provider request or simulation was repeated."
+                    )
+                    await self.save(current)
+            raise
+        except Exception as exc:
+            async with self.lock:
+                current = await self.get(job.id)
+                if current and current.status not in TERMINAL:
+                    current.status = "failed"
+                    current.error = (
+                        str(exc)[:2000]
+                        if isinstance(exc, SceneError)
+                        else "Scene generation stopped. Check source access and runtime setup; "
+                        "completed evidence was retained."
+                    )
+                    await self.save(current)
+        finally:
+            if owned_explorer:
+                await explorer.close()
 
     async def run_policy(self, job: Job) -> None:
         try:
@@ -434,7 +541,7 @@ class Execution:
                             "capture adopted, "
                             "or request redispatched. Retained raw data requires explicit review."
                         )
-                    elif isinstance(job.request, PolicyRequest):
+                    elif isinstance(job.request, (PolicyRequest, SceneRequest)):
                         evidence = evidence.replace("new inspection", "new job")
                         evidence = evidence.replace(
                             "orphan metadata worker", "orphan native worker"
