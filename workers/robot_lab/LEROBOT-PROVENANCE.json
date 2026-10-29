@@ -23,8 +23,82 @@
     "Clear the previous companion goal-velocity cap to zero/default.",
     "No relative target clipping; stock SO follower default max_relative_target=None.",
     "The upstream connectivity decorator is replaced by the generation/port-open gate; copied function bodies are unchanged.",
-    "Restore volatile Torque_Limit (48) to the saved EEPROM Max_Torque_Limit (16), matching power-on behavior and clearing an interrupted 10% identification cap; gripper stays at 500."
+    "Restore volatile Torque_Limit (48) to the saved EEPROM Max_Torque_Limit (16), matching power-on behavior and clearing an interrupted 10% identification cap; gripper stays at 500.",
+    "Validated follower gripper Present_Position replies carrying only overload status 0x20 continue after upstream protection settings are verified; gripper torque-off with this alarm requires exact zero read-back. Other faults remain fatal. Semantics checked against huggingface/lerobot@baf68724e867113e6052bb3159b04dcb97e88866 motors_bus.py read/write/sync_read, which distinguish alarms from refused operations.",
+    "Human manual, handguide and leader/follower observations follow upstream normalization: sampled calibration endpoints do not terminate a session; degree measurements remain unbounded by those samples and gripper measurements clamp to 0/100. Physical encoder validity, strict startup/agent admission and bounded commanded goals are retained. Excursions are journaled.",
+    "Camera recording peeks at a recent background-captured frame (500 ms freshness), while AI timed observations still read fresh hardware. PNG writes use a bounded asynchronous queue and upstream compression level 1. Recording failures pause collection and preserve motor control under its existing heartbeat/Stop gates; episode saves drain pending images and remain retryable after metadata errors. The control cycle compensates for work time as upstream CycleTimer does.",
+    "Apply current upstream STS3215 single-turn feedback configuration by clearing only Phase bit 4 while torque is off, verify it before the first control read, and preserve every other Phase bit. Configure passive-leader timing/position mode without enabling torque. Re-lock and verify every unlocked EEPROM after configuration, including failure paths. Half-turn homing clamps the one unrepresentable +2048 offset to +2047, as current upstream does; existing calibration files are not rewritten."
   ],
   "ast_python": "3.14",
-  "servo_memory_reference": "https://docs.waveshare.com/Memory_Map_Explanation/ST_Servo_Memory_Map_Explanation"
+  "servo_memory_reference": "https://docs.waveshare.com/Memory_Map_Explanation/ST_Servo_Memory_Map_Explanation",
+  "semantic_references": {
+    "ref": "baf68724e867113e6052bb3159b04dcb97e88866",
+    "normalization": {
+      "path": "motors/motors_bus.py",
+      "symbols": [
+        "SerialMotorsBus._normalize",
+        "SerialMotorsBus._unnormalize"
+      ]
+    },
+    "camera": {
+      "path": "cameras/opencv/camera_opencv.py",
+      "symbols": [
+        "OpenCVCamera._read_loop",
+        "OpenCVCamera.read_latest"
+      ]
+    },
+    "image_writing": {
+      "path": "datasets/image_writer.py",
+      "symbols": [
+        "AsyncImageWriter",
+        "write_image"
+      ]
+    },
+    "pacing": {
+      "path": "utils/cycle_timer.py",
+      "symbols": [
+        "CycleTimer.wait"
+      ]
+    },
+    "dataset": {
+      "path": "datasets/lerobot_dataset.py",
+      "symbols": [
+        "LeRobotDataset.add_frame",
+        "LeRobotDataset.save_episode",
+        "LeRobotDataset.finalize"
+      ]
+    },
+    "motor_configuration": {
+      "path": "motors/motors_bus.py",
+      "symbols": [
+        "SerialMotorsBus.configure_motors",
+        "SerialMotorsBus._get_half_turn_homings"
+      ]
+    },
+    "passive_leader": {
+      "path": "teleoperators/so_leader/so_leader.py",
+      "symbols": [
+        "SOLeader.configure"
+      ]
+    }
+  },
+  "feature_references": {
+    "connection_and_motor_ids": "motors/motors_bus.py: connect, ping, setup_motors; retain validated packets and isolated ID assignment",
+    "assembled_identification_and_mapping": "OpenJensen extension using the same ID/baud/torque registers; retain assembled discovery and low-torque mapping checks",
+    "calibration_and_recovery": "motors/motors_bus.py: record_calibration, set_half_turn_homings, write_calibration; retain drafts, backups and read-back verification",
+    "joint_units": "motors/motors_bus.py: _normalize/_unnormalize; use_degrees=True for body and RANGE_0_100 for gripper, preserving existing datasets",
+    "power_and_position_control": "robots/so_follower/so_follower.py: configure/send_action; retain 500/250/25 gripper settings and verified current-pose startup hold",
+    "manual_sliders_steps_and_partial_control": "SOFollower.send_action with max_relative_target=None; preserve selected-motor sessions and bounded requested goals",
+    "leader_and_handguide": "teleoperators/so_leader/so_leader.py: configure/get_action; torque-off leader and calibrated position mapping",
+    "saved_rest_pose_and_middle_motion": "OpenJensen extensions built on the same Goal_Position interface; retain saved-pose calibration binding and bounded transitions",
+    "stop_and_disconnect": "motors/motors_bus.py: disable_torque/disconnect; retain independent browser watchdog, generation fencing and exact torque read-back",
+    "motor_errors_and_grip_load": "motors/motors_bus.py: read/write/sync_read distinguish alarms from refused operations; retain stricter critical-fault stops",
+    "camera_preview_and_recording": "cameras/opencv/camera_opencv.py: _read_loop/read_latest; preserve platform permissions, camera inventory and freshness checks",
+    "ai_observations_and_commands": "Robot.get_observation/send_action interface; retain fresh timed sensor reads, local command leases and bounded agent segments",
+    "recording_and_cadence": "scripts/lerobot_record.py: record_loop and utils/cycle_timer.py; preserve measured FPS checks and pause collection separately from motor control",
+    "image_encoding": "datasets/image_writer.py: asynchronous PNG saving, compression level 1; bounded companion queue and explicit worker errors",
+    "dataset_format_and_finalization": "datasets/lerobot_dataset.py: v3 metadata, episodes and finalize; preserve local-only PNG/Parquet datasets and retryable saves",
+    "dataset_export_and_unsaved_close": "OpenJensen extensions; retain hash manifests, safe export paths and preservation of explicitly abandoned pending frames",
+    "persistent_diagnostics": "OpenJensen extension around upstream motor/camera events; retain rotating private logs and separately persisted latest stop"
+  }
 }

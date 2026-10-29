@@ -158,16 +158,67 @@ class MotorBridge:
         if not self.is_current() or not self.bus.opened:
             raise HardwareError("Control session stopped; no further goals sent")
 
+    def _relock(self, joints):
+        errors = []
+        for joint in joints:
+            try:
+                if not self.bus.opened:
+                    raise HardwareError("Port closed before EEPROM re-lock")
+                self.bus.write("Lock", IDS[joint], 1)
+                if self.bus.read("Lock", IDS[joint]) != 1:
+                    raise HardwareError(f"{joint} EEPROM re-lock read-back did not match")
+            except Exception as error:
+                errors.append(str(error))
+        return errors
+
     @contextmanager
     def torque_disabled(self):
         self.require_current()
         self.bus.disable()
+        unlocked, primary = [], None
+        try:
+            for joint in self.motors:
+                self.require_current()
+                unlocked.append(joint)
+                self.bus.write("Lock", IDS[joint], 0)
+            # Keep torque off on success and failure; control_start owns enable.
+            yield
+        except Exception as error:
+            primary = error
+            raise
+        finally:
+            errors = self._relock(unlocked)
+            if errors:
+                raise HardwareError(
+                    (str(primary) + "; " if primary else "")
+                    + "EEPROM re-lock failed: "
+                    + "; ".join(errors)
+                ) from primary
+
+    def configure_feedback_mode(self):
+        # Current upstream configure_motors clears only Phase bit 4 for STS3215.
+        # Preserve every other hardware phase bit and leave all torque disabled.
         for joint in self.motors:
             self.require_current()
-            self.bus.write("Lock", IDS[joint], 0)
-        # Unlike the upstream standalone context, do not automatically energize
-        # on exit (including on exceptions). control_start owns that final gate.
-        yield
+            phase = self.bus.read("Phase", IDS[joint])
+            if type(phase) is not int or not 0 <= phase <= 255:
+                raise HardwareError(f"{joint} Phase register is invalid")
+            if phase & 0x10:
+                primary = None
+                try:
+                    self.write("Lock", joint, 0)
+                    self.write("Phase", joint, phase & ~0x10)
+                except Exception as error:
+                    primary = error
+                    raise
+                finally:
+                    errors = self._relock([joint])
+                    if errors:
+                        raise HardwareError(
+                            (str(primary) + "; " if primary else "")
+                            + "EEPROM re-lock failed: "
+                            + "; ".join(errors)
+                        ) from primary
 
     def write(self, register, joint, value):
         self.require_current()
@@ -210,6 +261,19 @@ class MotorBridge:
         self.last_raw.update(raw)
 
 
+def prepare_single_turn_feedback(bus, is_current):
+    MotorBridge(bus, dict.fromkeys(bus.joints), is_current).configure_feedback_mode()
+
+
+def configure_passive_leader(bus, calibration, is_current):
+    bridge = MotorBridge(bus, calibration, is_current)
+    with bridge.torque_disabled():
+        bridge.configure_motors()
+        for joint in bridge.motors:
+            bridge.write("Operating_Mode", joint, OperatingMode.POSITION.value)
+    bridge.configure_feedback_mode()
+
+
 class LeRobotPositionControl:
     """Run upstream SO follower setup/actions without the ML training dependencies."""
 
@@ -222,7 +286,9 @@ class LeRobotPositionControl:
         self.torque_limits = {}
 
     def configure(self):
+        self.bridge.bus.gripper_load_tolerance = False
         self.follower.configure()
+        self.bridge.configure_feedback_mode()
         # Earlier companions leave a 100-tick/s speed cap in the volatile goal
         # register. Restore the position-mode zero/default before enabling.
         for joint in self.bridge.motors:
@@ -240,6 +306,9 @@ class LeRobotPositionControl:
                 )
             self.bridge.write("Torque_Limit", joint, limit)
             self.torque_limits[joint] = limit
+        # Arm load-alarm handling after all upstream gripper protection
+        # settings and the runtime torque ceiling have passed read-back.
+        self.bridge.bus.gripper_load_tolerance = "gripper" in self.bridge.motors
 
     def command(self, positions):
         action = {joint + ".pos": value for joint, value in positions.items()}
@@ -276,4 +345,11 @@ PROFILE = {
     "acceleration": 254,
     "maximum_acceleration": 254,
     "goal_velocity": 0,
+    "gripper_load_response": "continue_with_motor_protection",
+    "observation_range_policy": "lerobot_normalization",
+    "body_position_units": "degrees",
+    "gripper_position_units": "percent",
+    "recording_camera": "latest_frame",
+    "recording_images": "background_writer",
+    "feedback_mode": "single_turn",
 }

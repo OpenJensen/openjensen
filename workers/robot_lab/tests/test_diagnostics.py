@@ -119,13 +119,14 @@ class IncidentTests(unittest.TestCase):
         self.assertFalse(thread.is_alive())
         self.assertEqual(self.lab.mode, "idle")
 
-    def test_one_tick_range_fault_keeps_bad_reading_limits_and_pre_stop_context(self):
+    def test_agent_range_fault_keeps_bad_reading_limits_and_pre_stop_context(self):
         self.start()
+        self.lab.mode = "agent"
         self.buses[-1].raw["gripper"] = 99
         self.run_loop_until_stopped(self.lab._loop)
         stop = self.lab.status()["diagnostics"]["last_stop"]
         self.assertIn("1 ticks below minimum", stop["reason"])
-        self.assertEqual(stop["context"]["mode"], "manual")
+        self.assertEqual(stop["context"]["mode"], "agent")
         self.assertEqual(stop["context"]["raw_positions"]["follower"]["gripper"], 99)
         fault = stop["context"]["fault"]
         self.assertEqual(
@@ -140,8 +141,9 @@ class IncidentTests(unittest.TestCase):
         self.lab.error = None
         self.assertEqual(self.lab.status()["diagnostics"]["last_stop"]["id"], stop["id"])
 
-    def test_leader_fault_is_attributed_to_leader_calibration(self):
+    def test_leader_admission_fault_is_attributed_to_leader_calibration(self):
         self.start()
+        self.lab.stop()
         leader = FakeBus()
         leader.raw["shoulder_lift"] = 4001
         with self.assertRaises(EncoderRangeError):
