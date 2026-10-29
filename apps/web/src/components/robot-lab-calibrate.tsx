@@ -73,6 +73,8 @@ export function RobotLabCalibrate({ lab }: { lab: RobotLabState }) {
                   'Captured calibration resumed. Torque remains off.',
                   robotApi.resumeCalibration,
                   ownSession,
+                  true,
+                  'resume',
                 )
               }
             >
@@ -105,6 +107,8 @@ export function RobotLabCalibrate({ lab }: { lab: RobotLabState }) {
                   'Calibration started. Position each joint near its middle.',
                   () => robotApi.startCalibration(port, robotId, role),
                   ownSession,
+                  true,
+                  'start',
                 )
               }
             >
