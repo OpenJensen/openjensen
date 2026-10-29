@@ -42,7 +42,12 @@ from hardware import (
     normalized,
     probe_bus,
 )
-from lerobot_control import PROFILE, LeRobotPositionControl
+from lerobot_control import (
+    PROFILE,
+    LeRobotPositionControl,
+    configure_passive_leader,
+    prepare_single_turn_feedback,
+)
 from motion import MiddleMotion, RestMotion, control_limits, middle_targets, step_target
 from rest_position import RestPositions
 from verification import (
@@ -956,6 +961,7 @@ class RobotLab:
                             raise RequestError("Resume cancelled by Stop")
                         self.original_calibration = expected
                     bus.disable()
+                    prepare_single_turn_feedback(bus, lambda: generation == self.generation)
                     if generation != self.generation:
                         raise RequestError("Resume cancelled by Stop")
                     if current != temporary:
@@ -1025,6 +1031,7 @@ class RobotLab:
                     if generation != self.generation:
                         raise RequestError("Session cancelled by Stop")
                     bus.disable()
+                    prepare_single_turn_feedback(bus, lambda: generation == self.generation)
                     for motor_id in IDS.values():
                         bus.write("Lock", motor_id, 0)
                         bus.write("Operating_Mode", motor_id, 0)
@@ -1079,7 +1086,12 @@ class RobotLab:
                         bus.write("Min_Position_Limit", motor_id, 0)
                         bus.write("Max_Position_Limit", motor_id, 4095)
                     raw = self._read_positions(bus)
-                    offsets = {joint: position - 2047 for joint, position in raw.items()}
+                    # Match upstream sign-magnitude homing: raw 4095 needs
+                    # offset 2048, clamped to the register's representable 2047.
+                    offsets = {
+                        joint: max(-2047, min(2047, position - 2047))
+                        for joint, position in raw.items()
+                    }
                     if any(abs(value) > 2047 for value in offsets.values()):
                         raise RequestError(
                             "Invalid middle pose encoder reading; "
@@ -1226,6 +1238,7 @@ class RobotLab:
                             "before motion"
                         )
                     bus.disable()
+                    prepare_single_turn_feedback(bus, lambda: generation == self.generation)
                     raw = self._read_positions(bus, calibration)
                     if any(
                         not calibration[j]["range_min"] <= raw[j] <= calibration[j]["range_max"]
@@ -1254,7 +1267,9 @@ class RobotLab:
                                 raise RequestError(
                                     "Leader calibration differs from its saved profile"
                                 )
-                            leader.disable()
+                            configure_passive_leader(
+                                leader, leader_calibration, lambda: generation == self.generation
+                            )
                             self._read_positions(leader, leader_calibration, source="leader")
                         self.leader_calibration = leader_calibration
                     if mode != "handguide":

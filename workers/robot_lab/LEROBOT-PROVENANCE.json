@@ -26,7 +26,8 @@
     "Restore volatile Torque_Limit (48) to the saved EEPROM Max_Torque_Limit (16), matching power-on behavior and clearing an interrupted 10% identification cap; gripper stays at 500.",
     "Validated follower gripper Present_Position replies carrying only overload status 0x20 continue after upstream protection settings are verified; gripper torque-off with this alarm requires exact zero read-back. Other faults remain fatal. Semantics checked against huggingface/lerobot@baf68724e867113e6052bb3159b04dcb97e88866 motors_bus.py read/write/sync_read, which distinguish alarms from refused operations.",
     "Human manual, handguide and leader/follower observations follow upstream normalization: sampled calibration endpoints do not terminate a session; degree measurements remain unbounded by those samples and gripper measurements clamp to 0/100. Physical encoder validity, strict startup/agent admission and bounded commanded goals are retained. Excursions are journaled.",
-    "Camera recording peeks at a recent background-captured frame (500 ms freshness), while AI timed observations still read fresh hardware. PNG writes use a bounded asynchronous queue and upstream compression level 1. Recording failures pause collection and preserve motor control under its existing heartbeat/Stop gates; episode saves drain pending images and remain retryable after metadata errors. The control cycle compensates for work time as upstream CycleTimer does."
+    "Camera recording peeks at a recent background-captured frame (500 ms freshness), while AI timed observations still read fresh hardware. PNG writes use a bounded asynchronous queue and upstream compression level 1. Recording failures pause collection and preserve motor control under its existing heartbeat/Stop gates; episode saves drain pending images and remain retryable after metadata errors. The control cycle compensates for work time as upstream CycleTimer does.",
+    "Apply current upstream STS3215 single-turn feedback configuration by clearing only Phase bit 4 while torque is off, verify it before the first control read, and preserve every other Phase bit. Configure passive-leader timing/position mode without enabling torque. Re-lock and verify every unlocked EEPROM after configuration, including failure paths. Half-turn homing clamps the one unrepresentable +2048 offset to +2047, as current upstream does; existing calibration files are not rewritten."
   ],
   "ast_python": "3.14",
   "servo_memory_reference": "https://docs.waveshare.com/Memory_Map_Explanation/ST_Servo_Memory_Map_Explanation",
@@ -65,6 +66,19 @@
         "LeRobotDataset.add_frame",
         "LeRobotDataset.save_episode",
         "LeRobotDataset.finalize"
+      ]
+    },
+    "motor_configuration": {
+      "path": "motors/motors_bus.py",
+      "symbols": [
+        "SerialMotorsBus.configure_motors",
+        "SerialMotorsBus._get_half_turn_homings"
+      ]
+    },
+    "passive_leader": {
+      "path": "teleoperators/so_leader/so_leader.py",
+      "symbols": [
+        "SOLeader.configure"
       ]
     }
   },
