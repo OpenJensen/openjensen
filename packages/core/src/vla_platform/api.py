@@ -70,6 +70,9 @@ from vla_platform.projects import Projects
 from vla_platform.recordings_api import router as recordings_router
 from vla_platform.robot_lab_api import router as robot_lab_router
 from vla_platform.robot_lab_bridge import RobotLabBridge
+from vla_platform.scenes.agent import SceneError
+from vla_platform.scenes.contracts import SceneRequest
+from vla_platform.scenes_api import router as scenes_router
 from vla_platform.settings import Settings
 from vla_platform.storage import Storage
 from vla_platform.submissions import (
@@ -145,6 +148,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             await storage.initialize()
             initialized = True
             await execution.reconcile()
+            execution.scene_explorer = explorer
+            app.state.scenes = execution.scenes
+            await app.state.scenes.reconcile()
             app.state.module_installations = ModuleInstallations(settings.data_dir)
             app.state.application_updates = ApplicationUpdates(data_dir=settings.data_dir)
             app.state.projects, app.state.execution = Projects(storage), execution
@@ -181,6 +187,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         finally:
             try:
                 if initialized:
+                    if hasattr(app.state, "scenes"):
+                        await app.state.scenes.close()
                     try:
                         if hasattr(app.state, "agent_control"):
                             await app.state.agent_control.close()
@@ -241,6 +249,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(recordings_router)
     app.include_router(dataset_library_router)
     app.include_router(robot_lab_router)
+    app.include_router(scenes_router)
     app.include_router(updates_router)
     app.include_router(modules_router)
 
@@ -408,6 +417,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 status="untested" if execution.augmentation.options().configured else "planned",
                 description=(
                     "Gemini Omni appearance edits for selected camera clips; review required."
+                ),
+            ),
+            Capability(
+                stage="Dataset",
+                operation="scene.generate",
+                status="untested" if execution.scenes.options()["configured"] else "planned",
+                description=(
+                    "Dataset investigation, scene generation and simulation media as one job."
                 ),
             ),
             Capability(
@@ -850,9 +867,28 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/api/v1/jobs/{job_id}/events", response_model=list[JobEvent])
     async def job_events(job_id: str, execution: ExecutionDep, after: int = 0):
-        if await execution.get(job_id) is None:
+        job = await execution.get(job_id)
+        if job is None:
             raise HTTPException(404, "Job not found")
         try:
+            if isinstance(job.request, SceneRequest):
+                try:
+                    scene = execution.scenes.get(job.request.request_id)
+                except SceneError:
+                    return []
+                if scene.job_id != job.id or scene.project_id != job.project_id:
+                    raise ValueError("Scene event identity differs from its job")
+                return [
+                    JobEvent(
+                        sequence=index,
+                        stage=event["stage"],
+                        message=event["message"],
+                        timestamp=event["at"],
+                        data={"attempt": event.get("attempt", 0)},
+                    )
+                    for index, event in enumerate(scene.events, 1)
+                    if index > after
+                ]
             return execution.lifecycle.events(job_id, after)
         except ValueError as exc:
             raise HTTPException(
