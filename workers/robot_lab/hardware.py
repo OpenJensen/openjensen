@@ -58,7 +58,7 @@ def normalized(joint: str, raw: int, calibration: dict) -> float:
     entry = calibration[joint]
     low, high = entry["range_min"], entry["range_max"]
     if joint == "gripper":
-        return max(0.0, min(100.0, (raw - low) * 100 / (high - low)))
+        return (min(high, max(low, raw)) - low) / (high - low) * 100
     return (raw - (low + high) / 2) * 360 / 4095
 
 
@@ -68,7 +68,7 @@ def denormalized(joint: str, value: float, calibration: dict) -> int:
     entry = calibration[joint]
     low, high = entry["range_min"], entry["range_max"]
     raw = (
-        value * (high - low) / 100 + low
+        (min(100.0, max(0.0, value)) / 100) * (high - low) + low
         if joint == "gripper"
         else value * 4095 / 360 + (low + high) / 2
     )

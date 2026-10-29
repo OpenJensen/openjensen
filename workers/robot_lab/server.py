@@ -158,13 +158,13 @@ class EncoderRangeError(HardwareError):
         )
 
 
-def validate_raw(raw, calibration=None):
+def validate_raw(raw, calibration=None, *, calibration_bounds=True):
     if set(raw) != set(calibration if calibration is not None else JOINTS) or any(
         isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 4095
         for value in raw.values()
     ):
         raise HardwareError("Invalid encoder reading; inspect cabling and motor setup")
-    if calibration is not None:
+    if calibration is not None and calibration_bounds:
         for joint, value in raw.items():
             low, high = calibration[joint]["range_min"], calibration[joint]["range_max"]
             if not low <= value <= high:
@@ -273,6 +273,7 @@ class RobotLab:
         self.last_raw = {}
         self.last_fault = None
         self.motor_alarms = {}
+        self.range_excursions = {}
         self.diagnostics = Diagnostics(self.data_dir)
         if start_threads:
             for target in (self._loop, self._watchdog):
@@ -292,6 +293,9 @@ class RobotLab:
             "raw_positions": {key: dict(value) for key, value in dict(self.last_raw).items()},
             "motor_alarms": {
                 source: dict(alarms) for source, alarms in dict(self.motor_alarms).items()
+            },
+            "calibration_excursions": {
+                source: dict(value) for source, value in dict(self.range_excursions).items()
             },
             "commanded_raw": dict(self.commanded_raw),
             "targets": dict(self.action),
@@ -326,7 +330,14 @@ class RobotLab:
             joint: value for joint, value in raw.items() if joint in JOINTS and type(value) is int
         }
         try:
-            result = validate_raw(raw, calibration)
+            # LeRobot normalizes observations without rejecting sampled-range
+            # crossings: degree observations remain measured, gripper values
+            # saturate at 0/100. Admission and agent execution remain strict.
+            result = validate_raw(
+                raw,
+                calibration,
+                calibration_bounds=self.mode not in {"manual", "leader", "handguide"},
+            )
         except HardwareError as error:
             self.last_fault = {
                 "source": source,
@@ -339,6 +350,30 @@ class RobotLab:
             }
             self.diagnostics.emit("encoder_fault", fault=self.last_fault)
             raise
+        excursions = {
+            joint: {
+                "measured_ticks": value,
+                "min_ticks": calibration[joint]["range_min"],
+                "max_ticks": calibration[joint]["range_max"],
+            }
+            for joint, value in raw.items()
+            if calibration is not None
+            and not calibration[joint]["range_min"] <= value <= calibration[joint]["range_max"]
+        }
+        previous_joints = set(self.range_excursions.get(source, {}))
+        self.range_excursions[source] = excursions
+        if set(excursions) != previous_joints:
+            self.diagnostics.emit(
+                "calibration_endpoint_observed" if excursions else "calibration_endpoint_cleared",
+                reason=(
+                    f"{source.capitalize()} {', '.join(j.replace('_', ' ') for j in excursions)} "
+                    "crossed a sampled calibration endpoint; bounded control continues"
+                    if excursions
+                    else f"{source.capitalize()} readings returned within sampled endpoints"
+                ),
+                source=source,
+                context=self._diagnostic_context(),
+            )
         if alarms != previous_alarms:
             self.diagnostics.emit(
                 "gripper_load_alarm" if alarms else "gripper_load_cleared",
@@ -481,6 +516,7 @@ class RobotLab:
                 "rest_position": hardware,
                 "persistent_diagnostics": True,
                 "gripper_load_tolerance": True,
+                "lerobot_observation_ranges": True,
                 "agent_control": hardware,
                 "move_to_middle": hardware,
                 "middle_tolerance": hardware,
@@ -1166,6 +1202,7 @@ class RobotLab:
             self.last_fault = None
             self.last_raw = {}
             self.motor_alarms = {}
+            self.range_excursions = {}
             leader, control, bus = None, None, self.bus_factory(port)
             bus.joints = joints
             with self.stop_lock, self.lifecycle_lock:

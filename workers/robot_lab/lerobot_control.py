@@ -281,4 +281,5 @@ PROFILE = {
     "maximum_acceleration": 254,
     "goal_velocity": 0,
     "gripper_load_response": "continue_with_motor_protection",
+    "observation_range_policy": "lerobot_normalization",
 }
