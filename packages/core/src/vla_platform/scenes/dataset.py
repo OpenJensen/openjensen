@@ -17,7 +17,13 @@ from vla_platform.datasets.local_preview import reader_python
 from vla_platform.scenes.agent import SceneError, command, run_role
 from vla_platform.scenes.contracts import Investigation
 
-ROUNDS = 3
+
+def investigation_rounds(video_entries):
+    if type(video_entries) is not int or not 1 <= video_entries <= 96:
+        raise SceneError("Dataset investigation supports 1 to 96 episode-camera videos.")
+    return max(3, math.ceil(video_entries / 4) + 1)
+
+
 JOINTS = ["shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll", "gripper"]
 
 
@@ -69,16 +75,17 @@ async def investigate(scenes, run, source, explorer):
     folder = scenes.folder(run.id)
     inventory, info, rows = await catalog(scenes, run, source, explorer)
     frames, clips, seen = [], [], set()
+    rounds = investigation_rounds(sum(len(episode["cameras"]) for episode in inventory["episodes"]))
     videos = {}
     selected = None
     try:
-        for round_index in range(ROUNDS):
+        for round_index in range(rounds):
             work = folder / f"investigation-{round_index + 1}"
             work.mkdir(mode=0o700)
             scenes.event(
                 run,
                 "investigating",
-                f"Codex is selecting dataset evidence ({round_index + 1}/{ROUNDS}).",
+                f"Codex is selecting dataset evidence ({round_index + 1}/{rounds}).",
             )
             decision, tokens = await run_role(
                 work,
@@ -90,7 +97,7 @@ async def investigate(scenes, run, source, explorer):
                 "Request additional intervals when evidence is missing; you need not inspect every "
                 "video. ready may be true only after viewing evidence. Choose replay_episode from "
                 "an inspected episode. Select diverse views of the workspace and motion. "
-                f"At most {ROUNDS} investigation rounds and four clips per round are available. "
+                f"At most {rounds} investigation rounds and four clips per round are available. "
                 "The visual input is decoded temporal frames, rather than video bytes. "
                 "Catalog: "
                 + json.dumps(inventory)
@@ -110,7 +117,7 @@ async def investigate(scenes, run, source, explorer):
                 break
             if not decision.clips:
                 raise SceneError("Agent requested no video evidence before reconstruction.")
-            if round_index == ROUNDS - 1:
+            if round_index == rounds - 1:
                 raise SceneError(
                     "Agent investigation needs more evidence; its configured budget was reached."
                 )
@@ -143,6 +150,10 @@ async def investigate(scenes, run, source, explorer):
                     target = folder / f".source-{len(videos)}.mp4"
                     await download_video(explorer.client, camera["url"], target)
                     videos[camera["url"]] = target
+                    if sum(path.stat().st_size for path in videos.values()) > 1024**3:
+                        raise SceneError(
+                            "Dataset video investigation exceeds its 1 GiB download budget."
+                        )
                 video = videos[camera["url"]]
                 duration = camera["end_seconds"] - camera["start_seconds"]
                 start = camera["start_seconds"] + duration * requested.start_fraction
