@@ -401,7 +401,12 @@ class AgentControl(TaskControl, LocalAgents):
                 max_total_tokens=payload.max_total_tokens,
                 planning_mode=payload.planning_mode,
                 max_steps=payload.max_steps,
-                supported_skills=["joint_segment"]
+                gripper_position_control=payload.gripper_position_control,
+                supported_skills=(
+                    ["joint_segment", "gripper_position"]
+                    if payload.gripper_position_control
+                    else ["joint_segment"]
+                )
                 if payload.target_kind == "robot_lab"
                 else ["joint_correction", "joint_segment"]
                 if payload.planning_mode == "task"
@@ -928,11 +933,16 @@ class AgentControl(TaskControl, LocalAgents):
                 skill = result.get("skill", "joint_correction")
                 if skill not in s.supported_skills:
                     raise AgentError("Provider selected an unavailable skill", 503)
-                args = (
-                    SegmentArguments.model_validate(result.get("arguments"))
-                    if skill == "joint_segment"
-                    else Arguments.model_validate(result.get("arguments"))
-                )
+                position_plan = None
+                if skill == "gripper_position":
+                    args, position_plan = self.position_proposal(s, p, result.get("arguments"))
+                    skill = "joint_segment"
+                else:
+                    args = (
+                        SegmentArguments.model_validate(result.get("arguments"))
+                        if skill == "joint_segment"
+                        else Arguments.model_validate(result.get("arguments"))
+                    )
                 if (
                     skill == "joint_correction"
                     and args.joint not in s.observation.joints
@@ -955,6 +965,7 @@ class AgentControl(TaskControl, LocalAgents):
                     model=model,
                     **prompt,
                     arguments=args,
+                    gripper_position_plan=position_plan,
                     skill=skill,
                     purpose=str(result.get("purpose", result.get("summary", "")))[:512],
                     status="proposed",

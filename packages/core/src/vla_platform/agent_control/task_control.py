@@ -12,7 +12,15 @@ from sqlalchemy import select
 
 from vla_platform.storage import agent_observations
 
-from .contracts import Observation, PlanRequest, TaskReviewRecord
+from . import kinematics
+from .contracts import (
+    Observation,
+    PlanRequest,
+    PositionArguments,
+    PositionEstimate,
+    SegmentArguments,
+    TaskReviewRecord,
+)
 
 
 def error(message, status=409):
@@ -100,6 +108,17 @@ class TaskControl:
                 else "Simulator owner-thread capture",
             ),
         )
+        if physical and s.gripper_position_control:
+            obs.gripper_position_estimate = PositionEstimate.model_validate(
+                {
+                    "model": kinematics.MODEL,
+                    "frame": kinematics.FRAME,
+                    "units": "metres",
+                    "position_m": kinematics.forward(joints),
+                    "evidence": "model_estimate",
+                    "orientation_controlled": False,
+                }
+            )
         if execution:
             s.execution_observation = obs
             p["execution_raw_observation"] = raw
@@ -148,7 +167,39 @@ class TaskControl:
                 "max_speed_units_per_second": 10.0,
                 "max_acceleration_units_per_second2": 20.0,
             }
+        if physical and s.gripper_position_control:
+            result["gripper_position"] = {
+                "model": kinematics.MODEL,
+                "frame": kinematics.FRAME,
+                "units": "metres",
+                "max_step_m": kinematics.MAX_STEP_M,
+                "tolerance_m": kinematics.TOLERANCE_M,
+                "orientation_controlled": False,
+                "camera_to_base_calibrated": False,
+                "evidence": "model_estimate",
+            }
         return result
+
+    def position_proposal(self, s, p, arguments):
+        if s.target_kind != "robot_lab" or not s.gripper_position_control:
+            raise error(
+                "Enable standard SO101 gripper position targets when arming this session", 422
+            )
+        if any(s.observation.joint_units.get(j) != "degrees" for j in kinematics.JOINTS):
+            raise error("Position targets need calibrated SO101 joint angles in degrees", 422)
+        try:
+            args = PositionArguments.model_validate(arguments)
+            space = self.action_space(s, p)
+            segment, plan = kinematics.waypoint(
+                [args.x_m, args.y_m, args.z_m],
+                s.observation.joints,
+                space["joint_limits"],
+                space["max_delta"],
+                args.duration_seconds,
+            )
+            return SegmentArguments.model_validate(segment), plan
+        except (ValueError, KeyError) as problem:
+            raise error(str(problem), 422) from None
 
     async def capture_target(self, s, p):
         if s.target_kind == "robot_lab":

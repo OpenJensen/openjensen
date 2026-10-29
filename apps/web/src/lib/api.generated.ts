@@ -4460,6 +4460,7 @@ export interface components {
             observation_id: string;
             /** Observation Sha256 */
             observation_sha256: string;
+            position?: components["schemas"]["PositionArguments"] | null;
             /**
              * Purpose
              * @default
@@ -4930,6 +4931,90 @@ export interface components {
              */
             training_method: string;
         };
+        /** PositionArguments */
+        PositionArguments: {
+            /**
+             * Duration Seconds
+             * @default 2
+             */
+            duration_seconds: number;
+            /**
+             * Frame
+             * @default base_link
+             * @constant
+             */
+            frame: "base_link";
+            /** X M */
+            x_m: number;
+            /** Y M */
+            y_m: number;
+            /** Z M */
+            z_m: number;
+        };
+        /** PositionEstimate */
+        PositionEstimate: {
+            /**
+             * Evidence
+             * @constant
+             */
+            evidence: "model_estimate";
+            /**
+             * Frame
+             * @constant
+             */
+            frame: "base_link";
+            /** Model */
+            model: string;
+            /**
+             * Orientation Controlled
+             * @constant
+             */
+            orientation_controlled: false;
+            /** Position M */
+            position_m: number[];
+            /**
+             * Units
+             * @constant
+             */
+            units: "metres";
+        };
+        /** PositionPlan */
+        PositionPlan: {
+            /**
+             * Evidence
+             * @constant
+             */
+            evidence: "model_estimate";
+            /** Final Waypoint */
+            final_waypoint: boolean;
+            /**
+             * Frame
+             * @constant
+             */
+            frame: "base_link";
+            /** From M */
+            from_m: number[];
+            /** Model */
+            model: string;
+            /** Next M */
+            next_m: number[];
+            /**
+             * Orientation Controlled
+             * @constant
+             */
+            orientation_controlled: false;
+            /** Remaining M */
+            remaining_m: number;
+            /** Target M */
+            target_m: number[];
+            /** Tolerance M */
+            tolerance_m: number;
+            /**
+             * Units
+             * @constant
+             */
+            units: "metres";
+        };
         /** Precision */
         Precision: {
             /**
@@ -4972,6 +5057,7 @@ export interface components {
             expected_revision: number;
             /** Expires At */
             expires_at: string;
+            gripper_position_plan?: components["schemas"]["PositionPlan"] | null;
             /** Id */
             id: string;
             /** Model */
@@ -5720,6 +5806,11 @@ export interface components {
             /** Created At */
             created_at: string;
             execution_observation?: components["schemas"]["vla_platform__agent_control__contracts__Observation"] | null;
+            /**
+             * Gripper Position Control
+             * @default false
+             */
+            gripper_position_control: boolean;
             /** Id */
             id: string;
             /**
@@ -5825,6 +5916,11 @@ export interface components {
              * @default false
              */
             cloud_consent: boolean;
+            /**
+             * Gripper Position Control
+             * @default false
+             */
+            gripper_position_control: boolean;
             /**
              * Max Calls
              * @default 4
@@ -6439,6 +6535,7 @@ export interface components {
             episode_id: string | null;
             /** Expires At */
             expires_at: string;
+            gripper_position_estimate?: components["schemas"]["PositionEstimate"] | null;
             /** Id */
             id: string;
             /** Image Sha256 */

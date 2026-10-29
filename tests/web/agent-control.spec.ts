@@ -41,6 +41,7 @@ async function fixture(
     joint_units: {} as Record<string, string>,
     calibration_sha256: null as string | null,
     image_sha256: null as string | null,
+    gripper_position_estimate: null as Record<string, unknown> | null,
     source: 'synthetic_fixture',
   };
   const saved = {
@@ -74,6 +75,7 @@ async function fixture(
     step_count: 0,
     run_enabled: false,
     control_armed: false,
+    gripper_position_control: false,
     supported_skills: ['joint_correction'],
     model_assessment: null as Record<string, unknown> | null,
     task_review: null as Record<string, unknown> | null,
@@ -161,6 +163,23 @@ async function fixture(
       status: 'proposed',
       created_at: stamp,
       expires_at: new Date(Date.now() + 120000).toISOString(),
+      ...(saved.gripper_position_control
+        ? {
+            gripper_position_plan: {
+              model: 'so101-new-calib-3a65d2d35e68a8d2',
+              frame: 'base_link',
+              units: 'metres',
+              target_m: [0.3, 0.0, 0.15],
+              from_m: [0.391, 0.0, 0.226],
+              next_m: [0.39, 0.0, 0.218],
+              remaining_m: 0.113,
+              tolerance_m: 0.003,
+              final_waypoint: false,
+              orientation_controlled: false,
+              evidence: 'model_estimate',
+            },
+          }
+        : {}),
     };
   }
   let sessions: (typeof saved)[] = [];
@@ -288,12 +307,24 @@ async function fixture(
         saved.mode = body.mode;
         saved.max_calls = body.max_calls;
         saved.max_steps = body.max_steps;
+        saved.gripper_position_control = body.gripper_position_control ?? false;
         if (body.target_kind === 'robot_lab') {
           saved.target_kind = 'robot_lab';
           saved.clock_policy = 'physical';
           saved.authority_epoch = 42;
           saved.control_armed = true;
           saved.supported_skills = ['joint_segment'];
+          if (saved.gripper_position_control) {
+            saved.supported_skills.push('gripper_position');
+            observation.gripper_position_estimate = {
+              frame: 'base_link',
+              model: 'so101-new-calib-3a65d2d35e68a8d2',
+              units: 'metres',
+              position_m: [0.391, 0.0, 0.226],
+              evidence: 'model_estimate',
+              orientation_controlled: false,
+            };
+          }
           observation.environment_kind = 'physical';
           observation.units = 'mixed';
           observation.joints = robot.session.positions;
@@ -989,4 +1020,35 @@ test('MCP setup keeps the armed session alive and returns to its existing connec
   await dialog.getByRole('button', { name: 'Close MCP setup', exact: true }).click();
   await expect(dialog).toHaveCount(0);
   await page.getByRole('button', { name: 'Stop arm and disable torque', exact: true }).click();
+});
+
+test('gripper position setup and coordinate review preserve the physical approval boundary', async ({
+  page,
+}, testInfo) => {
+  const { requests } = await fixture(page, { physical: true, localMcp: true });
+  await connectPhysical(page);
+  const enable = page.getByRole('checkbox', {
+    name: 'Enable gripper position targets for a standard SO101',
+    exact: true,
+  });
+  await expect(enable).not.toBeChecked();
+  await enable.check();
+  await expect(
+    page.getByText('Use the standard SO101 assembly and midpoint joint calibration.', { exact: false }),
+  ).toBeVisible();
+  await page.getByRole('combobox', { name: 'Agent provider profile', exact: true }).selectOption('local-mcp');
+  await page.getByRole('button', { name: 'Arm AI session', exact: true }).click();
+  expect(requests.find((r) => r.path === '/projects/agent-project/agent-sessions')?.body.gripper_position_control).toBe(
+    true,
+  );
+  await expect(page.getByRole('region', { name: 'Gripper position estimate', exact: true })).toContainText(
+    'X 391.0 mm',
+  );
+  await page.getByRole('button', { name: 'Start task', exact: true }).click();
+  const waypoint = page.getByRole('region', { name: 'Gripper target waypoint', exact: true });
+  await expect(waypoint).toContainText('Target: X 300.0 mm');
+  await expect(waypoint).toContainText('Next waypoint: X 390.0 mm');
+  await expect(waypoint).toContainText('Verify the measured result');
+  expect(requests.filter((r) => r.path.endsWith('/approve'))).toEqual([]);
+  await waypoint.screenshot({ path: testInfo.outputPath('gripper-position-review.png') });
 });

@@ -212,6 +212,7 @@ def test_stdio_transport_exposes_only_scoped_tools():
                     "get_context",
                     "get_camera_image",
                     "propose_joint_segment",
+                    "propose_gripper_position",
                     "report_assessment",
                     "stop_robot",
                 }

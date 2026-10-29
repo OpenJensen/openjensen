@@ -20,6 +20,10 @@ motors. Do not invent object poses, kinematic transforms, collision avoidance or
 grasp skills. If the observation cannot ground the target or the next safe step, finish with
 needs_help and state what is missing. Never refuse merely because the user omitted joint names:
 selecting admitted skills/joints from an abstract goal is your job when the evidence is sufficient.
+When gripper_position is advertised, use its base_link metres and current model estimate.
+Set the desired endpoint; the host solves a bounded waypoint. Repeat the endpoint after each
+new observation until within the declared tolerance. Gripper opening stays separate. A camera
+image alone supplies no calibrated metric position: never guess a pixel-to-base transform.
 
 After each action, inspect the NEW observation and actual applied/measured result before deciding
 again. An execution receipt does not establish task success. Finish with achieved only as a model
@@ -47,7 +51,7 @@ def validate_space(space, joints):
     if (
         not isinstance(space, dict)
         or not required <= set(space)
-        or set(space) - required - {"trajectory_profile"}
+        or set(space) - required - {"trajectory_profile", "gripper_position"}
     ):
         fail("A task planner requires an exact host action-space manifest.")
     if space["kind"] not in {"simulation", "physical"}:
@@ -89,6 +93,41 @@ def validate_space(space, joints):
             or not number(profile["max_acceleration_units_per_second2"], 0.01, 20)
         ):
             fail("The physical trajectory profile is missing or exceeds executor limits.")
+    position = space.get("gripper_position")
+    if position is not None:
+        if (
+            space["kind"] != "physical"
+            or not isinstance(position, dict)
+            or set(position)
+            != {
+                "model",
+                "frame",
+                "units",
+                "max_step_m",
+                "tolerance_m",
+                "orientation_controlled",
+                "camera_to_base_calibrated",
+                "evidence",
+            }
+            or position.get("model") != "so101-new-calib-3a65d2d35e68a8d2"
+            or set(joints)
+            != {
+                "shoulder_pan",
+                "shoulder_lift",
+                "elbow_flex",
+                "wrist_flex",
+                "wrist_roll",
+                "gripper",
+            }
+            or position.get("frame") != "base_link"
+            or position.get("units") != "metres"
+            or position.get("evidence") != "model_estimate"
+            or position.get("orientation_controlled") is not False
+            or position.get("camera_to_base_calibrated") is not False
+            or not number(position.get("max_step_m"), 0.001, 0.02)
+            or not number(position.get("tolerance_m"), 0.0001, 0.005)
+        ):
+            fail("Invalid standard SO101 position-planning manifest.")
     return space
 
 
@@ -157,6 +196,34 @@ def tools(joints, space):
             },
         }
     )
+    if space.get("gripper_position") is not None:
+        result.append(
+            {
+                "type": "function",
+                "name": "propose_gripper_position",
+                "strict": True,
+                "description": (
+                    "Set the desired gripper position in base_link metres using the admitted "
+                    "standard SO101 model. The host solves one bounded waypoint for operator "
+                    "review. Read the next observation and repeat the target until its estimate "
+                    "is within tolerance. Gripper opening is unchanged; orientation and camera "
+                    "pixel-to-base transforms are not controlled."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "frame": {"type": "string", "enum": ["base_link"]},
+                        "x_m": {"type": "number", "minimum": -0.6, "maximum": 0.6},
+                        "y_m": {"type": "number", "minimum": -0.6, "maximum": 0.6},
+                        "z_m": {"type": "number", "minimum": 0, "maximum": 0.6},
+                        "duration_seconds": {"type": "number", "minimum": 0.5, "maximum": 5.0},
+                        "purpose": {"type": "string", "minLength": 1, "maxLength": 512},
+                    },
+                    "required": ["frame", "x_m", "y_m", "z_m", "duration_seconds", "purpose"],
+                },
+            }
+        )
     result.append(
         {
             "type": "function",
@@ -199,6 +266,23 @@ def decision(name, value, request):
     if not isinstance(value.get("purpose"), str) or not 1 <= len(value["purpose"]) <= 512:
         fail("An action needs a bounded purpose summary.")
     purpose = value["purpose"]
+    if name == "propose_gripper_position":
+        if (
+            space.get("gripper_position") is None
+            or set(value) != {"frame", "x_m", "y_m", "z_m", "duration_seconds", "purpose"}
+            or value["frame"] != "base_link"
+            or not number(value["x_m"], -0.6, 0.6)
+            or not number(value["y_m"], -0.6, 0.6)
+            or not number(value["z_m"], 0, 0.6)
+            or not number(value["duration_seconds"], 0.5, 5.0)
+        ):
+            fail("Invalid or unavailable gripper position target.")
+        return {
+            "status": "proposed",
+            "skill": "gripper_position",
+            "arguments": {k: v for k, v in value.items() if k != "purpose"},
+            "purpose": purpose,
+        }
     if name == "propose_joint_correction" and space["kind"] == "simulation":
         if set(value) != {"joint", "delta_rad", "purpose"}:
             fail("Unexpected correction properties.")
