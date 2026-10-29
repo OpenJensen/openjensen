@@ -582,25 +582,31 @@ async def _command(
         safe = "[redacted private key]" if private else redact(line)
         logger = _RUN_LOGGER.get()
         if logger:
-            logged = await logger(line)
+            logged = await logger(safe)
             if isinstance(logged, str):
                 safe = logged
+        # One canonical representation feeds capture, legacy logs and callbacks.
+        # Preserve the existing split-secret stream marker at every boundary.
+        safe = re.sub(r"\[redacted\]", "[REDACTED]", safe, flags=re.I)
+        encoded = (safe + "\n").encode()
+        if len(captured) < MAX_LOG_BYTES:
+            captured.extend(encoded[: MAX_LOG_BYTES - len(captured)])
         if written < MAX_LOG_BYTES:
-            part = (safe + "\n").encode()[: MAX_LOG_BYTES - written]
+            part = encoded[: MAX_LOG_BYTES - written]
             log.write(part)
             log.flush()
             written += len(part)
         if on_line:
-            await on_line(line)
+            await on_line(safe)
         if not on_event:
             return
         # SkyPilot may prefix job-log lines. Progress content is parsed strictly
         # and never treated as executable text.
-        start = line.find("{")
+        start = safe.find("{")
         if start < 0:
             return
         try:
-            item = json.loads(line[start:])
+            item = json.loads(safe[start:])
         except ValueError:
             return
         if isinstance(item, dict) and (
@@ -623,8 +629,6 @@ async def _command(
         async with asyncio.timeout(timeout):
             with log_path.open("ab") as log:
                 async for chunk in _safe_output(process.stdout, (*_RUN_SECRETS.get(), *secrets)):
-                    if len(captured) < MAX_LOG_BYTES:
-                        captured.extend(chunk[: MAX_LOG_BYTES - len(captured)])
                     for line in framing.feed(chunk):
                         await process_line(line)
                 for line in framing.finish():

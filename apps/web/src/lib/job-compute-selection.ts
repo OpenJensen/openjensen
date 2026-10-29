@@ -37,11 +37,7 @@ export function saveJobCompute(
   if (typeof window !== 'undefined') window.dispatchEvent(new Event('openjensen:job-compute-selection'));
 }
 /** Call only when constructing a new request, before durable journaling. */
-export function withJobCompute<T extends object>(
-  project: string,
-  body: T,
-  storage?: SelectionStore,
-): T {
+export function withJobCompute<T extends object>(project: string, body: T, storage?: SelectionStore): T {
   if (storage === undefined && typeof window === 'undefined') return body;
   const input = body as Record<string, unknown>;
   if (typeof input.operation !== 'string' || !input.operation.startsWith('policy.')) return body;

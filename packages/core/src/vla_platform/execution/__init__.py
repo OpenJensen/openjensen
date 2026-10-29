@@ -550,7 +550,13 @@ class Execution:
     async def finish(self, job_id: str, response: WorkerResult) -> None:
         async with self.lock:
             job = await self.get(job_id)
-            if job and job.status == "cancelled" and job.cancellation and response.error:
+            if (
+                job
+                and job.status == "cancelled"
+                and job.cancellation
+                and job.cancellation.cleanup == "pending"
+                and response.error
+            ):
                 self._unconfirmed_cancellation(job, response.error, stage=job.stage or "execution")
                 await self.save(job)
             elif job and job.status not in TERMINAL:

@@ -208,35 +208,52 @@ def test_unknown_project_and_unknown_job_are_explicit(client):
 
 
 def test_scene_repeated_submission_retains_owned_identity(client, monkeypatch):
+    from test_scene_generation import source as scene_source
+
     ident = project(client)
-    dataset = accept(
-        client, ident, submission(client.app.state.execution.settings.local_root)
-    ).json()
-    stored = {}
+    dataset = scene_source(ident)
+    client.portal.call(client.app.state.execution._accept, dataset, None)
+    default = {"model": "fixture-model"}
+    models = [
+        {"id": name, "reasoning_efforts": ["medium"]}
+        for name in ("fixture-model", "another-fixture-model")
+    ]
+    monkeypatch.setattr(
+        client.app.state.scenes,
+        "options",
+        lambda: {
+            "configured": True,
+            "models": models,
+            "default_model": default["model"],
+        },
+    )
+    validated = []
+    validate = client.app.state.scenes.validate
 
-    async def create(project_id, body, source, explorer):
-        if body.request_id not in stored:
-            stored[body.request_id] = SceneRun(
-                id=body.request_id,
-                project_id=project_id,
-                request=body,
-                status="queued",
-                stage="queued",
-                created_at=now(),
-                updated_at=now(),
-                message="Saved",
-            )
-        return stored[body.request_id]
+    async def checked(project_id, body, source):
+        validated.append(body.request_id)
+        return await validate(project_id, body, source)
 
-    monkeypatch.setattr(client.app.state.scenes, "create", create)
-    body = {"operation": "scene.generate", "inputs": {"source_job_id": dataset["source_id"]}}
+    monkeypatch.setattr(client.app.state.scenes, "validate", checked)
+    body = {"operation": "scene.generate", "inputs": {"source_job_id": dataset.id}}
     one = accept(client, ident, body, "scene-request")
+    assert one.status_code == 202, one.text
+    default["model"] = "another-fixture-model"
     two = accept(client, ident, body, "scene-request")
-    assert one.status_code == two.status_code == 202
+    assert two.status_code == 202, two.text
     assert one.json()["id"] == two.json()["id"]
-    assert len(stored) == 1
+    assert one.json()["id"].startswith("core:")
+    assert one.json()["inputs"]["model"] == two.json()["inputs"]["model"] == "fixture-model"
+    assert len(validated) == 1
     wrong = accept(client, ident, {**body, "target_id": "unregistered"}, "other")
-    assert wrong.status_code == 422 and len(stored) == 1
+    assert wrong.status_code == 422
+    changed = accept(
+        client, ident, {**body, "inputs": {**body["inputs"], "max_attempts": 3}}, "scene-request"
+    )
+    assert changed.status_code == 409
+    history = client.get(f"/api/v1/projects/{ident}/work-jobs").json()
+    assert len(history) == 2
+    assert sum(row["operation"] == "scene.generate" for row in history) == 1
 
 
 def test_history_pagination_filters_and_summary_payloads_are_bounded(client):
