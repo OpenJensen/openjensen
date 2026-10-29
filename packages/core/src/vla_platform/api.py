@@ -11,7 +11,6 @@ import httpx
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
-from fastapi.staticfiles import StaticFiles
 from filelock import FileLock, Timeout
 from starlette.background import BackgroundTask
 from starlette.middleware.trustedhost import TrustedHostMiddleware
@@ -86,6 +85,7 @@ from vla_platform.teaching_api import router as teaching_router
 from vla_platform.teaching_sessions.config import TeachingError
 from vla_platform.teaching_sessions_api import router as teaching_sessions_router
 from vla_platform.updates_api import router as updates_router
+from vla_platform.web_assets import WorkspaceStaticFiles
 
 LOCAL_ORIGINS = {
     "http://127.0.0.1:3000",
@@ -932,5 +932,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             prefix = request.scope.get("root_path", "").rstrip("/")
             return RedirectResponse(request.url.replace(path=f"{prefix}/dashboard/"))
 
-        app.mount("/", StaticFiles(directory=settings.static_dir, html=True), name="web")
+        app.mount("/", WorkspaceStaticFiles(directory=settings.static_dir, html=True), name="web")
     return app
