@@ -4197,6 +4197,103 @@
         "title": "Limits",
         "type": "object"
       },
+      "LocalAgentAccess": {
+        "additionalProperties": false,
+        "properties": {
+          "access_token": {
+            "title": "Access Token",
+            "type": "string"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          },
+          "source_commit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Commit"
+          }
+        },
+        "required": [
+          "session_id",
+          "access_token"
+        ],
+        "title": "LocalAgentAccess",
+        "type": "object"
+      },
+      "LocalAgentResult": {
+        "additionalProperties": false,
+        "properties": {
+          "agent_name": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9._ :/-]+$",
+            "title": "Agent Name",
+            "type": "string"
+          },
+          "arguments": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SegmentArguments"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "assessment": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Assessment"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "authority_epoch": {
+            "minimum": 1.0,
+            "title": "Authority Epoch",
+            "type": "integer"
+          },
+          "observation_id": {
+            "pattern": "^[A-Za-z0-9_-]{1,96}$",
+            "title": "Observation Id",
+            "type": "string"
+          },
+          "observation_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Observation Sha256",
+            "type": "string"
+          },
+          "purpose": {
+            "default": "",
+            "maxLength": 512,
+            "title": "Purpose",
+            "type": "string"
+          },
+          "request_id": {
+            "pattern": "^[A-Za-z0-9_-]{1,96}$",
+            "title": "Request Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "authority_epoch",
+          "observation_id",
+          "observation_sha256",
+          "agent_name"
+        ],
+        "title": "LocalAgentResult",
+        "type": "object"
+      },
       "LocalComputeSettings": {
         "additionalProperties": false,
         "properties": {
@@ -5762,7 +5859,8 @@
           "provider": {
             "enum": [
               "mock",
-              "openai_responses"
+              "openai_responses",
+              "local_mcp"
             ],
             "title": "Provider",
             "type": "string"
@@ -9197,7 +9295,7 @@
   },
   "info": {
     "title": "OPEN JENSEN local VLA application",
-    "version": "0.1.11"
+    "version": "0.1.12"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -9483,6 +9581,271 @@
           }
         },
         "summary": "Heartbeat",
+        "tags": [
+          "Agent Control"
+        ]
+      }
+    },
+    "/api/v1/agent-sessions/{session_id}/local/access": {
+      "delete": {
+        "operationId": "local_revoke_api_v1_agent_sessions__session_id__local_access_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Local Revoke",
+        "tags": [
+          "Agent Control"
+        ]
+      },
+      "post": {
+        "operationId": "local_access_api_v1_agent_sessions__session_id__local_access_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocalAgentAccess"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Local Access",
+        "tags": [
+          "Agent Control"
+        ]
+      }
+    },
+    "/api/v1/agent-sessions/{session_id}/local/context": {
+      "get": {
+        "operationId": "local_context_api_v1_agent_sessions__session_id__local_context_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Local Context",
+        "tags": [
+          "Agent Control"
+        ]
+      }
+    },
+    "/api/v1/agent-sessions/{session_id}/local/image": {
+      "get": {
+        "operationId": "local_image_api_v1_agent_sessions__session_id__local_image_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "observation_id",
+            "required": true,
+            "schema": {
+              "title": "Observation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Local Image",
+        "tags": [
+          "Agent Control"
+        ]
+      }
+    },
+    "/api/v1/agent-sessions/{session_id}/local/result": {
+      "post": {
+        "operationId": "local_result_api_v1_agent_sessions__session_id__local_result_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LocalAgentResult"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Local Result",
+        "tags": [
+          "Agent Control"
+        ]
+      }
+    },
+    "/api/v1/agent-sessions/{session_id}/local/stop": {
+      "post": {
+        "operationId": "local_stop_api_v1_agent_sessions__session_id__local_stop_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Local Stop",
         "tags": [
           "Agent Control"
         ]

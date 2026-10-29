@@ -53,6 +53,9 @@ export async function agentRequest<T>(
 
 const sessionPath = (id: string) => `/agent-sessions/${encodeURIComponent(id)}`;
 export const agentApi = {
+  localAccess: (id: string) =>
+    agentRequest<components['schemas']['LocalAgentAccess']>(`${sessionPath(id)}/local/access`, 'POST', {}),
+  localRevoke: (id: string) => agentRequest<AgentSession>(`${sessionPath(id)}/local/access`, 'DELETE'),
   openaiModels: () => agentRequest<string[]>('/agent/openai/models'),
   providers: () => agentRequest<AgentProvider[]>('/agent/providers'),
   saveProvider: (id: string, body: AgentProviderRequest) =>

@@ -1,0 +1,73 @@
+.mcp-setup-trigger,
+.mobile-mcp-setup,
+.mcp-setup-close {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+}
+.mcp-setup-trigger {
+  font-family: inherit;
+}
+.mobile-mcp-setup {
+  display: none;
+  align-items: center;
+  color: var(--muted);
+}
+.mcp-setup-dialog {
+  width: min(580px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  margin: auto;
+  overflow: auto;
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.6;
+}
+.mcp-setup-dialog::backdrop {
+  background: rgb(0 0 0 / 35%);
+}
+.mcp-setup-content {
+  display: grid;
+  gap: 16px;
+}
+.mcp-setup-content header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.mcp-setup-content h2 {
+  font-size: 20px;
+}
+.mcp-setup-close {
+  color: var(--muted);
+  font-size: 24px;
+  min-width: 32px;
+  min-height: 32px;
+}
+.mcp-setup-content ol {
+  padding-left: 22px;
+}
+.mcp-setup-content li + li {
+  margin-top: 10px;
+}
+.mcp-setup-content footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.mcp-setup-content footer a {
+  text-decoration: none;
+}
+@media (max-width: 700px) {
+  .mobile-mcp-setup {
+    display: inline-flex;
+  }
+  .mcp-setup-dialog {
+    padding: 20px;
+  }
+}

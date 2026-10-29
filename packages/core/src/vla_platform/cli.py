@@ -85,6 +85,23 @@ def serve(port: Annotated[int, typer.Option(min=1, max=65535)] = 8000) -> None:
         launch(port)
 
 
+@app.command("agent-mcp")
+def agent_mcp(
+    session_id: Annotated[str, typer.Option(help="Armed local agent session ID")],
+    api_url: Annotated[
+        str, typer.Option(help="Loopback application URL or SSH forward")
+    ] = "http://127.0.0.1:8000",
+) -> None:
+    """Serve scoped MCP tools over stdio; use OPENJENSEN_AGENT_TOKEN for this session."""
+    from vla_platform.agent_mcp import serve as serve_mcp
+
+    try:
+        serve_mcp(api_url, session_id)
+    except ValueError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1) from None
+
+
 @app.command()
 def capabilities() -> None:
     call("GET", "/capabilities")

@@ -15,6 +15,8 @@ async function fixture(
     alternatePort?: boolean;
     staleCalibration?: boolean;
     cameraFailure?: boolean;
+    localMcp?: boolean;
+    localAccessFailure?: boolean;
   } = {},
 ) {
   const requests: { path: string; body: Record<string, unknown> }[] = [];
@@ -182,6 +184,18 @@ async function fixture(
       message: 'Built-in replay provider',
     },
   ];
+  if (options.localMcp)
+    profiles.push({
+      id: 'local-mcp',
+      provider: 'local_mcp',
+      model: 'local-agent',
+      reasoning_effort: 'low',
+      revision: 'local-mcp-v1',
+      saved: false,
+      checked: true,
+      capabilities: ['text', 'images'],
+      message: 'Local MCP transport available',
+    });
   await page.route('**/api/v1/**', async (route) => {
     if (await fulfillApplicationUpdateRead(route)) return;
     if (await fulfillWorkJobRead(route)) return;
@@ -268,6 +282,8 @@ async function fixture(
       if (request.method() === 'POST') {
         const body = request.postDataJSON();
         saved.task = body.task;
+        saved.provider_id = body.provider_id;
+        if (body.provider_id === 'local-mcp') saved.provider_revision = 'local-mcp-v1';
         saved.planning_mode = body.planning_mode;
         saved.mode = body.mode;
         saved.max_calls = body.max_calls;
@@ -308,6 +324,18 @@ async function fixture(
       saved.run_enabled = true;
       propose('task-loop-fixture');
       return route.fulfill({ status: 202, json: saved });
+    }
+    if (path === '/agent-sessions/agent-fixture/local/access') {
+      if (request.method() === 'DELETE') {
+        saved.status = 'paused';
+        saved.run_enabled = false;
+        return route.fulfill({ json: saved });
+      }
+      if (options.localAccessFailure)
+        return route.fulfill({ status: 409, json: { detail: 'Pause planning before replacing local agent access' } });
+      return route.fulfill({
+        json: { session_id: saved.id, access_token: 'A'.repeat(43), source_commit: 'f'.repeat(40) },
+      });
     }
     if (path === '/agent-sessions/agent-fixture/heartbeat') return route.fulfill({ json: saved });
     if (path === '/agent-sessions/agent-fixture/execution-observation') {
@@ -856,4 +884,109 @@ test('switching targets or returning to physical preparation clears operator con
   await expect(clear).not.toBeChecked();
   await expect(page.getByLabel('Show the local camera preview', { exact: true })).not.toBeChecked();
   expect(requests).toEqual([]);
+});
+
+test('local MCP uses scoped Codex and Claude configurations without an OpenAI key', async ({ page }, testInfo) => {
+  const { requests, robot } = await fixture(page, { physical: true, localMcp: true });
+  await connectPhysical(page);
+  await page.getByRole('combobox', { name: 'Agent provider profile', exact: true }).selectOption('local-mcp');
+  await page.getByText('Run limits', { exact: true }).click();
+  await expect(page.getByLabel('Maximum planning requests', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('Maximum total tokens', { exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Arm AI session', exact: true }).click();
+  await expect(page.getByText('Tokens reported', { exact: true })).toHaveCount(0);
+  const panel = page.getByRole('region', { name: 'Local agent connection', exact: true });
+  await expect(panel).toBeVisible();
+  const creation = requests.find((request) => request.path === '/projects/agent-project/agent-sessions');
+  expect(creation?.body).toMatchObject({ provider_id: 'local-mcp', cloud_consent: false });
+  expect(
+    requests.some((request) => request.path.includes('/providers/') || request.path.includes('/api-connections/')),
+  ).toBe(false);
+  await panel.getByRole('button', { name: 'Create local agent connection', exact: true }).click();
+  await expect(panel.getByRole('button', { name: 'Copy Codex configuration', exact: true })).toBeVisible();
+  await panel.screenshot({ path: testInfo.outputPath('local-agent-connection.png') });
+  await panel.getByText('Show connection configuration', { exact: true }).click();
+  const codex = await panel.getByRole('textbox', { name: 'Codex config.toml entry', exact: true }).inputValue();
+  expect(codex).toContain('[mcp_servers.openjensen]');
+  expect(codex).toContain('agent-mcp');
+  expect(codex).toContain('OPENJENSEN_AGENT_TOKEN');
+  const claude = JSON.parse(await panel.getByRole('textbox', { name: 'Claude MCP JSON', exact: true }).inputValue());
+  expect(claude.mcpServers.openjensen.command).toBe('uvx');
+  expect(claude.mcpServers.openjensen.args).toContain(
+    'git+https://github.com/OpenJensen/openjensen.git@' + 'f'.repeat(40) + '#subdirectory=packages/core',
+  );
+  expect(claude.mcpServers.openjensen.args).toContain('agent-fixture');
+  expect(claude.mcpServers.openjensen.env.OPENJENSEN_AGENT_TOKEN).toBe('A'.repeat(43));
+  await panel.getByRole('button', { name: 'Revoke local agent access', exact: true }).click();
+  await expect(panel).toContainText('Local agent access revoked');
+  await expect(panel.getByRole('button', { name: 'Copy Codex configuration', exact: true })).toHaveCount(0);
+  expect(robot.session.torque_enabled).toBe(true);
+  expect(requests.filter((request) => request.path.endsWith('/approve'))).toEqual([]);
+  await page.getByRole('button', { name: 'Stop arm and disable torque', exact: true }).click();
+  await expect(panel).toHaveCount(0);
+});
+
+test('local MCP connection failures never show a usable credential', async ({ page }) => {
+  await fixture(page, { physical: true, localMcp: true, localAccessFailure: true });
+  await connectPhysical(page);
+  await page.getByRole('combobox', { name: 'Agent provider profile', exact: true }).selectOption('local-mcp');
+  await page.getByRole('button', { name: 'Arm AI session', exact: true }).click();
+  const panel = page.getByRole('region', { name: 'Local agent connection', exact: true });
+  await panel.getByRole('button', { name: 'Create local agent connection', exact: true }).click();
+  await expect(panel.getByRole('alert')).toContainText('Pause planning');
+  await expect(panel.getByRole('button', { name: 'Copy Codex configuration', exact: true })).toHaveCount(0);
+  await expect(panel.getByRole('button', { name: 'Create local agent connection', exact: true })).toBeEnabled();
+});
+
+test('MCP setup is reachable without starting hardware or navigating away', async ({ page }, testInfo) => {
+  const { requests } = await fixture(page, { physical: true, localMcp: true });
+  await page.goto('/ai-teleoperation/');
+  const setup = page.getByRole('button', { name: 'MCP setup', exact: true }).filter({ visible: true });
+  await expect(setup).toBeVisible();
+  await setup.click();
+  const dialog = page.getByRole('dialog', { name: 'MCP setup', exact: true });
+  await expect(dialog).toContainText('Local agent (MCP)');
+  await expect(dialog.getByRole('link', { name: 'Open AI teleoperation', exact: true })).toHaveAttribute(
+    'href',
+    '/ai-teleoperation/',
+  );
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1))
+    .toBe(true);
+  const box = await dialog.boundingBox();
+  expect(box!.width).toBeLessThanOrEqual(page.viewportSize()!.width);
+  await dialog.screenshot({ path: testInfo.outputPath('mcp-setup.png') });
+  expect(requests).toEqual([]);
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  await expect(setup).toBeFocused();
+  await expect(page).toHaveURL(/\/ai-teleoperation\/$/);
+});
+
+test('MCP setup keeps the armed session alive and returns to its existing connection', async ({ page }) => {
+  const { requests, robot } = await fixture(page, { physical: true, localMcp: true });
+  await connectPhysical(page);
+  await page.getByRole('combobox', { name: 'Agent provider profile', exact: true }).selectOption('local-mcp');
+  await page.getByRole('button', { name: 'Arm AI session', exact: true }).click();
+  const panel = page.getByRole('region', { name: 'Local agent connection', exact: true });
+  await expect(panel).toBeVisible();
+  const count = () => requests.filter((request) => request.path.endsWith('/heartbeat')).length;
+  const heartbeats = count();
+  await page.getByRole('button', { name: 'MCP setup', exact: true }).filter({ visible: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'MCP setup', exact: true });
+  await expect(dialog).toBeVisible();
+  await expect.poll(count).toBeGreaterThan(heartbeats + 1);
+  expect(robot.session.torque_enabled).toBe(true);
+  expect(
+    requests.filter((request) => request.path.endsWith('/stop') || request.path.endsWith('/local/access')),
+  ).toEqual([]);
+  await dialog.getByRole('button', { name: 'Show session connection', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(panel).toBeFocused();
+  await expect(panel.getByRole('button', { name: 'Create local agent connection', exact: true })).toBeVisible();
+  expect(requests.filter((request) => request.path.endsWith('/stop'))).toEqual([]);
+  await page.getByRole('button', { name: 'MCP setup', exact: true }).filter({ visible: true }).click();
+  await dialog.getByRole('button', { name: 'Close MCP setup', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await page.getByRole('button', { name: 'Stop arm and disable torque', exact: true }).click();
 });

@@ -35,7 +35,8 @@ def test_provider_uses_saved_shared_key_and_rechecks_after_key_change(tmp_path, 
     profiles.checked("openai", changed["revision"], ["text"])
     assert profiles.get("openai")["checked"]
     set_module_installed(tmp_path, "openai", False)
-    assert [item.id for item in profiles.list()] == ["mock"]
+    assert [item.id for item in profiles.list()] == ["mock", "local-mcp"]
+    assert profiles.get("local-mcp")["api_key"] is None
     with pytest.raises(ProfileError, match="Install OpenAI"):
         profiles.get("openai")
     assert keys.key("openai") == KEY + "-changed"

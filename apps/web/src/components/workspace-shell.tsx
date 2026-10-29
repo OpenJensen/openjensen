@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import Link from 'next/link';
 import './workspace-shell.css';
 import { Icon } from '@/components/icon';
+import { McpSetup } from '@/components/mcp-setup';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { apiReferenceUrl } from '@/lib/api';
 import { publicPath } from '@/lib/base-path';
@@ -62,6 +63,7 @@ export function WorkspaceShell({
         <div className="sidebar-bottom">
           {sidebarFooter}
           <div className="sidebar-links">
+            <McpSetup />
             <a className="sidebar-link" href={publicPath('/guide/')}>
               <Icon name="book" size={16} /> Guide
             </a>
@@ -76,6 +78,7 @@ export function WorkspaceShell({
           <div className="breadcrumb">{breadcrumb}</div>
           <div className="topbar-actions">
             {headerActions}
+            <McpSetup compact />
             {showGuideShortcut && (
               <a className="mobile-guide-link" href={publicPath('/guide/')} aria-label="Workspace guide">
                 <Icon name="book" size={18} />
