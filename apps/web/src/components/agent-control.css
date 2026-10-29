@@ -82,6 +82,27 @@
   border-radius: 10px;
 }
 
+.agent-workspace-camera {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.agent-camera-preview,
+.agent-camera-placeholder {
+  min-height: 220px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--surface-soft);
+}
+
+.agent-camera-placeholder {
+  padding: 24px;
+  border: 1px dashed var(--line);
+  text-align: center;
+}
+
 .agent-simulation-tools {
   display: grid;
   gap: 24px;

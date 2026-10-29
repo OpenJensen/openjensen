@@ -170,7 +170,7 @@ export type RobotStatus = {
     role: RobotRole;
     path: string;
     valid?: boolean;
-    setup_port?: string;
+    setup_port?: string | null;
     setup_fresh?: boolean;
     sha256?: string;
     error?: string | null;

@@ -53,6 +53,7 @@ export async function agentRequest<T>(
 
 const sessionPath = (id: string) => `/agent-sessions/${encodeURIComponent(id)}`;
 export const agentApi = {
+  openaiModels: () => agentRequest<string[]>('/agent/openai/models'),
   providers: () => agentRequest<AgentProvider[]>('/agent/providers'),
   saveProvider: (id: string, body: AgentProviderRequest) =>
     agentRequest<AgentProvider>(`/agent/providers/${encodeURIComponent(id)}`, 'PUT', body),

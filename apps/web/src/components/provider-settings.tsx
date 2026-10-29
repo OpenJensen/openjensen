@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { agentApi, type AgentProvider, type AgentProviderRequest } from '@/lib/agent-api';
+import { agentModelName } from '@/lib/agent-models';
 import './workbench-form.css';
 import './agent-control.css';
 
@@ -12,6 +13,13 @@ export function ProviderSettings() {
   const [id, setId] = useState('openai');
   const [provider, setProvider] = useState<'mock' | 'openai_responses'>('openai_responses');
   const [model, setModel] = useState('gpt-6-astra');
+  const [customModel, setCustomModel] = useState(false);
+  const models = useQuery({
+    queryKey: ['openai-models'],
+    queryFn: agentApi.openaiModels,
+    enabled: false,
+    retry: false,
+  });
   const [reasoning, setReasoning] = useState('medium');
   const [busy, setBusy] = useState(false);
   const [checkConsent, setCheckConsent] = useState(false);
@@ -42,12 +50,14 @@ export function ProviderSettings() {
     setId(profile.id);
     setProvider(profile.provider);
     setModel(profile.model);
+    setCustomModel(false);
     setReasoning(profile.reasoning_effort);
     setCheckConsent(false);
     setMessage('');
     setError('');
   }
   const validId = /^[A-Za-z0-9_-]{1,64}$/.test(id);
+  const modelOptions = Array.from(new Set([model, ...(models.data ?? [])])).filter(Boolean);
   return (
     <section className="agent-provider-settings" aria-label="Agent provider settings">
       <div>
@@ -98,23 +108,45 @@ export function ProviderSettings() {
                 const value = event.target.value as 'mock' | 'openai_responses';
                 setProvider(value);
                 setModel(value === 'mock' ? 'deterministic-mock' : 'gpt-6-astra');
+                setCustomModel(false);
               }}
             >
               <option value="openai_responses">OpenAI Responses</option>
               <option value="mock">Deterministic mock</option>
             </select>
           </label>
-          <label className="workbench-field">
-            Model ID
-            <input
-              value={model}
-              maxLength={128}
-              required
-              disabled={busy}
-              spellCheck={false}
-              onChange={(event) => setModel(event.target.value)}
-            />
-          </label>
+          {provider === 'openai_responses' && !customModel ? (
+            <label className="workbench-field">
+              OpenAI model
+              <select
+                value={model}
+                disabled={busy}
+                onChange={(event) => {
+                  if (event.target.value === '__custom__') setCustomModel(true);
+                  else setModel(event.target.value);
+                }}
+              >
+                {modelOptions.map((identity) => (
+                  <option key={identity} value={identity}>
+                    {agentModelName(identity)} · {identity}
+                  </option>
+                ))}
+                <option value="__custom__">Enter a model ID…</option>
+              </select>
+            </label>
+          ) : (
+            <label className="workbench-field">
+              Model ID
+              <input
+                value={model}
+                maxLength={128}
+                required
+                disabled={busy || provider === 'mock'}
+                spellCheck={false}
+                onChange={(event) => setModel(event.target.value)}
+              />
+            </label>
+          )}
           <label className="workbench-field">
             Reasoning effort
             <select value={reasoning} disabled={busy} onChange={(event) => setReasoning(event.target.value)}>
@@ -126,7 +158,31 @@ export function ProviderSettings() {
             </select>
           </label>
         </div>
-        {provider === 'openai_responses' && <p>Uses the OpenAI API key configured above.</p>}
+        {provider === 'openai_responses' && (
+          <>
+            <p>Uses the OpenAI API key configured above. Model availability does not verify vision or tool support.</p>
+            <div className="workbench-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={busy || models.isFetching}
+                onClick={() => void models.refetch()}
+              >
+                {models.isFetching ? 'Loading OpenAI models…' : 'Load available OpenAI models'}
+              </button>
+              {customModel && (
+                <button type="button" className="text-link" disabled={busy} onClick={() => setCustomModel(false)}>
+                  Choose a model by name
+                </button>
+              )}
+            </div>
+            <p>Loading model names makes no inference request and does not send camera images.</p>
+            {models.isError && <p role="alert">{models.error.message}</p>}
+            {models.isSuccess && models.data.length === 0 && (
+              <p role="status">No models were returned. Enter a model ID or refresh the list.</p>
+            )}
+          </>
+        )}
         <div className="workbench-actions">
           <button
             type="submit"
@@ -162,7 +218,7 @@ export function ProviderSettings() {
       {providers.data?.map((profile) => (
         <section key={profile.id} className="agent-provider-card" aria-label={`Provider ${profile.id}`}>
           <h3>
-            {profile.id} · {profile.model}
+            {agentModelName(profile.model)} · {profile.id}
           </h3>
           <p>
             {profile.saved ? 'Saved' : 'Built-in'} ·{' '}
