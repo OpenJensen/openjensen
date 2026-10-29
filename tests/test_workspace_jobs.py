@@ -6,9 +6,9 @@ from types import SimpleNamespace
 import pytest
 from fastapi.testclient import TestClient
 from vla_platform.api import create_app
-from vla_platform.contracts import IntakeRequest, Job, now
+from vla_platform.contracts import IntakeRequest, Job, JobCancellation, now
 from vla_platform.execution import Execution
-from vla_platform.scenes.contracts import SceneRequest, SceneRun
+from vla_platform.scenes.contracts import SceneJobResult, SceneRequest, SceneRun
 from vla_platform.settings import Settings
 from vla_platform.workspace_jobs import CATALOG, OPERATIONS, core_job
 
@@ -307,3 +307,93 @@ def test_history_pagination_filters_and_summary_payloads_are_bounded(client):
 def test_job_history_rejects_unbounded_or_invalid_queries(client, query):
     ident = project(client)
     assert client.get(f"/api/v1/projects/{ident}/work-jobs", params=query).status_code == 422
+
+
+@pytest.mark.parametrize("validation_status", ["needs_review", "needs_simulation"])
+@pytest.mark.parametrize("source_status", ["failed", "succeeded"])
+def test_partial_core_scene_results_need_attention_and_keep_artifacts(
+    validation_status, source_status
+):
+    job = Job(
+        id="scene-job",
+        project_id="project",
+        kind="scene.generate",
+        request=SceneRequest(request_id="a" * 32, source_job_id="dataset-job"),
+        status=source_status,
+        stage="validation",
+        created_at=now(),
+        updated_at=now(),
+        result=SceneJobResult(
+            scene_id="a" * 32,
+            validation_status=validation_status,
+            scene_artifacts=["scene.usda", "evidence.json"],
+        ),
+    )
+    row = core_job(job)
+    assert row.status == "waiting" and row.source_status == source_status
+    assert row.result["validation_status"] == validation_status
+    assert [output.label for output in row.outputs] == ["scene.usda", "evidence.json"]
+    assert all("/jobs/scene-job/scene/artifact?name=" in output.url for output in row.outputs)
+    assert row.parent_ids == ["core:dataset-job"] and not row.can_cancel
+
+
+def test_fully_validated_completed_core_scene_remains_completed():
+    job = Job(
+        id="scene-job",
+        project_id="project",
+        kind="scene.generate",
+        request=SceneRequest(request_id="a" * 32, source_job_id="dataset-job"),
+        status="succeeded",
+        stage="complete",
+        created_at=now(),
+        updated_at=now(),
+        result=SceneJobResult(
+            scene_id="a" * 32, validation_status="needs_review", scene_artifacts=["scene.usda"]
+        ),
+    )
+    assert core_job(job).status == "succeeded"
+    assert core_job(job).outputs
+
+
+@pytest.mark.parametrize(
+    "cleanup,expected", [(None, "cancelled"), ("pending", "cancelling"), ("failed", "waiting")]
+)
+def test_scene_attention_projection_preserves_cancellation_priority(cleanup, expected):
+    cancellation = JobCancellation(requested_at=now(), cleanup=cleanup) if cleanup else None
+    job = Job(
+        id="scene-job",
+        project_id="project",
+        kind="scene.generate",
+        request=SceneRequest(request_id="a" * 32, source_job_id="dataset-job"),
+        status="cancelled",
+        stage="validation",
+        cancellation=cancellation,
+        created_at=now(),
+        updated_at=now(),
+        result=SceneJobResult(
+            scene_id="a" * 32,
+            validation_status="needs_simulation",
+            scene_artifacts=["evidence.json"],
+        ),
+    )
+    assert core_job(job).status == expected
+    assert core_job(job).outputs
+
+
+def test_scene_still_needing_simulation_never_appears_fully_validated():
+    job = Job(
+        id="scene-job",
+        project_id="project",
+        kind="scene.generate",
+        request=SceneRequest(request_id="a" * 32, source_job_id="dataset-job"),
+        status="succeeded",
+        stage="complete",
+        created_at=now(),
+        updated_at=now(),
+        result=SceneJobResult(
+            scene_id="a" * 32, validation_status="needs_simulation", scene_artifacts=["scene.usda"]
+        ),
+    )
+    assert core_job(job).status == "waiting"
+    assert core_job(job).source_status == "succeeded"
+    assert core_job(job).outputs

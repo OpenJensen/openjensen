@@ -102,7 +102,7 @@ def redact(text: str) -> str:
         "[redacted]",
         value,
     )
-    value = re.sub(r"(?i)\b(bearer\s+)\S+", r"\1[redacted]", value)
+    value = re.sub(r"(?i)\b((?:bearer|basic)\s+)\S+", r"\1[redacted]", value)
     value = re.sub(
         r"(?i)((?:[A-Za-z0-9_]*(?:token|secret|password|api_key|authorization|cookie))[\"']?\s*[:=]\s*)(?:[\"'][^\"']*[\"']|[^\s,;]+)",
         r"\1[redacted]",
@@ -130,7 +130,7 @@ def public_value(value: Any, depth=0) -> Any:
                 r"(?i)(token|secret|password|credential|api.?key|authorization|cookie|^env$|environment|hostname|^host$|endpoint|private.?key|^path$|_path$|_dir$|_root$)",
                 name,
             ):
-                result[name] = "[redacted]"
+                result[redact(name)[:200]] = "[redacted]"
             else:
                 result[redact(name)[:200]] = public_value(item, depth + 1)
         return result

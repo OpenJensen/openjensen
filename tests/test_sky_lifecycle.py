@@ -5,7 +5,7 @@ import hashlib
 import json
 import sys
 import types
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, nullcontext
 
 import pytest
 from fastapi.testclient import TestClient
@@ -112,6 +112,7 @@ def cloud(tmp_path, monkeypatch):
 
     runner = types.ModuleType("vla_platform.lifecycle.sky_runner")
     runner.run = unconfigured_runner
+    runner.log_to = lambda callback: nullcontext()
 
     async def recovered(_data_dir):
         return []

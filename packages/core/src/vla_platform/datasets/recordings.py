@@ -1082,9 +1082,13 @@ class Recordings:
             async with self.execution.lock:
                 current = await self.execution.get(job.id)
                 if current is not None:
-                    if current.status not in TERMINAL:
-                        current.status, current.result = "failed", None
-                    # Cleanup failures must remain visible even if cancellation
-                    # already made this job terminal. They are never success.
-                    current.error = ((current.error + " ") if current.error else "") + message
+                    if current.status == "cancelled" and getattr(current, "cancellation", None):
+                        self.execution._unconfirmed_cancellation(
+                            current, error, stage=current.stage or "recording_preparation"
+                        )
+                    else:
+                        if current.status not in TERMINAL:
+                            current.status, current.result = "failed", None
+                        # Legacy terminal records retain their original cancellation contract.
+                        current.error = ((current.error + " ") if current.error else "") + message
                     await self.execution.save(current)

@@ -139,6 +139,18 @@ def core_job(job):
                 url=f"/api/v1/jobs/{quote(job.id, safe='')}/augmentation/download",
             )
         ]
+    scene_needs_attention = (
+        isinstance(job.result, SceneJobResult)
+        and job.status in {"failed", "succeeded"}
+        and job.result.validation_status in {"needs_review", "needs_simulation"}
+        # The scene owner publishes succeeded only after all required gates and
+        # final evidence pass. Its legacy validation label remains needs_review.
+        and not (
+            job.status == "succeeded"
+            and job.stage == "complete"
+            and job.result.validation_status == "needs_review"
+        )
+    )
     return WorkJob(
         id="core:" + job.id,
         source_id=job.id,
@@ -151,6 +163,8 @@ def core_job(job):
             if job.cancellation and job.cancellation.cleanup == "pending"
             else "waiting"
             if job.cancellation and job.cancellation.cleanup == "failed"
+            else "waiting"
+            if scene_needs_attention
             else job.status
         ),
         source_status=job.status,

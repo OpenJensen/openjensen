@@ -8,6 +8,7 @@ an artifact. Cancellation must drain the owned process/resource before returning
 import asyncio
 import json
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
@@ -100,14 +101,10 @@ class SkyPilotAdapter:
 
         hf_token = HuggingFaceConnection(owner.settings.data_dir).token()
         secret_options = {"hf_token": hf_token} if hf_token else {}
-        returncode = await sky_runner.run(
-            payload,
-            stage_dir,
-            target,
-            progress,
-            on_log=lambda line: _record_remote(owner, job, invocation.output, line),
-            **secret_options,
-        )
+        with sky_runner.log_to(lambda line: _record_remote(owner, job, invocation.output, line)):
+            returncode = await sky_runner.run(
+                payload, stage_dir, target, progress, **secret_options
+            )
         return returncode
 
 
@@ -245,7 +242,7 @@ class LocalAdapter:
 
 async def _record_remote(owner, job, stage, line):
     saved = owner.execution.observability.try_record(
-        job.id, line, kind="log", component="provider", stage=stage, stream="stdout"
+        job.id, line, kind="log", component="provider", stage=stage
     )
     return saved.message if saved is not None else "[diagnostic storage unavailable]"
 
@@ -283,6 +280,10 @@ class SkyPilotTargetAdapter:
             "region": connection.get("region", definition.location),
         }
         if definition.infrastructure == "gcp":
+            region = connection.get("region")
+            if not isinstance(region, str) or not re.fullmatch(r"[a-z][a-z0-9-]+[0-9]", region):
+                raise ValueError("The accepted Google Cloud region is unavailable")
+            target["region"] = region
             target["project_id"] = connection["project_id"]
 
         async def progress(message):
@@ -292,14 +293,10 @@ class SkyPilotTargetAdapter:
                 await owner.event(job, invocation.output, message)
 
         token = HuggingFaceConnection(owner.settings.data_dir).token()
-        return await sky_runner.run(
-            invocation.payload,
-            invocation.stage_dir,
-            target,
-            progress,
-            hf_token=token,
-            on_log=lambda line: _record_remote(owner, job, invocation.output, line),
-        )
+        with sky_runner.log_to(lambda line: _record_remote(owner, job, invocation.output, line)):
+            return await sky_runner.run(
+                invocation.payload, invocation.stage_dir, target, progress, hf_token=token
+            )
 
 
 class AdapterRegistry:

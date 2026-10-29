@@ -40,7 +40,10 @@ async def run(execution, initial):
     except Exception as exc:
         async with execution.lock:
             job = await execution.get(initial.id)
-            if job is not None and job.status not in TERMINAL:
+            if job is not None and job.status == "cancelled" and job.cancellation:
+                execution._unconfirmed_cancellation(job, exc, stage=job.stage or "scoring")
+                await execution.save(job)
+            elif job is not None and job.status not in TERMINAL:
                 job.status = "failed"
                 job.error = str(exc.detail if isinstance(exc, HTTPException) else exc)[:2000]
                 await execution.save(job)

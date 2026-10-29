@@ -1,7 +1,7 @@
-"""Bounded per-job GCP training through SkyPilot CLI, including artifact return.
+"""Bounded policy jobs on configured SkyPilot infrastructure, with artifact return.
 
 No global SkyPilot configuration or provider credential files are modified.
-Launch uses a private task bundle and verifies the server billing project.
+Launch uses a private task bundle and verifies billing identity for GCP targets.
 Results travel through supported ``sky logs --sync-down`` before ``sky down``.
 See https://docs.skypilot.co/en/latest/reference/cli.html and sky_bootstrap.py.
 """
@@ -41,6 +41,16 @@ Event = Callable[[str], Awaitable[None]]
 CLUSTER_PATTERN = r"fb-[a-f0-9]{12}-[a-f0-9]{8}"
 _RUN_SECRETS: ContextVar[tuple[str, ...]] = ContextVar("firebird_run_secrets", default=())
 _RUN_LOGGER: ContextVar[Event | None] = ContextVar("job_provider_log", default=None)
+
+
+@contextmanager
+def log_to(callback):
+    """Bind a per-job collector without changing executor call signatures."""
+    token = _RUN_LOGGER.set(callback)
+    try:
+        yield
+    finally:
+        _RUN_LOGGER.reset(token)
 
 
 def validate_endpoint(value: object) -> str:
@@ -370,36 +380,13 @@ def prepare(payload: dict, stage_dir: Path, target: dict) -> tuple[Path, dict]:
                 {
                     "config": {
                         "slurm": {
-                            "cluster_configs": {
-                                target["location"]: {
-                                    **(
-                                        {
-                                            "partition_configs": {
-                                                target["partition"]: {
-                                                    "quota": {
-                                                        key: value
-                                                        for key, value in {
-                                                            "account": target.get("account"),
-                                                            "queue": target.get("qos"),
-                                                        }.items()
-                                                        if value
-                                                    }
-                                                }
-                                            }
-                                        }
-                                        if target.get("partition")
-                                        else {
-                                            "quota": {
-                                                key: value
-                                                for key, value in {
-                                                    "account": target.get("account"),
-                                                    "queue": target.get("qos"),
-                                                }.items()
-                                                if value
-                                            }
-                                        }
-                                    )
-                                }
+                            "sbatch_options": {
+                                key: value
+                                for key, value in {
+                                    "account": target.get("account"),
+                                    "qos": target.get("qos"),
+                                }.items()
+                                if value
                             }
                         }
                     }
@@ -1163,7 +1150,7 @@ async def run(
     on_log: Event | None = None,
 ) -> int:
     context = _RUN_SECRETS.set((hf_token,) if hf_token else ())
-    log_context = _RUN_LOGGER.set(on_log)
+    log_context = _RUN_LOGGER.set(on_log if on_log is not None else _RUN_LOGGER.get())
     try:
         return await _run(payload, stage_dir, target, on_event, hf_token=hf_token)
     finally:

@@ -337,3 +337,32 @@ def test_invalid_retention_policy_never_uses_an_implicit_write_policy(tmp_path):
     with pytest.raises(ObservabilityError):
         store.page("job-1")
     assert not store.path.exists()
+
+
+@pytest.mark.parametrize(
+    "header",
+    [
+        "Authorization: Basic dXNlcjpwYXNz",
+        "Proxy-Authorization: Basic dXNlcjpwYXNz",
+        "authorization=basic dXNlcjpwYXNz",
+    ],
+)
+def test_basic_authentication_credentials_never_persist_or_export(tmp_path, header):
+    store = JobObservability(tmp_path)
+    store.record("job-1", header, kind="log", stream="stderr")
+    assert "dXNlcjpwYXNz" not in store.page("job-1").records[0].message
+    with zipfile.ZipFile(io.BytesIO(store.export("job-1", {"message": header}))) as archive:
+        for name in archive.namelist():
+            assert b"dXNlcjpwYXNz" not in archive.read(name)
+
+
+def test_sensitive_dictionary_keys_are_redacted_before_storage(tmp_path):
+    store = JobObservability(tmp_path)
+    record = store.record(
+        "job-1",
+        "metadata",
+        data={"api_key=private-value": "ignored", "password=another-value": "ignored"},
+    )
+    assert "private-value" not in record.model_dump_json()
+    assert "another-value" not in record.model_dump_json()
+    assert "private-value" not in store.page("job-1").model_dump_json()

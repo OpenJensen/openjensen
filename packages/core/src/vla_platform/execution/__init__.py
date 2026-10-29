@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import os
+import re
 import time
 from pathlib import Path
 from uuid import UUID, uuid4
@@ -295,7 +296,18 @@ class Execution:
                             )
                             if not project:
                                 raise ValueError("Configure the target's cloud billing project")
+                            region = definition.location or (
+                                configured.region if configured else None
+                            )
+                            if not isinstance(region, str) or not re.fullmatch(
+                                r"[a-z][a-z0-9-]+[0-9]", region
+                            ):
+                                raise ValueError(
+                                    "Choose a Google Cloud region in the target "
+                                    "or its cloud settings"
+                                )
                             connection["project_id"] = project
+                            connection["region"] = region
                             connection["workspace"] = connection.get(
                                 "workspace"
                             ) or cloud_compute_catalog.sky_workspace_name(project)
@@ -469,15 +481,21 @@ class Execution:
                 task.cancel()
 
         async def drain():
-            if task:
-                await asyncio.gather(task, return_exceptions=True)
+            outcomes = await asyncio.gather(task, return_exceptions=True) if task else []
+            errors = [
+                value
+                for value in outcomes
+                if isinstance(value, BaseException)
+                and not isinstance(value, asyncio.CancelledError)
+            ]
             async with self.lock:
                 current = await self.get(job_id)
                 if current is not None and current.cancellation is not None:
-                    cleanup_failed = "cleanup" in (current.error or "").lower() and (
-                        "failed" in (current.error or "").lower()
-                        or "needs attention" in (current.error or "").lower()
-                    )
+                    if errors:
+                        self._unconfirmed_cancellation(
+                            current, errors[0], stage=current.stage or "cleanup"
+                        )
+                    cleanup_failed = current.cancellation.cleanup == "failed"
                     current.cancellation.finished_at = now()
                     current.cancellation.cleanup = "failed" if cleanup_failed else "succeeded"
                     if not cleanup_failed:
@@ -504,10 +522,38 @@ class Execution:
                 continue
         return owned.result()
 
+    def _unconfirmed_cancellation(self, job: Job, error, *, stage: str):
+        """Record evidence of an interrupted cleanup owner without guessing its cause.
+
+        Callers hold the execution lock and persist the updated job before returning.
+        A task exception after cancellation means cleanup was not confirmed even if
+        its text does not contain a particular provider's cleanup vocabulary.
+        """
+        if job.cancellation is None:
+            return
+        detail = redact(str(error)) or type(error).__name__
+        job.cancellation.cleanup = "failed"
+        job.cancellation.finished_at = now()
+        job.error = (
+            "Cancellation stopped with an error; execution cleanup could not be confirmed. "
+            + detail[:2000]
+        )
+        self.observability.try_failure(
+            job.id,
+            stage=stage,
+            message=job.error,
+            code="CANCELLATION_UNCONFIRMED",
+            cause=f"{type(error).__name__}: {detail}",
+            cleanup="failed",
+        )
+
     async def finish(self, job_id: str, response: WorkerResult) -> None:
         async with self.lock:
             job = await self.get(job_id)
-            if job and job.status not in TERMINAL:
+            if job and job.status == "cancelled" and job.cancellation and response.error:
+                self._unconfirmed_cancellation(job, response.error, stage=job.stage or "execution")
+                await self.save(job)
+            elif job and job.status not in TERMINAL:
                 job.status = "succeeded" if response.result else "failed"
                 job.result, job.error = response.result, response.error
                 await self.save(job)
@@ -673,6 +719,9 @@ class Execution:
                         "completed evidence was retained."
                     )
                     await self.save(current)
+                elif current and current.status == "cancelled" and current.cancellation:
+                    self._unconfirmed_cancellation(current, exc, stage=current.stage or "scene")
+                    await self.save(current)
         finally:
             if owned_explorer:
                 await explorer.close()
@@ -729,10 +778,8 @@ class Execution:
                     current.status = "failed"
                     current.error = redact(f"{type(exc).__name__}: {str(exc)[:2000]}")
                     await self.save(current)
-                elif current.status == "cancelled" and any(
-                    label in str(exc) for label in ("Cloud cleanup", "Worker cleanup")
-                ):
-                    current.error = f"{current.error or 'Cancelled.'}\n{str(exc)[:2000]}"
+                elif current.status == "cancelled" and current.cancellation:
+                    self._unconfirmed_cancellation(current, exc, stage=current.stage or "execution")
                     await self.save(current)
 
     async def reconcile(self) -> None:
@@ -850,7 +897,7 @@ class Execution:
             )
         for value in cancelled:
             current = Job.model_validate(value)
-            if current.cancellation and current.cancellation.cleanup == "pending":
+            if current.cancellation and current.cancellation.cleanup in {"pending", "failed"}:
                 remote = bool(
                     current.compute_target
                     or (
@@ -858,6 +905,9 @@ class Execution:
                         and current.execution.adapter in {"skypilot", "skypilot-target"}
                     )
                 )
+                if current.cancellation.cleanup == "failed" and not remote:
+                    # A restart cannot establish that a local orphan was stopped.
+                    continue
                 current.cancellation.finished_at = now()
                 current.cancellation.cleanup = (
                     "succeeded" if remote and current.id not in failed_ids else "failed"
