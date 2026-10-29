@@ -1188,6 +1188,13 @@ for (const both of [false, true])
 
 test('scene generation exposes missing setup without starting agents or a GPU job', async ({ page }) => {
   const state = await fixture(page);
+  await expect(page.getByRole('region', { name: 'Scene generation', exact: true })).toHaveCount(0);
+  await page
+    .getByRole('navigation', { name: 'Policy lifecycle' })
+    .getByRole('group', { name: 'Data', exact: true })
+    .getByRole('link', { name: 'Real to sim', exact: true })
+    .click();
+  await expect(page.getByRole('heading', { name: 'Real to sim', level: 1, exact: true })).toBeVisible();
   const scene = page.getByRole('region', { name: 'Scene generation', exact: true });
   await expect(scene).toBeVisible();
   await expect(scene.getByRole('button', { name: 'Generate scene', exact: true })).toBeDisabled();
@@ -1197,6 +1204,7 @@ test('scene generation exposes missing setup without starting agents or a GPU jo
 
 test('generated USD keeps unverified simulator gates visible and bundles downloadable', async ({ page }) => {
   await fixture(page);
+  await page.getByRole('link', { name: 'Real to sim', exact: true }).click();
   const revision = 'ecef85bc07005f771ad86deeff1427f9d72953ed';
   const run = {
     id: 'a'.repeat(32),
@@ -1259,6 +1267,7 @@ test('generated USD keeps unverified simulator gates visible and bundles downloa
 
 test('scene model and power choices reach the request and remain pinned on retry', async ({ page }) => {
   await fixture(page);
+  await page.getByRole('link', { name: 'Real to sim', exact: true }).click();
   const revision = 'ecef85bc07005f771ad86deeff1427f9d72953ed';
   await page.route('**/api/v1/scene-generation/options', (route) =>
     route.fulfill({

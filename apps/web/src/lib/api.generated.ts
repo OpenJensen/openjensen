@@ -5548,7 +5548,7 @@ export interface components {
              * Id
              * @enum {string}
              */
-            id: "datasets" | "models" | "robot-lab" | "teaching" | "augmentation" | "training" | "distillation" | "quantization" | "evaluation" | "simulation" | "decision-lab" | "cloud-runs" | "google-cloud" | "openai" | "gemini" | "huggingface";
+            id: "datasets" | "models" | "robot-lab" | "teaching" | "augmentation" | "real-to-sim" | "training" | "distillation" | "quantization" | "evaluation" | "simulation" | "decision-lab" | "cloud-runs" | "google-cloud" | "openai" | "gemini" | "huggingface";
             /** Installed */
             installed: boolean;
             /**
@@ -7619,7 +7619,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                ident: "datasets" | "models" | "robot-lab" | "teaching" | "augmentation" | "training" | "distillation" | "quantization" | "evaluation" | "simulation" | "decision-lab" | "cloud-runs" | "google-cloud" | "openai" | "gemini" | "huggingface";
+                ident: "datasets" | "models" | "robot-lab" | "teaching" | "augmentation" | "real-to-sim" | "training" | "distillation" | "quantization" | "evaluation" | "simulation" | "decision-lab" | "cloud-runs" | "google-cloud" | "openai" | "gemini" | "huggingface";
             };
             cookie?: never;
         };
@@ -7654,7 +7654,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                ident: "datasets" | "models" | "robot-lab" | "teaching" | "augmentation" | "training" | "distillation" | "quantization" | "evaluation" | "simulation" | "decision-lab" | "cloud-runs" | "google-cloud" | "openai" | "gemini" | "huggingface";
+                ident: "datasets" | "models" | "robot-lab" | "teaching" | "augmentation" | "real-to-sim" | "training" | "distillation" | "quantization" | "evaluation" | "simulation" | "decision-lab" | "cloud-runs" | "google-cloud" | "openai" | "gemini" | "huggingface";
             };
             cookie?: never;
         };
@@ -7685,7 +7685,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                ident: "datasets" | "models" | "robot-lab" | "teaching" | "augmentation" | "training" | "distillation" | "quantization" | "evaluation" | "simulation" | "decision-lab" | "cloud-runs" | "google-cloud" | "openai" | "gemini" | "huggingface";
+                ident: "datasets" | "models" | "robot-lab" | "teaching" | "augmentation" | "real-to-sim" | "training" | "distillation" | "quantization" | "evaluation" | "simulation" | "decision-lab" | "cloud-runs" | "google-cloud" | "openai" | "gemini" | "huggingface";
             };
             cookie?: never;
         };

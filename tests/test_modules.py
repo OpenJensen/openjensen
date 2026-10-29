@@ -411,3 +411,23 @@ def test_uninstall_rejects_matching_active_jobs_and_allows_unrelated_feature(tmp
             assert client.delete("/api/v1/modules/models").status_code == 200
         finally:
             client.portal.call(remove_fixture)
+
+
+def test_real_to_sim_is_an_independent_data_module(tmp_path, monkeypatch):
+    from vla_platform.scenes.service import Scenes
+
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path / "codex-home"))
+    monkeypatch.setenv("OPENAI_API_KEY", "fixture-openai-credential")
+    monkeypatch.setattr(Scenes, "options", lambda self: {"configured": True})
+    with TestClient(create_app(Settings(data_dir=tmp_path))) as client:
+        before = modules(client)
+        assert before["real-to-sim"]["group"] == "Data"
+        assert before["real-to-sim"]["configured"]
+        assert not before["real-to-sim"]["installed"]
+        assert client.post("/api/v1/modules/real-to-sim/install").status_code == 200
+        after = modules(client)
+        assert after["real-to-sim"]["installed"] and after["real-to-sim"]["enabled"]
+        assert after["simulation"] == before["simulation"]
+        assert client.put("/api/v1/modules/real-to-sim", json={"enabled": False}).status_code == 200
+        assert not modules(client)["real-to-sim"]["enabled"]
+        assert client.get("/api/v1/scene-generation/options").status_code == 200
