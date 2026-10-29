@@ -327,6 +327,10 @@ class PublicGateway:
             if expanded == decoded:
                 break
             decoded = expanded
+        if {"work-jobs", "compute-targets"}.intersection(decoded.split("/")):
+            return self.error(
+                request.scope, 403, "Manage jobs and compute through the private workspace."
+            )
         if "api-connections" in decoded.split("/"):
             return self.error(request.scope, 403, "Manage API keys through the private workspace.")
         if "module-installations" in decoded.split("/") or (

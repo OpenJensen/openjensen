@@ -333,7 +333,7 @@ async def validate(lifecycle, project_id, request):
         or not native_quantization_ready(runtime)
     ):
         raise ValueError("Configure a ready local CPU native ACT quantization runtime first")
-    lifecycle.compute.require_enabled(runtime)
+    lifecycle.require_compute(request, runtime)
     artifact = await lifecycle.artifact(project_id, request.artifact_id)
     try:
         await finish_owned(asyncio.to_thread(source_info, artifact, lifecycle.settings.data_dir))

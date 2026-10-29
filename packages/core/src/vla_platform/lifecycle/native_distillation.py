@@ -253,7 +253,7 @@ async def admission(lifecycle, project_id, request):
         or not native_distillation_ready(runtime)
     ):
         raise ValueError("Configure a ready local CPU ACT distillation and dataset-reader runtime")
-    lifecycle.compute.require_enabled(runtime)
+    lifecycle.require_compute(request, runtime)
     source = await lifecycle.artifact(project_id, request.artifact_id)
     dataset = await lifecycle.execution.get(request.dataset_job_id)
     if (

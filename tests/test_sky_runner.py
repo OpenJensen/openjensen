@@ -1169,3 +1169,40 @@ def test_unverifiable_recovery_records_are_preserved_without_remote_cleanup(
     assert "operator-owned" not in failures[0]["error"]
     assert preserved.read_bytes() == before
     assert path.is_symlink() if damage == "symlink" else not path.is_symlink()
+
+
+@pytest.mark.parametrize("partition", [None, "gpu"])
+@pytest.mark.parametrize(
+    "account,qos,expected",
+    [
+        ("robotics", "normal", {"account": "robotics", "qos": "normal"}),
+        ("robotics", None, {"account": "robotics"}),
+        (None, "normal", {"qos": "normal"}),
+    ],
+)
+def test_slurm_task_uses_supported_task_level_sbatch_overrides(
+    payload, target, tmp_path, partition, account, qos, expected
+):
+    # SkyPilot 0.13 task config permits sbatch_options, not cluster_configs/quota.
+    destination = {
+        **target,
+        "infrastructure": "slurm",
+        "location": "research",
+        "partition": partition,
+        "account": account,
+        "qos": qos,
+        "resources": {
+            "cpus": 2,
+            "memory_gib": 4,
+            "disk_gib": 100,
+            "accelerator": "L4",
+            "gpu_count": 1,
+        },
+    }
+    destination.pop("instance_type", None)
+    path, _ = sky_runner.prepare(payload, tmp_path / "slurm-operation", destination)
+    task = json.loads(path.read_text())
+    assert task["config"] == {"slurm": {"sbatch_options": expected}}
+    assert task["resources"]["infra"] == "slurm/research" + ("/gpu" if partition else "")
+    assert "quota" not in json.dumps(task["config"])
+    assert "queue" not in json.dumps(task["config"])

@@ -1,3 +1,4 @@
+import { openModuleWorkspace } from './work-job-controls';
 import { fulfillApplicationUpdateRead } from './application-update-controls';
 import { selectProject } from './project-controls';
 import { expect, test, type Page } from '@playwright/test';
@@ -53,6 +54,7 @@ test('data tools are first-class pages with clear return paths and no job submis
     await expect(page.locator('.workflow-panel')).toHaveCount(0);
   }
   await navigation.getByRole('link', { name: 'Augmentation', exact: true }).click();
+  await openModuleWorkspace(page);
   await page.getByRole('button', { name: 'Import a dataset', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Datasets', level: 1, exact: true })).toBeVisible();
   expect(mutations).toEqual([]);
@@ -142,6 +144,7 @@ test('the contextual guide covers every section and keeps API docs separate', as
   const sections = page.locator('.guide-sections > section');
   const expectedSections = [
     'Dashboard',
+    'Jobs',
     'Models',
     'Datasets',
     'Real to sim',

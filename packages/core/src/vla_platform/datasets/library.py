@@ -19,6 +19,7 @@ from uuid import uuid4
 from filelock import FileLock
 
 from vla_platform.contracts import DatasetProfile, IntakeRequest, now
+from vla_platform.datasets.jobs import DatasetOperations
 from vla_platform.datasets.local_preview import reader_python
 from vla_platform.environment import getenv
 
@@ -108,6 +109,9 @@ def contained(root, name):
 
 class DatasetLibrary:
     def __init__(self, data_dir, *, reconcile=True):
+        self.operations = DatasetOperations(data_dir)
+        self._closing = False
+        self._conversion_cancels = set()
         self.root = (data_dir / "dataset-library").resolve()
         self.root.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.tasks = {}
@@ -120,7 +124,7 @@ class DatasetLibrary:
                     error="Conversion was interrupted by app restart. Retry conversion.",
                 )
                 try:
-                    self.save(value)
+                    self.save(value, operation_status="interrupted")
                 except OSError:
                     # A read-only or full workspace must still serve its saved diagnostics.
                     continue
@@ -214,6 +218,11 @@ class DatasetLibrary:
             or any(not isinstance(camera, str) for camera in value["converted"]["cameras"])
         ):
             raise ValueError("Invalid converted dataset")
+        for key in ("_import_job_id", "_conversion_job_id"):
+            if key in value and (
+                not isinstance(value[key], str) or not re.fullmatch(r"[a-f0-9]{32}", value[key])
+            ):
+                raise ValueError("Invalid dataset operation identity")
         if value.get("error") is not None and not isinstance(value["error"], str):
             raise ValueError("Invalid record diagnostic")
         for key in ("normalized", "source_directory"):
@@ -247,7 +256,8 @@ class DatasetLibrary:
             if re.fullmatch(r"[a-f0-9]{32}", directory.name) and directory.is_dir():
                 yield self.get(directory.name)
 
-    def save(self, value):
+    def save(self, value, *, operation_status=None):
+        value["updated_at"] = now()
         self.validate_record(value, value["id"])
         path = self.directory(value["id"]) / "record.json"
         payload = json.dumps(value, allow_nan=False).encode()
@@ -264,6 +274,37 @@ class DatasetLibrary:
             sync_directory(path.parent)
         finally:
             temporary.unlink(missing_ok=True)
+        self._sync_operations(value, conversion_status=operation_status)
+
+    def _sync_operations(self, value, conversion_status=None):
+        imported = value.get("_import_job_id")
+        if imported:
+            status = "waiting" if value["status"] == "uploading" else "succeeded"
+            self.operations.update(
+                imported,
+                status=status,
+                stage="uploading" if status == "waiting" else "imported",
+                error=value.get("error") if status == "waiting" else None,
+                result=value.get("detection"),
+            )
+        conversion = value.get("_conversion_job_id")
+        if conversion:
+            status = conversion_status or {
+                "converting": "running",
+                "ready": "succeeded",
+                "failed": "failed",
+            }.get(value["status"])
+            if status:
+                self.operations.update(
+                    conversion,
+                    status=status,
+                    stage="converting" if status == "running" else status,
+                    error=value.get("error"),
+                    result=value.get("converted"),
+                )
+
+    def operation_records(self, project_id=None):
+        return self.operations.records(project_id)
 
     def get(self, ident, project_id=None):
         if not re.fullmatch(r"[a-f0-9]{32}", ident):
@@ -299,7 +340,11 @@ class DatasetLibrary:
         return value
 
     def public(self, value):
-        result = {k: v for k, v in value.items() if k not in ("normalized", "files")}
+        result = {
+            k: v
+            for k, v in value.items()
+            if k not in ("normalized", "files") and not k.startswith("_")
+        }
         result["uploaded_files"] = len(value["files"]) if "files" in value else None
         result["can_discard"] = value["status"] == "uploading" and not (
             value.get("detection") or value.get("normalized") or value.get("converted")
@@ -327,6 +372,7 @@ class DatasetLibrary:
             "annotation_revision": 0,
         }
         (self.directory(value["id"]) / "source").mkdir(parents=True)
+        value["_import_job_id"] = self.operations.create(value, "dataset.import")["id"]
         self.save(value)
         return self.public(value)
 
@@ -539,6 +585,8 @@ class DatasetLibrary:
                 return self.public(value)
             if not value["files"]:
                 raise LibraryError("Select dataset files first")
+            if value.get("_import_job_id"):
+                self.operations.update(value["_import_job_id"], status="running", stage="detecting")
             try:
                 await owned_thread(self.extract, ident)
                 value = self.get(ident)
@@ -562,6 +610,14 @@ class DatasetLibrary:
                     and existing["project_id"] == value["project_id"]
                     and (existing.get("detection") or {}).get("sha256") == detection["sha256"]
                 ):
+                    if value.get("_import_job_id"):
+                        self.operations.update(
+                            value["_import_job_id"],
+                            status="succeeded",
+                            stage="deduplicated",
+                            result=detection,
+                            redirect_dataset_id=existing["id"],
+                        )
                     shutil.rmtree(self.directory(ident))
                     return self.public(existing)
             value.update(detection=detection, status="detected", error=None)
@@ -608,11 +664,28 @@ class DatasetLibrary:
                 return self.public(value)
             if not value.get("detection") or not value["detection"]["convertible"]:
                 raise LibraryError("This dataset format does not have a conversion adapter")
+            value["_conversion_job_id"] = self.operations.create(
+                value,
+                "dataset.convert",
+                {
+                    "conversion": settings,
+                    "source_sha256": value["detection"]["sha256"],
+                    **(
+                        {"source_job_id": "dataset:" + value["_import_job_id"]}
+                        if value.get("_import_job_id")
+                        else {}
+                    ),
+                },
+            )["id"]
             value.update(status="converting", error=None, conversion=settings)
             self.save(value)
             task = asyncio.create_task(self.convert(ident, settings))
             self.tasks[ident] = task
-            task.add_done_callback(lambda _: self.tasks.pop(ident, None))
+            task.add_done_callback(
+                lambda finished: (
+                    self.tasks.pop(ident, None) if self.tasks.get(ident) is finished else None
+                )
+            )
             return self.public(value)
 
     async def convert(self, ident, settings):
@@ -632,12 +705,48 @@ class DatasetLibrary:
             )
             output.rename(self.directory(ident) / "converted")
             value.update(status="ready", normalized="converted", converted=result, error=None)
+        except asyncio.CancelledError:
+            cancelled = ident in self._conversion_cancels
+            value.update(
+                status="failed",
+                error="Conversion cancelled by the user. Source files were preserved."
+                if cancelled
+                else "Conversion interrupted. Source files were preserved; retry to continue.",
+            )
+            if output.exists():
+                shutil.rmtree(output)
+            self.save(value, operation_status="cancelled" if cancelled else "interrupted")
+            raise
         except (LibraryError, OSError, ValueError) as exc:
             value.update(status="failed", error=str(exc))
             if output.exists():
                 shutil.rmtree(output)
         finally:
             self.save(value)
+            self._conversion_cancels.discard(ident)
+
+    async def cancel_conversion(self, dataset_id, expected_job_id=None):
+        async with self.lock:
+            value = self.get(dataset_id)
+            active = value.get("_conversion_job_id")
+            if expected_job_id is not None and active != expected_job_id:
+                raise LibraryError("This conversion is no longer the active dataset job", 409)
+            task = self.tasks.get(dataset_id)
+            if value["status"] != "converting" or task is None or task.done():
+                raise LibraryError("This dataset conversion cannot be cancelled", 409)
+            self._conversion_cancels.add(dataset_id)
+            task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        # A task cancelled before entering convert() still needs a terminal journal.
+        value = self.get(dataset_id)
+        if value["status"] == "converting":
+            value.update(
+                status="failed",
+                error="Conversion cancelled by the user. Source files were preserved.",
+            )
+            self.save(value, operation_status="cancelled")
+        self._conversion_cancels.discard(dataset_id)
+        return self.public(self.get(dataset_id))
 
     def resolve(self, ident, project_id):
         value = self.get(ident, project_id)
@@ -752,12 +861,29 @@ class DatasetLibrary:
                     raise LibraryError(
                         "This upload is referenced by a saved job and is preserved", 409
                     )
+            if value.get("_import_job_id"):
+                self.operations.update(
+                    value["_import_job_id"],
+                    status="cancelled",
+                    stage="discarded",
+                    error="Unfinished upload discarded by the user.",
+                )
             directory = self.directory(ident)
             await owned_thread(shutil.rmtree, directory)
             sync_directory(self.root)
             return {"discarded": True, "id": ident}
 
     async def close(self):
-        for task in list(self.tasks.values()):
+        self._closing = True
+        owned = dict(self.tasks)
+        for task in owned.values():
             task.cancel()
-        await asyncio.gather(*self.tasks.values(), return_exceptions=True)
+        await asyncio.gather(*owned.values(), return_exceptions=True)
+        for ident in owned:
+            value = self.get(ident)
+            if value["status"] == "converting":
+                value.update(
+                    status="failed",
+                    error="Conversion interrupted. Source files were preserved; retry to continue.",
+                )
+                self.save(value, operation_status="interrupted")

@@ -57,15 +57,35 @@ async function request<T>(path: string, body?: object, beforePost?: () => void):
   }
 }
 
-export function TeachingPanel({ transport }: { transport?: TeachingTransport } = {}) {
+type InstructionDraft = { value: string; onChange: (value: string) => void };
+
+export function TeachingPanel({
+  transport,
+  instructionDraft,
+}: { transport?: TeachingTransport; instructionDraft?: InstructionDraft } = {}) {
   // A changed target retires every pending receipt, preview and voice lease.
-  return <TeachingControls key={transport?.identity ?? 'manual'} transport={transport} />;
+  // Only the manual editor may receive workspace-owned unsent text.
+  return (
+    <TeachingControls
+      key={transport?.identity ?? 'manual'}
+      transport={transport}
+      instructionDraft={transport ? undefined : instructionDraft}
+    />
+  );
 }
 
-function TeachingControls({ transport }: { transport?: TeachingTransport }) {
+function TeachingControls({
+  transport,
+  instructionDraft,
+}: {
+  transport?: TeachingTransport;
+  instructionDraft?: InstructionDraft;
+}) {
   const requestFor = transport?.request ?? request;
   const scope = transport?.identity ?? 'manual';
-  const [instruction, setInstruction] = useState('');
+  const [localInstruction, setLocalInstruction] = useState('');
+  const instruction = instructionDraft?.value ?? localInstruction;
+  const setInstruction = instructionDraft?.onChange ?? setLocalInstruction;
   const [joint, setJoint] = useState('');
   const [receiptId, setReceiptId] = useState('');
   const [receiptExpired, setReceiptExpired] = useState(false);

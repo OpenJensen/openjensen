@@ -1,3 +1,4 @@
+import { fulfillWorkJobRead, openModuleWorkspace } from './work-job-controls';
 import { fulfillApplicationUpdateRead } from './application-update-controls';
 import { selectProject } from './project-controls';
 import { installedModules } from './module-fixtures';
@@ -5,6 +6,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { createHash } from 'node:crypto';
 
 async function selectSimulation(page: Page) {
+  await openModuleWorkspace(page);
   await page.getByRole('combobox', { name: 'Agent target', exact: true }).selectOption('teaching');
 }
 
@@ -196,6 +198,7 @@ async function fixture(page: Page) {
   };
   await page.route('**/api/v1/**', async (route) => {
     if (await fulfillApplicationUpdateRead(route)) return;
+    if (await fulfillWorkJobRead(route)) return;
     const req = route.request(),
       path = new URL(req.url()).pathname,
       project = path.split('/')[4];
@@ -391,8 +394,10 @@ test('draft and selected job are project isolated and restore without consent', 
   const s = await fixture(page);
   await selectEpisodes(page);
   await selectProject(page, 'beta');
+  await selectSimulation(page);
   await expect(panel(page).getByRole('checkbox', { checked: true })).toHaveCount(0);
   await selectProject(page, 'alpha');
+  await selectSimulation(page);
   await expect(panel(page).getByRole('checkbox', { checked: true })).toHaveCount(2);
   await expect(submit(page)).toBeDisabled();
   expect(s.posts).toEqual([]);
@@ -646,6 +651,7 @@ test('AI teleoperation draft is not remounted by recording project changes', asy
   await expect(instruction).toBeEnabled();
   await instruction.fill('Unsubmitted live teaching draft');
   await selectProject(page, 'beta');
+  await selectSimulation(page);
   await expect(instruction).toHaveValue('Unsubmitted live teaching draft');
   expect(s.posts).toEqual([]);
 });

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { TeachingAgentControl, type AgentTarget } from '@/components/teaching-agent-control';
 import { TeachingPanel } from '@/components/teaching-panel';
 import { ManagedTeachingPanel } from '@/components/managed-teaching-panel';
@@ -11,6 +11,10 @@ export default function TeachingSection() {
   const [agentTarget, setAgentTarget] = useState<AgentTarget>('robot_lab');
   const {
     teachingMode,
+    manualTeachingInstruction,
+    setManualTeachingInstruction,
+    requestedWorkJob,
+    requestedJobOperation,
     setTeachingCapture,
     setTeachingMode,
     workflowProjectId,
@@ -22,11 +26,25 @@ export default function TeachingSection() {
     startTrainingOnDataset,
     isSectionCurrent,
   } = useWorkspace();
+  useEffect(() => {
+    if (requestedJobOperation?.id === 'teaching.capture' || requestedWorkJob?.operation === 'teaching.capture')
+      setAgentTarget('teaching');
+    else if (
+      requestedWorkJob?.operation === 'agent.control' &&
+      ['replay', 'teaching', 'robot_lab'].includes(String(requestedWorkJob.inputs.target))
+    )
+      setAgentTarget(requestedWorkJob.inputs.target as AgentTarget);
+  }, [requestedJobOperation, requestedWorkJob]);
   return (
     <>
       <TeachingAgentControl
         key={`agent:${workflowProjectId}`}
         projectId={workflowProjectId}
+        preferredSessionId={
+          requestedWorkJob?.project_id === workflowProjectId && requestedWorkJob.operation === 'agent.control'
+            ? requestedWorkJob.source_id
+            : undefined
+        }
         target={agentTarget}
         onTargetChange={setAgentTarget}
         onOpenProviders={() => navigateStage('cloud-apis')}
@@ -65,10 +83,18 @@ export default function TeachingSection() {
             <ManagedTeachingPanel
               key={`managed:${workflowProjectId}`}
               projectId={workflowProjectId}
+              preferredJobId={
+                requestedWorkJob?.project_id === workflowProjectId && requestedWorkJob.operation === 'teaching.capture'
+                  ? requestedWorkJob.source_id
+                  : undefined
+              }
               onPublishedCapture={reviewTeachingCapture}
             />
           ) : (
-            <TeachingPanel key="manual-teaching" />
+            <TeachingPanel
+              key="manual-teaching"
+              instructionDraft={{ value: manualTeachingInstruction, onChange: setManualTeachingInstruction }}
+            />
           )}
           <RecordingPreparationPanel
             isActive={() => isSectionCurrent('teaching')}

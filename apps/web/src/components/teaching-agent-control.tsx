@@ -21,8 +21,10 @@ export function TeachingAgentControl({
   target,
   onTargetChange,
   onOpenProviders,
+  preferredSessionId,
 }: {
   projectId: string;
+  preferredSessionId?: string;
   target?: AgentTarget;
   onTargetChange?: (target: AgentTarget) => void;
   onOpenProviders?: () => void;
@@ -40,6 +42,7 @@ export function TeachingAgentControl({
         <AgentControls
           key={projectId}
           projectId={projectId}
+          preferredSessionId={preferredSessionId}
           target={selectedTarget}
           onTargetChange={changeTarget}
           onOpenProviders={onOpenProviders}
@@ -56,8 +59,10 @@ function AgentControls({
   target,
   onTargetChange,
   onOpenProviders,
+  preferredSessionId,
 }: {
   projectId: string;
+  preferredSessionId?: string;
   target: AgentTarget;
   onTargetChange: (target: AgentTarget) => void;
   onOpenProviders?: () => void;
@@ -82,7 +87,10 @@ function AgentControls({
   const [maxOutput, setMaxOutput] = useState(2048);
   const [maxTokens, setMaxTokens] = useState(64000);
   const [consent, setConsent] = useState(false);
-  const [selectedId, setSelectedId] = useState('');
+  const [selectedId, setSelectedId] = useState(preferredSessionId ?? '');
+  useEffect(() => {
+    if (preferredSessionId) setSelectedId(preferredSessionId);
+  }, [preferredSessionId]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [now, setNow] = useState(() => Date.now());
