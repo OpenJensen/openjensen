@@ -1,3 +1,4 @@
+import { fulfillWorkJobRead, openModuleWorkspace } from './work-job-controls';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fulfillApplicationUpdateRead } from './application-update-controls';
@@ -135,6 +136,7 @@ async function mockWorkspace(
   // suite cannot invoke a model or upload media to a real provider.
   await page.route('**/api/v1/**', async (route) => {
     if (await fulfillApplicationUpdateRead(route)) return;
+    if (await fulfillWorkJobRead(route)) return;
     const request = route.request();
     const path = new URL(request.url()).pathname;
     const submissionPath = `/api/v1/projects/${projectId}/submissions/`;
@@ -288,6 +290,7 @@ async function mockWorkspace(
   });
   await page.goto('/datasets/');
   await page.getByRole('link', { name: 'Augmentation', exact: true }).click();
+  await openModuleWorkspace(page);
   await expect(page.getByRole('heading', { name: 'Augmentation', exact: true, level: 1 })).toBeVisible();
   await expect(page.getByRole('group', { name: 'Generator', exact: true })).toContainText('Gemini Omni');
   return {
@@ -438,6 +441,7 @@ test('running augmentation persists across tab changes, polls for completion and
   await expect(page.getByRole('button', { name: 'Cancel augmentation', exact: true })).toBeVisible();
   await page.getByRole('link', { name: 'Datasets', exact: true }).click();
   await page.getByRole('link', { name: 'Augmentation', exact: true }).click();
+  await openModuleWorkspace(page);
   await expect(page.getByRole('button', { name: 'Cancel augmentation', exact: true })).toBeVisible();
   jobs[0].status = 'succeeded';
   jobs[0].result = resultFor(submitted[0]);
@@ -668,6 +672,7 @@ test('lost augmentation acknowledgement recovers its original job by saved key a
   expect(fixture.keys[0]).toMatch(/^[a-f0-9-]{36}$/);
   await page.reload();
   await page.getByRole('link', { name: 'Augmentation', exact: true }).click();
+  await openModuleWorkspace(page);
   await expect(page.getByRole('button', { name: /Add one more/ })).toBeDisabled();
   await recovery.getByRole('button', { name: 'Check saved request' }).click();
   await expect(recovery).toHaveCount(0);

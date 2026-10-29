@@ -10,6 +10,8 @@ import { Icon } from '@/components/icon';
 import { WorkspaceShell } from '@/components/workspace-shell';
 import { ApplicationUpdates } from '@/components/application-updates';
 import { ProjectMenu } from '@/components/project-menu';
+import { JobComputeSelectionNotice } from '@/components/job-compute-selection';
+import { WorkJobs } from '@/components/work-jobs';
 import { ErrorNotice } from '@/components/workspace-ui';
 import { publicPath } from '@/lib/base-path';
 import { guideSectionId } from '@/lib/guide-section';
@@ -17,6 +19,9 @@ import { isModule, workspaceRoutes, navigationGroups } from '@/lib/workspace-rou
 
 const DatasetsSection = dynamic(() => import('@/components/workspace-sections/datasets'));
 const TrainingSection = dynamic(() => import('@/components/workspace-sections/training'));
+const AugmentationSection = dynamic(() => import('@/components/workspace-sections/augmentation'));
+const RealToSimSection = dynamic(() => import('@/components/workspace-sections/real-to-sim'));
+const DecisionLabSection = dynamic(() => import('@/components/workspace-sections/decision-lab'));
 
 function Workbench({ children }: { children: ReactNode }) {
   const state = useWorkbenchState();
@@ -42,7 +47,34 @@ function Workbench({ children }: { children: ReactNode }) {
     recoveryError,
     options,
     simulation,
+    moduleJobView,
+    workNavigationError,
+    setModuleJobView,
+    newWorkJob,
+    openWorkJob,
   } = state;
+  const workloadModule = [
+    'training',
+    'distillation',
+    'quantization',
+    'evaluation',
+    'simulation',
+    'augmentation',
+    'real-to-sim',
+    'datasets',
+    'models',
+    'teaching',
+    'decision-lab',
+  ].includes(activeStage);
+  const showingJobs = workloadModule && moduleJobView === 'jobs';
+  const retainedComposer =
+    ['augmentation', 'real-to-sim', 'decision-lab'].includes(activeStage) && !showingJobs ? activeStage : null;
+  const [lastComposer, setLastComposer] = useState(retainedComposer);
+  useEffect(() => {
+    if (retainedComposer) setLastComposer(retainedComposer);
+  }, [retainedComposer]);
+  const composerStage = retainedComposer ?? lastComposer;
+  const configurationDetour = ['settings', 'cloud-apis', 'modules'].includes(activeStage);
   const [datasetsVisited, setDatasetsVisited] = useState(activeStage === 'datasets');
   useEffect(() => {
     if (activeStage === 'datasets') setDatasetsVisited(true);
@@ -188,13 +220,84 @@ function Workbench({ children }: { children: ReactNode }) {
             </button>
           </div>
         )}
+        {workNavigationError && (
+          <p className="error-notice" role="alert">
+            {workNavigationError}
+          </p>
+        )}
+        {workloadModule && moduleInstalled(activeStage as Parameters<typeof moduleInstalled>[0]) && (
+          <div className="workbench-actions work-module-navigation" role="group" aria-label="Module view">
+            <button
+              className={showingJobs ? 'primary-button' : 'secondary-button'}
+              aria-pressed={showingJobs}
+              onClick={() => setModuleJobView('jobs')}
+            >
+              <Icon name="layers" size={16} /> Jobs
+            </button>
+            <button
+              className={!showingJobs ? 'primary-button' : 'secondary-button'}
+              aria-pressed={!showingJobs}
+              onClick={() => setModuleJobView('workspace')}
+            >
+              Workspace
+            </button>
+          </div>
+        )}
+        {showingJobs && moduleInstalled(activeStage as Parameters<typeof moduleInstalled>[0]) && (
+          <WorkJobs
+            key={`${workflowProjectId}:${activeStage}`}
+            projectId={workflowProjectId}
+            module={activeStage}
+            onNew={newWorkJob}
+            onOpen={openWorkJob}
+          />
+        )}
+        {workloadModule && !showingJobs && (
+          <JobComputeSelectionNotice
+            key={`${workflowProjectId}:${activeStage}:${state.requestedJobOperation?.id ?? ''}`}
+            projectId={workflowProjectId}
+            module={activeStage}
+            onSettings={() => {
+              setSettingsTab('compute');
+              state.openStage('settings');
+            }}
+          />
+        )}
+        {composerStage === 'augmentation' &&
+          moduleInstalled('augmentation') &&
+          (activeStage === 'augmentation' || configurationDetour) && (
+            <div hidden={activeStage !== 'augmentation' || showingJobs}>
+              <AugmentationSection />
+            </div>
+          )}
+        {composerStage === 'real-to-sim' &&
+          moduleInstalled('real-to-sim') &&
+          (activeStage === 'real-to-sim' || configurationDetour) && (
+            <div hidden={activeStage !== 'real-to-sim' || showingJobs}>
+              <RealToSimSection />
+            </div>
+          )}
+        {composerStage === 'decision-lab' &&
+          moduleInstalled('decision-lab') &&
+          (activeStage === 'decision-lab' || configurationDetour) && (
+            <div hidden={activeStage !== 'decision-lab' || showingJobs}>
+              <DecisionLabSection />
+            </div>
+          )}
         {/* Retain intake drafts and pending uploads when another section opens. */}
-        {moduleInstalled('datasets') && (datasetsVisited || activeStage === 'datasets') && <DatasetsSection />}
+        {moduleInstalled('datasets') && (datasetsVisited || activeStage === 'datasets') && (
+          <div hidden={showingJobs}>
+            <DatasetsSection />
+          </div>
+        )}
         {/* Configuration detours retain the exact unfinished training recipe. */}
         {moduleInstalled('training') && ['training', 'settings', 'cloud-apis', 'modules'].includes(activeStage) && (
-          <TrainingSection />
+          <div hidden={showingJobs}>
+            <TrainingSection />
+          </div>
         )}
         {(!isModule(activeStage) || moduleInstalled(activeStage)) &&
+          !showingJobs &&
           entryPending &&
           (!workflowProjectId || jobs.isPending || entryFailed || recoveryError) && (
             <section className="panel" aria-label="Workflow selection status">
@@ -245,7 +348,7 @@ function Workbench({ children }: { children: ReactNode }) {
               </>
             )}
           </section>
-        ) : state.isSectionCurrent(activeStage) ? (
+        ) : showingJobs ? null : state.isSectionCurrent(activeStage) ? (
           children
         ) : (
           <p role="status">Opening workspace section…</p>

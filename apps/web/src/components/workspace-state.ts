@@ -3,6 +3,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
+import { record } from '@/lib/policy-job-mutation';
+import type { WorkJob, JobOperation } from '@/lib/work-jobs';
 import { api, isActive, isDatasetJob, type PolicyArtifact, type Project } from '@/lib/api';
 import { quantizeModeFor, type ModelAction } from '@/lib/model-library';
 import {
@@ -22,7 +24,7 @@ import type { SimulationHandoff } from '@/lib/native-simulation-handoff';
 import type { DistillationModel } from '@/components/distillation-panel';
 import type { SettingsTab } from '@/components/workflow-panel';
 import type { ManagedPublishedCapture } from '@/lib/managed-teaching';
-import type { LibraryDataset } from '@/lib/dataset-library';
+import { datasetLibrary, type LibraryDataset } from '@/lib/dataset-library';
 import { workspaceRoutes, workspaceStage, type ModuleId, type StageId } from '@/lib/workspace-routes';
 import { readPublicPreference, writePublicPreference } from '@/lib/public-preferences';
 import { projectHistoryView, validProjectHistory } from '@/lib/project-history';
@@ -30,16 +32,26 @@ import { projectHistoryView, validProjectHistory } from '@/lib/project-history';
 export function useWorkbenchState() {
   const queryClient = useQueryClient();
   const [projectId, setProjectId] = useState('');
+  const workNavigationVersion = useRef(0);
+  const [workNavigationError, setWorkNavigationError] = useState('');
   const [selectedJobId, setSelectedJobId] = useState('');
+  const [requestedWorkJob, setRequestedWorkJob] = useState<WorkJob | null>(null);
+  const [moduleJobViewOverride, setModuleJobView] = useState<'workspace' | 'jobs' | null>(null);
+  const [requestedJobOperation, setRequestedJobOperation] = useState<JobOperation | null>(null);
   const router = useRouter();
   const pathname = usePathname();
   const activeStage = workspaceStage(pathname);
+  const moduleJobView =
+    moduleJobViewOverride ??
+    (['augmentation', 'real-to-sim', 'decision-lab', 'teaching'].includes(activeStage) ? 'jobs' : 'workspace');
   // Fence delayed preflight reads as soon as navigation is requested, before
   // Next finishes fetching and committing the destination's route payload.
   const routeSelection = useRef({ pathname, stage: activeStage });
   if (routeSelection.current.pathname !== pathname) routeSelection.current = { pathname, stage: activeStage };
   const isSectionCurrent = (id: StageId) => routeSelection.current.stage === id;
   function openStage(id: StageId) {
+    workNavigationVersion.current += 1;
+    setWorkNavigationError('');
     routeSelection.current.stage = id;
     router.push(workspaceRoutes[id].path, { scroll: false });
   }
@@ -105,6 +117,9 @@ export function useWorkbenchState() {
     setProjectId(selected?.id ?? '');
   }, [projects.data, projectId]);
   function navigateStage(id: StageId) {
+    setRequestedWorkJob(null);
+    setModuleJobView(['augmentation', 'real-to-sim', 'decision-lab', 'teaching'].includes(id) ? 'jobs' : 'workspace');
+    setRequestedJobOperation(null);
     setOpenQuantizationRun(null);
     setOpenDistillationRun(null);
     setSelectedModel(null);
@@ -135,6 +150,13 @@ export function useWorkbenchState() {
     openStage('training');
   }
   function selectProject(id: string) {
+    workNavigationVersion.current += 1;
+    setWorkNavigationError('');
+    setRequestedWorkJob(null);
+    setModuleJobView(
+      ['augmentation', 'real-to-sim', 'decision-lab', 'teaching'].includes(activeStage) ? 'jobs' : 'workspace',
+    );
+    setRequestedJobOperation(null);
     setDistillationModels({});
     setDistillTeachers({});
     setOpenQuantizationRun(null);
@@ -239,6 +261,72 @@ export function useWorkbenchState() {
     } else {
       navigateStage('quantization');
       setOpenQuantizationRun({ projectId: owner, id });
+    }
+  }
+  function newWorkJob(operation: JobOperation) {
+    if (!(operation.module in workspaceRoutes)) return;
+    navigateStage(operation.module as StageId);
+    setRequestedJobOperation(operation);
+    setModuleJobView('workspace');
+    if (operation.module === 'training') {
+      const id = trainingNavigation + 1;
+      setTrainingNavigation(id);
+      setStartTraining({ id });
+    }
+    if (operation.id === 'teaching.capture') setTeachingMode('managed');
+    if (operation.id === 'policy.import') {
+      navigateStage('simulation');
+      chooseRun('native', 'handoff');
+      setImportModel(true);
+    }
+  }
+  async function openWorkJob(job: WorkJob) {
+    if (!projects.data?.some((item) => item.id === job.project_id) || !(job.module in workspaceRoutes)) return;
+    if (['policy.finetune', 'policy.distill', 'policy.quantize'].includes(job.operation)) {
+      openModelRun(job.project_id, job.source_id, job.operation);
+    } else {
+      if (projectId !== job.project_id) selectProject(job.project_id);
+      navigateStage(job.module as StageId);
+      if (job.operation === 'dataset.inspect') {
+        setSelectedJobId(job.source_id);
+        setDatasetView('inspection');
+      }
+      if (job.operation === 'policy.run') {
+        const mode = job.inputs.simulation ? 'native' : job.inputs.native_replay ? 'replay' : 'engine';
+        setEntries((previous) => ({
+          ...previous,
+          [job.project_id]: { ...previous[job.project_id], run: { mode, origin: 'manual', jobId: job.source_id } },
+        }));
+        if (mode === 'native') setOpenSimulation({ projectId: job.project_id, id: job.source_id });
+      }
+      if (job.operation === 'teaching.capture') setTeachingMode('managed');
+      if (job.module === 'models' && record(job.result) && Array.isArray(job.result.artifacts)) {
+        const artifact = job.result.artifacts.find((item: unknown) => record(item) && typeof item.id === 'string');
+        if (record(artifact) && typeof artifact.id === 'string')
+          setSelectedModel({ projectId: job.project_id, id: artifact.id });
+      }
+    }
+    setRequestedWorkJob(job);
+    setModuleJobView('workspace');
+    if (job.operation === 'dataset.import' || job.operation === 'dataset.convert') {
+      const version = workNavigationVersion.current;
+      try {
+        const entry = await datasetLibrary.get(
+          typeof job.inputs.dataset_id === 'string' ? job.inputs.dataset_id : job.source_id,
+        );
+        if (version !== workNavigationVersion.current || entry.project_id !== job.project_id) return;
+        if (entry.status === 'ready' || entry.status === 'converting') {
+          setSelectedLibrary(entry);
+          setDatasetView('labels');
+        } else {
+          setImportLibrary(entry);
+          setIntakeSelection((value) => value + 1);
+          setDatasetView('sources');
+        }
+      } catch {
+        if (version === workNavigationVersion.current)
+          setWorkNavigationError('This saved dataset is unavailable. Review its job diagnostics before continuing.');
+      }
     }
   }
   const teachingContext = useRef({ project: workflowProjectId, stage: activeStage, mode: teachingMode });
@@ -384,6 +472,13 @@ export function useWorkbenchState() {
 
   return {
     projectId,
+    requestedWorkJob,
+    workNavigationError,
+    requestedJobOperation,
+    moduleJobView,
+    setModuleJobView,
+    newWorkJob,
+    openWorkJob,
     selectedJobId,
     activeStage,
     distillationModels,

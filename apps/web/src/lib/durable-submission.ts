@@ -1,3 +1,4 @@
+import { withJobCompute } from './job-compute-selection';
 import {
   recordingSubmissionLegacy,
   clearRecordingSubmissionLegacy,
@@ -393,7 +394,11 @@ export function submissionController(scope: SubmissionScope, cache: SubmissionCa
     if (!current().hydrated || !current().available || current().attempt || current().busy) return null;
     let attempt: NonNullable<PolicyJobAttempt> | undefined;
     try {
-      attempt = createSubmissionAttempt(scope.project, scope.operation, body);
+      attempt = createSubmissionAttempt(
+        scope.project,
+        scope.operation,
+        scope.operation === 'policy.finetune' && record(body) ? withJobCompute(scope.project, body) : body,
+      );
       if (readAttempt(scope, getStorage()) !== null) throw new SubmissionJournalChanged();
       writeRaw(getStorage(), submissionStorageKey(scope), JSON.stringify(attempt));
       put({ attempt, receipt: null, error: '', busy: true, notFoundKey: null });

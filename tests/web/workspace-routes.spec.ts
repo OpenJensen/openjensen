@@ -1,3 +1,4 @@
+import { openModuleWorkspace } from './work-job-controls';
 import { fulfillApplicationUpdateRead } from './application-update-controls';
 import { expect, test, type Page } from '@playwright/test';
 import { selectProject } from './project-controls';
@@ -238,6 +239,8 @@ test('sidebar preloads routes without mounting their tools or submitting work', 
   });
   await link.click();
   await expect(page.getByRole('heading', { name: 'Augmentation', level: 1, exact: true })).toBeVisible();
+  expect(destinationReads).toEqual([]);
+  await openModuleWorkspace(page);
   await expect.poll(() => destinationReads.length).toBeGreaterThan(0);
   expect(await page.evaluate(() => (window as any).__preloadedNavigation)).toBe('same document');
   expect(writes).toEqual([]);

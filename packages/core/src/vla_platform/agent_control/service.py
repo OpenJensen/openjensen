@@ -212,6 +212,20 @@ class AgentControl(TaskControl):
                 )
             )
 
+        self.execution.observability.try_record(
+            "agent:" + session.id,
+            session.message or kind,
+            component="agent",
+            stage=session.status,
+            data={"event": kind, "status": session.status},
+        )
+        if session.status == "error":
+            self.execution.observability.try_failure(
+                "agent:" + session.id,
+                stage=kind,
+                message=session.message or "Agent execution failed",
+            )
+
     async def events(self, identity, after):
         await self.get(identity)
         async with self.storage.engine.connect() as c:

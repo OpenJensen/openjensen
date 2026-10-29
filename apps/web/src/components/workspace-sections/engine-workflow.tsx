@@ -6,6 +6,7 @@ import { useWorkspace } from '@/components/workspace-context';
 export default function EngineWorkflowSection() {
   const {
     workflowProjectId,
+    requestedWorkJob,
     activeStage,
     workflowNavigation,
     settingsTab,
@@ -27,7 +28,9 @@ export default function EngineWorkflowSection() {
       preferredJobId={
         activeStage === 'quantization' && openQuantizationRun?.projectId === workflowProjectId
           ? openQuantizationRun.id
-          : undefined
+          : requestedWorkJob?.project_id === workflowProjectId && requestedWorkJob.module === activeStage
+            ? requestedWorkJob.source_id
+            : undefined
       }
       preferredArtifactId={
         activeStage === 'quantization' && quantizeArtifact?.projectId === workflowProjectId

@@ -16,7 +16,9 @@ from pydantic import (
 )
 
 from vla_platform.augmentation.contracts import AugmentationRequest, AugmentationResult
+from vla_platform.compute.contracts import ExecutionBinding
 from vla_platform.datasets.recording_contracts import RecordingPreparation, RecordingSummary
+from vla_platform.decision_contracts import DecisionRequest, ScoreResult
 from vla_platform.lifecycle.contracts import (
     CloudExecutionTarget,
     LifecycleResult,
@@ -325,19 +327,40 @@ JobStatus = Literal["queued", "running", "succeeded", "failed", "cancelled", "in
 TERMINAL = {"succeeded", "failed", "cancelled", "interrupted"}
 
 
+class JobCancellation(Record):
+    requested_at: Timestamp
+    finished_at: Timestamp | None = None
+    cleanup: Literal["pending", "succeeded", "failed"] = "pending"
+
+
 class Job(Record):
     id: NonEmptyString
     project_id: NonEmptyString
     kind: NonEmptyString = "dataset.inspect"
+    cancellation: JobCancellation | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     status: JobStatus = "queued"
-    request: IntakeRequest | PolicyRequest | AugmentationRequest | TeachingCaptureRequest
+    request: (
+        IntakeRequest
+        | PolicyRequest
+        | AugmentationRequest
+        | TeachingCaptureRequest
+        | DecisionRequest
+    )
+    execution: ExecutionBinding | None = Field(default=None, exclude_if=lambda value: value is None)
     compute_target: CloudExecutionTarget | None = None
     simulation_target: SimulationTarget | None = None
     created_at: Timestamp
     updated_at: Timestamp
-    result: DatasetProfile | LifecycleResult | AugmentationResult | TeachingCaptureResult | None = (
-        None
-    )
+    result: (
+        DatasetProfile
+        | LifecycleResult
+        | AugmentationResult
+        | TeachingCaptureResult
+        | ScoreResult
+        | None
+    ) = None
     error: str | None = None
     stage: str | None = None
 
@@ -346,14 +369,17 @@ class Job(Record):
         expected = (
             self.request.operation
             if isinstance(
-                self.request, (PolicyRequest, AugmentationRequest, TeachingCaptureRequest)
+                self.request,
+                (PolicyRequest, AugmentationRequest, TeachingCaptureRequest, DecisionRequest),
             )
             else "dataset.inspect"
         )
         if self.kind != expected:
             raise ValueError("Job kind must match its registered request operation")
         result_type = (
-            TeachingCaptureResult
+            ScoreResult
+            if isinstance(self.request, DecisionRequest)
+            else TeachingCaptureResult
             if isinstance(self.request, TeachingCaptureRequest)
             else AugmentationResult
             if isinstance(self.request, AugmentationRequest)

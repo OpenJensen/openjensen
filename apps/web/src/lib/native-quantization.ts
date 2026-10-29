@@ -1,3 +1,4 @@
+import { withJobCompute } from './job-compute-selection';
 import { type Job, type PolicyArtifact, type PolicyOptions } from './api';
 import { policyJobRequest, sameJson, UncertainPolicyJob } from './policy-job-mutation';
 
@@ -229,14 +230,15 @@ function accepted(value: unknown, expected: Expected, id?: string): Job {
   return value as unknown as Job;
 }
 export async function startNativeQuantization(expected: Expected): Promise<Job> {
-  const value = await request(`/projects/${encode(expected.project)}/policy-jobs`, {
+  const body = withJobCompute(expected.project, {
     operation: 'policy.quantize',
     runtime_id: expected.runtime,
     artifact_id: expected.artifact,
     native_quantization: { format: 'firebird_quant', bits: expected.bits, group_size: 64 },
     timeout_seconds: expected.timeout,
   });
-  return accepted(value, expected);
+  const value = await request(`/projects/${encode(expected.project)}/policy-jobs`, body);
+  return accepted(value, { ...expected, runtime: body.runtime_id });
 }
 export async function cancelNativeQuantization(job: Job, stillSelected: () => boolean): Promise<Job> {
   const spec = nativeQuantizationOf(job);

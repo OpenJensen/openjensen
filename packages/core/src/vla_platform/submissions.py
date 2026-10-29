@@ -10,6 +10,7 @@ from sqlalchemy import select
 
 from vla_platform.augmentation.contracts import AugmentationRequest
 from vla_platform.contracts import IntakeRequest, Job
+from vla_platform.decision_contracts import DecisionRequest
 from vla_platform.lifecycle.contracts import PolicyRequest
 from vla_platform.storage import Storage, job_submissions, jobs
 from vla_platform.teaching_sessions.contracts import TeachingCaptureRequest
@@ -18,6 +19,7 @@ IdempotencyKey = Annotated[
     str, StringConstraints(strict=True, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 ]
 SubmissionOperation = Literal[
+    "decision.score",
     "teaching.capture",
     "dataset.inspect",
     "dataset.augment",
@@ -30,7 +32,9 @@ SubmissionOperation = Literal[
     "policy.workflow",
     "policy.import",
 ]
-SubmissionRequest = IntakeRequest | PolicyRequest | AugmentationRequest | TeachingCaptureRequest
+SubmissionRequest = (
+    IntakeRequest | PolicyRequest | AugmentationRequest | TeachingCaptureRequest | DecisionRequest
+)
 MAX_REQUEST_BYTES = 1024 * 1024
 
 
@@ -110,7 +114,9 @@ async def lookup(
                 raise ValueError("Unknown fingerprint version")
             raw = row["request_record"]
             model = (
-                TeachingCaptureRequest
+                DecisionRequest
+                if operation_name == "decision.score"
+                else TeachingCaptureRequest
                 if operation_name == "teaching.capture"
                 else IntakeRequest
                 if operation_name == "dataset.inspect"

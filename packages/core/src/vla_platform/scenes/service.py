@@ -62,6 +62,9 @@ def write(path, value):
 class Scenes:
     def __init__(self, data_dir, root=None):
         self.data_dir = Path(data_dir)
+        from vla_platform.job_observability import JobObservability
+
+        self.observability = JobObservability(self.data_dir)
         self.directory = self.data_dir / "scene-runs"
         self.root = Path(root) if root else Path(__file__).resolve().parents[5]
         self.template = self.root / "workers/isaac_sim/scenes/so101-pickup"
@@ -91,6 +94,15 @@ class Scenes:
         run.message = message
         run.events.append({"at": now(), "stage": stage, "attempt": run.attempt, "message": message})
         self.save(run)
+        self.observability.try_record(
+            "scene:" + run.id,
+            message,
+            component="scene",
+            stage=stage,
+            data={"attempt": run.attempt},
+        )
+        if run.status == "failed":
+            self.observability.try_failure("scene:" + run.id, stage=stage, message=message)
 
     def list(self, project):
         if not self.directory.exists():

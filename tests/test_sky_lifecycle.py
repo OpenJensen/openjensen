@@ -11,11 +11,11 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import insert
 from vla_platform.api import create_app
+from vla_platform.compute import providers
 from vla_platform.compute_settings import ComputeSettings
 from vla_platform.contracts import IntakeRequest, Job, now
 from vla_platform.datasets.inspect import profile
 from vla_platform.execution import Execution
-from vla_platform.lifecycle import service
 from vla_platform.lifecycle.contracts import CloudExecutionTarget, PolicyRequest
 from vla_platform.lifecycle.runtime import Runtime
 from vla_platform.settings import Settings
@@ -136,7 +136,7 @@ def cloud(tmp_path, monkeypatch):
 
     monkeypatch.setattr(ComputeSettings, "plan_cloud_target", planned)
     monkeypatch.setattr(ComputeSettings, "ensure_cloud_ready", ensured)
-    monkeypatch.setattr(service, "command", no_native)
+    monkeypatch.setattr(providers, "command", no_native)
     monkeypatch.setattr(asyncio, "create_subprocess_exec", no_native)
 
     @asynccontextmanager

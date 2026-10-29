@@ -31,6 +31,7 @@ from vla_platform.cloud_api import router as cloud_connections_router
 from vla_platform.cloud_connections import CloudConnections
 from vla_platform.cloud_runs import CloudRunsFeed, read_cloud_runs
 from vla_platform.compute_api import router as compute_settings_router
+from vla_platform.compute_targets_api import router as compute_targets_router
 from vla_platform.contracts import (
     Capability,
     EpisodePage,
@@ -48,6 +49,7 @@ from vla_platform.decision_api import router as decision_router
 from vla_platform.execution import Execution
 from vla_platform.huggingface_api import router as huggingface_router
 from vla_platform.huggingface_connection import HuggingFaceConnection
+from vla_platform.job_observability_api import router as job_observability_router
 from vla_platform.lifecycle import telemetry
 from vla_platform.lifecycle.contracts import (
     JobEvent,
@@ -88,6 +90,7 @@ from vla_platform.teaching_sessions.config import TeachingError
 from vla_platform.teaching_sessions_api import router as teaching_sessions_router
 from vla_platform.updates_api import router as updates_router
 from vla_platform.web_assets import WorkspaceStaticFiles
+from vla_platform.workspace_jobs_api import router as workspace_jobs_router
 
 LOCAL_ORIGINS = {
     "http://127.0.0.1:3000",
@@ -152,6 +155,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             app.state.module_installations = ModuleInstallations(settings.data_dir)
             app.state.application_updates = ApplicationUpdates(data_dir=settings.data_dir)
             app.state.projects, app.state.execution = Projects(storage), execution
+            app.state.job_observability = execution.observability
             app.state.explorer = explorer
             app.state.dataset_library = DatasetLibrary(settings.data_dir)
             app.state.robot_lab = RobotLabBridge(settings.data_dir)
@@ -250,6 +254,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(scenes_router)
     app.include_router(updates_router)
     app.include_router(modules_router)
+    app.include_router(workspace_jobs_router)
+    app.include_router(job_observability_router)
+    app.include_router(compute_targets_router)
 
     @app.exception_handler(LibraryError)
     async def dataset_library_error(_request: Request, exc: LibraryError):
@@ -263,7 +270,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_origins=sorted(LOCAL_ORIGINS),
         allow_methods=["GET", "POST", "PUT", "DELETE"],
         allow_headers=["Content-Type", "Idempotency-Key"],
-        expose_headers=["Idempotency-Key"],
+        expose_headers=["Idempotency-Key", "X-Next-Offset", "X-Total-Count"],
     )
 
     @app.middleware("http")
@@ -570,12 +577,38 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/api/v1/policy-options")
     async def policy_options(execution: ExecutionDep) -> dict:
+        from vla_platform.compute.recipes import portable_runtimes
+        from vla_platform.compute_targets import ComputeTargets
+
+        lifecycle = execution.lifecycle
+        public = lifecycle.compute.public_catalog(lifecycle.catalog)
+        available = lifecycle.compute.available_catalog(lifecycle.catalog)
+        targets = ComputeTargets(lifecycle.settings.data_dir).list(lifecycle.catalog).targets
+        portable = []
+        for runtime in portable_runtimes():
+            matching = [
+                item
+                for item in targets
+                if item.definition.runtime_id == runtime.id and item.launchable
+            ]
+            if not matching:
+                continue
+            portable.append(runtime)
+            row = type(lifecycle.catalog)(runtimes=[runtime]).public()["runtimes"][0]
+            target = matching[0].definition
+            row.update(
+                provider=target.infrastructure,
+                provider_label="Configured compute",
+                accelerator=target.resources.accelerator,
+                enabled=True,
+                launchable=True,
+            )
+            public["runtimes"].append(row)
+        available = available.model_copy(update={"runtimes": [*available.runtimes, *portable]})
         return {
-            **execution.lifecycle.compute.public_catalog(execution.lifecycle.catalog),
+            **public,
             "compute": execution.lifecycle.compute.preferences().model_dump(),
-            "training_models": public_training_models(
-                execution.lifecycle.compute.available_catalog(execution.lifecycle.catalog)
-            ),
+            "training_models": public_training_models(available),
             "training_methods": [
                 {
                     "id": "lora",

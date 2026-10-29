@@ -1,3 +1,4 @@
+import { withJobCompute } from './job-compute-selection';
 import { type DatasetJob, type Job, type PolicyArtifact, type PolicyOptions, type PolicyRequest } from './api';
 import { policyJobRequest, record, sameJson, UncertainPolicyJob } from './policy-job-mutation';
 import { nativeTransformIssue, nativeTransformMetadata } from './native-quantization';
@@ -99,6 +100,7 @@ function accepted(value: unknown, project: string, expected: DistillationRequest
   return value as unknown as Job;
 }
 export async function startStudent(project: string, expected: DistillationRequest): Promise<Job> {
+  expected = withJobCompute(project, expected);
   return accepted(
     await policyJobRequest(`/projects/${encodeURIComponent(project)}/policy-jobs`, expected),
     project,

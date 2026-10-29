@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import os
 import time
 from pathlib import Path
 from uuid import UUID, uuid4
@@ -11,11 +12,21 @@ from sqlalchemy.exc import IntegrityError
 
 from vla_platform.augmentation.contracts import AugmentationRequest
 from vla_platform.augmentation.service import Augmentation
-from vla_platform.contracts import TERMINAL, IntakeRequest, Job, WorkerRequest, WorkerResult, now
+from vla_platform.contracts import (
+    TERMINAL,
+    IntakeRequest,
+    Job,
+    JobCancellation,
+    WorkerRequest,
+    WorkerResult,
+    now,
+)
 from vla_platform.datasets.cache import Inspections
 from vla_platform.datasets.recordings import Recordings
+from vla_platform.decision_contracts import DecisionRequest
 from vla_platform.environment import getenv
 from vla_platform.frozen_commands import intake_command
+from vla_platform.job_observability import JobObservability, redact
 from vla_platform.lifecycle.contracts import PolicyRequest, SimulationTarget
 from vla_platform.lifecycle.service import Lifecycle
 from vla_platform.settings import Settings
@@ -35,10 +46,12 @@ _LOG = logging.getLogger(__name__)
 class Execution:
     def __init__(self, storage: Storage, settings: Settings):
         self.storage, self.settings = storage, settings
+        self.observability = JobObservability(settings.data_dir)
         self.tasks: dict[str, asyncio.Task] = {}
         self.lock = asyncio.Lock()
         self.native_slots = asyncio.Semaphore(1)
         self.cloud_slots = asyncio.Semaphore(2)
+        self.target_slots: dict[str, asyncio.Semaphore] = {}
         self.simulation_slots = asyncio.Semaphore(1)
         self._simulation_cancellation_requested: set[str] = set()
         self.lifecycle = Lifecycle(self)
@@ -73,11 +86,33 @@ class Execution:
     async def save(self, job: Job) -> None:
         job.updated_at = now()
         async with self.storage.engine.begin() as connection:
+            previous = (
+                await connection.execute(select(jobs.c.record).where(jobs.c.id == job.id))
+            ).scalar_one_or_none()
             await connection.execute(
                 update(jobs)
                 .where(jobs.c.id == job.id)
                 .values(status=job.status, record=job.model_dump())
             )
+        if previous and (previous.get("status"), previous.get("stage"), previous.get("error")) != (
+            job.status,
+            job.stage,
+            job.error,
+        ):
+            self.observability.try_record(
+                job.id,
+                job.error or f"Job {job.status}",
+                stage=job.stage or job.status,
+                severity="error" if job.status == "failed" else "info",
+                data={"status": job.status},
+            )
+            if job.status == "failed":
+                self.observability.try_failure(
+                    job.id,
+                    stage=job.stage or "execution",
+                    message=job.error or "Job failed",
+                    code="WORKER_FAILED",
+                )
 
     async def submit(
         self, project_id: str, request: SubmissionRequest, *, idempotency_key: str | None = None
@@ -123,7 +158,11 @@ class Execution:
         self, project_id: str, request: SubmissionRequest, submission: Submission | None = None
     ) -> Job:
         compute_target = None
-        if isinstance(request, TeachingCaptureRequest):
+        if isinstance(request, DecisionRequest):
+            from vla_platform.decision_api import configuration
+
+            configuration()
+        elif isinstance(request, TeachingCaptureRequest):
             await self.teaching.validate(project_id, request)
         elif isinstance(request, PolicyRequest):
             compute_target = await self.lifecycle.validate(project_id, request)
@@ -141,7 +180,10 @@ class Execution:
             id=str(uuid4()),
             project_id=project_id,
             kind=request.operation
-            if isinstance(request, (PolicyRequest, AugmentationRequest, TeachingCaptureRequest))
+            if isinstance(
+                request,
+                (PolicyRequest, AugmentationRequest, TeachingCaptureRequest, DecisionRequest),
+            )
             else "dataset.inspect",
             request=request,
             compute_target=None if isinstance(compute_target, SimulationTarget) else compute_target,
@@ -151,6 +193,103 @@ class Execution:
             created_at=now(),
             updated_at=now(),
         )
+        from vla_platform.compute.contracts import ExecutionBinding, bind_runtime
+
+        if isinstance(request, PolicyRequest):
+            runtime = self.lifecycle.runtime(request.runtime_id)
+            if runtime is not None:
+                job.execution = bind_runtime(runtime)
+                if request.execution_target_id:
+                    snapshot = self.lifecycle.configured_target(request)
+                    definition = snapshot.definition
+                    job.execution = job.execution.model_copy(
+                        update={
+                            "adapter": "skypilot-target"
+                            if definition.adapter == "skypilot"
+                            else "local",
+                            "infrastructure": definition.infrastructure,
+                            "target_id": definition.id,
+                            "label": definition.label,
+                            "target_snapshot": snapshot.model_dump(mode="json"),
+                        }
+                    )
+                    if definition.adapter == "skypilot":
+                        import hashlib
+                        import json
+
+                        from vla_platform import cloud_compute_catalog
+                        from vla_platform.compute_targets import ComputeTargets
+                        from vla_platform.lifecycle import sky_runner
+
+                        connection = ComputeTargets(self.settings.data_dir).connection(definition)
+                        connection = dict(connection)
+                        connection["sky_api_endpoint"] = connection.get(
+                            "sky_api_endpoint"
+                        ) or await cloud_compute_catalog.configured_sky_endpoint(
+                            sky_runner.executable()
+                        )
+                        if definition.infrastructure == "gcp":
+                            from vla_platform.cloud_connections import CloudConnections
+
+                            configured = (
+                                CloudConnections(self.settings.data_dir).list().providers[0].config
+                            )
+                            project = connection.get("project_id") or (
+                                configured.project_id if configured else None
+                            )
+                            if not project:
+                                raise ValueError("Configure the target's cloud billing project")
+                            connection["project_id"] = project
+                            connection["workspace"] = connection.get(
+                                "workspace"
+                            ) or cloud_compute_catalog.sky_workspace_name(project)
+                        connection.setdefault("workspace", "default")
+                        encoded = json.dumps(
+                            connection, sort_keys=True, separators=(",", ":")
+                        ).encode()
+                        directory = self.settings.data_dir / "jobs" / job.id
+                        directory.mkdir(parents=True, exist_ok=True)
+                        path = directory / "execution-connection.json"
+                        path.write_bytes(encoded)
+                        path.chmod(0o600)
+                        job.execution = job.execution.model_copy(
+                            update={"connection_sha256": hashlib.sha256(encoded).hexdigest()}
+                        )
+            elif request.simulation is not None:
+                job.execution = ExecutionBinding(
+                    adapter="simulation",
+                    infrastructure="gcp",
+                    target_id=request.simulation.profile_id,
+                    label="Simulation",
+                )
+        elif isinstance(request, DecisionRequest):
+            job.execution = ExecutionBinding(
+                adapter="local",
+                infrastructure="local",
+                target_id="decision",
+                label="Decision scorer",
+            )
+        elif isinstance(request, AugmentationRequest):
+            job.execution = ExecutionBinding(
+                adapter="provider-api",
+                infrastructure="google",
+                target_id="augmentation",
+                label="Video generation",
+            )
+        elif isinstance(request, TeachingCaptureRequest):
+            job.execution = ExecutionBinding(
+                adapter="teaching",
+                infrastructure="configured",
+                target_id="teaching",
+                label="Teaching executor",
+            )
+        else:
+            job.execution = ExecutionBinding(
+                adapter="local",
+                infrastructure="local",
+                target_id="datasets",
+                label="Dataset worker",
+            )
         if isinstance(request, PolicyRequest):
             from vla_platform.lifecycle.telemetry import capture
 
@@ -219,6 +358,15 @@ class Execution:
                     return previous
             raise
         if new_job:
+            self.observability.try_record(
+                job.id,
+                "Job accepted",
+                stage="queued",
+                data={
+                    "operation": job.kind,
+                    "execution": job.execution.model_dump() if job.execution else None,
+                },
+            )
             self._schedule(job.id)
         return job
 
@@ -233,17 +381,52 @@ class Execution:
             job = await self.get(job_id)
             if job is None or job.status in TERMINAL:
                 return job
+            # Terminal status fences late publication while cleanup is separately tracked.
             job.status = "cancelled"
-            job.error = "Cancelled by the user; no later stage will be published."
+            job.cancellation = JobCancellation(requested_at=now())
+            job.error = "Cancellation requested; waiting for execution cleanup."
             if isinstance(job.request, AugmentationRequest):
-                job.error += " An already submitted Gemini request may still run and incur charges."
+                job.error += " Provider work already submitted may continue and incur charges."
             await self.save(job)
             task = self.tasks.get(job_id)
             if task:
                 task.cancel()
-        if task:
-            await asyncio.gather(task, return_exceptions=True)
-        return await self.get(job_id)
+
+        async def drain():
+            if task:
+                await asyncio.gather(task, return_exceptions=True)
+            async with self.lock:
+                current = await self.get(job_id)
+                if current is not None and current.cancellation is not None:
+                    cleanup_failed = "cleanup" in (current.error or "").lower() and (
+                        "failed" in (current.error or "").lower()
+                        or "needs attention" in (current.error or "").lower()
+                    )
+                    current.cancellation.finished_at = now()
+                    current.cancellation.cleanup = "failed" if cleanup_failed else "succeeded"
+                    if not cleanup_failed:
+                        current.error = "Cancelled by the user; owned execution has stopped."
+                        if isinstance(current.request, AugmentationRequest):
+                            current.error += (
+                                " Provider work already submitted may continue and incur charges."
+                            )
+                    await self.save(current)
+                    self.observability.try_record(
+                        current.id,
+                        current.error or "Cancelled",
+                        stage="cleanup",
+                        severity="error" if cleanup_failed else "info",
+                        data={"cleanup": current.cancellation.cleanup},
+                    )
+                return current
+
+        owned = asyncio.create_task(drain())
+        while not owned.done():
+            try:
+                await asyncio.shield(owned)
+            except asyncio.CancelledError:
+                continue
+        return owned.result()
 
     async def finish(self, job_id: str, response: WorkerResult) -> None:
         async with self.lock:
@@ -280,8 +463,21 @@ class Execution:
         )
         return request_path, result_path
 
+    async def observe_output(self, job_id, stream, name, stage="execution"):
+        from vla_platform.compute.streams import output_lines
+
+        async for line in output_lines(stream):
+            self.observability.try_record(
+                job_id, line, kind="log", component="worker", stage=stage, stream=name
+            )
+
     async def run(self, job_id: str) -> None:
         initial = await self.get(job_id)
+        if initial and isinstance(initial.request, DecisionRequest):
+            from vla_platform.decision_jobs import run
+
+            await run(self, initial)
+            return
         if initial and isinstance(initial.request, TeachingCaptureRequest):
             await self.teaching.run(initial)
             return
@@ -295,6 +491,7 @@ class Execution:
             await self.recordings.run(initial)
             return
         process = None
+        drains = []
         try:
             async with self.slots:
                 async with self.lock:
@@ -304,13 +501,23 @@ class Execution:
                     job.status = "running"
                     await self.save(job)
                 request_path, result_path = await asyncio.to_thread(self.write_request, job)
-                process = await asyncio.create_subprocess_exec(
+                process = await self.lifecycle.act_spawn_owned(
                     *intake_command(request_path, result_path),
-                    stdout=asyncio.subprocess.DEVNULL,
-                    stderr=asyncio.subprocess.DEVNULL,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    start_new_session=os.name == "posix",
                 )
+                drains = [
+                    asyncio.create_task(
+                        self.observe_output(job.id, process.stdout, "stdout", "inspection")
+                    ),
+                    asyncio.create_task(
+                        self.observe_output(job.id, process.stderr, "stderr", "inspection")
+                    ),
+                ]
                 await asyncio.wait_for(
-                    process.wait(), timeout=180 if job.request.snapshot_for_training else 90
+                    asyncio.gather(process.wait(), *drains),
+                    timeout=180 if job.request.snapshot_for_training else 90,
                 )
                 if process.returncode != 0 or not result_path.is_file():
                     raise RuntimeError(
@@ -330,15 +537,10 @@ class Execution:
                 job_id, WorkerResult(error=f"{type(exc).__name__}: {str(exc)[:1000]}")
             )
         finally:
-            if process is not None and process.returncode is None:
-                try:
-                    process.terminate()
-                    await asyncio.wait_for(process.wait(), timeout=5)
-                except TimeoutError:
-                    process.kill()
-                    await process.wait()
-                except ProcessLookupError:
-                    pass
+            if process is not None:
+                await self.lifecycle.act_stop_owned(process)
+            if drains:
+                await asyncio.gather(*drains, return_exceptions=True)
 
     async def run_policy(self, job: Job) -> None:
         try:
@@ -348,9 +550,16 @@ class Execution:
                 if job.simulation_target is not None
                 else self.cloud_slots
                 if job.compute_target is not None
+                or (job.execution and job.execution.adapter == "skypilot-target")
                 else self.native_slots
             )
-            async with slots:
+            target_slots = asyncio.Semaphore(1)
+            if job.execution and job.execution.target_snapshot:
+                definition = job.execution.target_snapshot["definition"]
+                target_slots = self.target_slots.setdefault(
+                    definition["id"], asyncio.Semaphore(definition["resources"]["concurrency"])
+                )
+            async with target_slots, slots:
                 async with self.lock:
                     current = await self.get(job.id)
                     if current.status in TERMINAL:
@@ -366,12 +575,24 @@ class Execution:
         except asyncio.CancelledError:
             raise
         except Exception as exc:
+            self.observability.try_failure(
+                job.id,
+                stage=job.stage or "execution",
+                message=redact(str(exc)) or type(exc).__name__,
+                code="JOB_DEADLINE_EXCEEDED"
+                if isinstance(exc, TimeoutError)
+                else "INVALID_EXECUTION"
+                if isinstance(exc, ValueError)
+                else "WORKER_FAILED",
+                cause=f"{type(exc).__name__}: {exc}",
+                cleanup="failed" if "cleanup" in str(exc).lower() else "unknown",
+            )
             await self.lifecycle.event(job, "failed", f"{type(exc).__name__}: {exc}")
             async with self.lock:
                 current = await self.get(job.id)
                 if current.status not in TERMINAL:
                     current.status = "failed"
-                    current.error = f"{type(exc).__name__}: {str(exc)[:2000]}"
+                    current.error = redact(f"{type(exc).__name__}: {str(exc)[:2000]}")
                     await self.save(current)
                 elif current.status == "cancelled" and any(
                     label in str(exc) for label in ("Cloud cleanup", "Worker cleanup")
@@ -391,6 +612,7 @@ class Execution:
         records. Completed native stage artifacts remain registered; an orphan
         cannot publish a later stage.
         """
+        recovered_jobs = []
         # Serialize with cancel/finish and commit the entire recovery batch atomically.
         # A crash before commit rolls back; after commit, repeated recovery is a no-op.
         async with self.lock:
@@ -452,6 +674,14 @@ class Execution:
                         .where(jobs.c.id == job.id, jobs.c.status == previous_status)
                         .values(status=job.status, record=job.model_dump())
                     )
+                    recovered_jobs.append((job.id, job.error))
+        for ident, message in recovered_jobs:
+            self.observability.try_record(
+                ident,
+                message or "Job interrupted after restart",
+                stage="recovery",
+                severity="warning",
+            )
         # SkyPilot clusters outlive the API process. Reconcile only durable,
         # job-owned dispatch records, never unrelated operator clusters.
         from vla_platform.lifecycle.sky_runner import recover
@@ -470,6 +700,39 @@ class Execution:
                     current.error = f"{current.error}\n{message}" if current.error else message
                     await self.save(current)
 
+        # A process restart cannot prove that a local orphan stopped. Keep
+        # cancellation unresolved rather than reporting successful cleanup.
+        failed_ids = {item["job_id"] for item in failures}
+        async with self.storage.engine.connect() as connection:
+            cancelled = (
+                (
+                    await connection.execute(
+                        select(jobs.c.record).where(jobs.c.status == "cancelled")
+                    )
+                )
+                .scalars()
+                .all()
+            )
+        for value in cancelled:
+            current = Job.model_validate(value)
+            if current.cancellation and current.cancellation.cleanup == "pending":
+                remote = bool(
+                    current.compute_target
+                    or (
+                        current.execution
+                        and current.execution.adapter in {"skypilot", "skypilot-target"}
+                    )
+                )
+                current.cancellation.finished_at = now()
+                current.cancellation.cleanup = (
+                    "succeeded" if remote and current.id not in failed_ids else "failed"
+                )
+                current.error = (
+                    "Cancellation reconciled after restart."
+                    if current.cancellation.cleanup == "succeeded"
+                    else "Cancellation was interrupted; execution cleanup needs verification."
+                )
+                await self.save(current)
         await self.reconcile_simulations()
 
     async def reconcile_simulations(self) -> None:

@@ -63,7 +63,9 @@ async function openCompute(page: Page) {
 
 async function openLocalCompute(page: Page) {
   await page.getByRole('link', { name: 'Settings', exact: true }).click();
-  await page.getByRole('button', { name: 'Local compute', exact: true }).click();
+  await page.getByRole('button', { name: 'Compute targets', exact: true }).click();
+  const setup = page.getByText('Local worker setup', { exact: true });
+  if (!(await page.getByRole('region', { name: 'Local runs', exact: true }).isVisible())) await setup.click();
   await expect(page.getByRole('region', { name: 'Local runs', exact: true })).toBeVisible();
 }
 
@@ -1021,7 +1023,7 @@ test('dashboard and Settings omit uninstalled cloud integrations and local setup
   await expect(page.getByRole('heading', { name: 'Resources & connections', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Check resources', exact: true })).toHaveCount(0);
   await page.getByRole('link', { name: 'Settings', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Local compute', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Compute targets', exact: true })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Local runs', exact: true })).toHaveCount(0);
   await expect(page.getByRole('region', { name: 'Google Cloud', exact: true })).toHaveCount(0);
   await expect(page.getByLabel('Hugging Face access token', { exact: true })).toHaveCount(0);

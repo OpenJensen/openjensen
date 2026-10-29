@@ -6,13 +6,19 @@ Select or create a project from the project menu, then open a page from the side
 
 Open Models or Datasets, or inspect the current resource and connection status.
 
+## Jobs
+
+Open **Jobs** to review work across the selected project, or use a module’s **Jobs** view for its history. Choose **New job**, select an operation and an available compute target, then configure the inputs in its workspace. Maintenance remains in Settings and Modules.
+
+Open a job for its status, inputs, results and source jobs. **Timeline** explains lifecycle changes; **Logs** follows retained messages with severity, output and text filters. Pause live following to inspect earlier output, or download the redacted diagnostics bundle. Failed jobs retain an explanation and available technical evidence. Cancellation stays pending until execution and cleanup are reconciled.
+
 ## Initial setup
 
 Connect the computer beside your SO-101, preview its camera, and work through **Connect → Motor IDs → Calibrate → Teleoperate → Record**. USB access stays on that computer; captures stay there until you add them to a project.
 
 ## AI teleoperation
 
-Open **ROBOT LAB → AI teleoperation** for physical SO101 control. **Agent Control** opens with **Physical SO101** selected; choose the USB port, saved calibration and workspace camera before explicitly enabling movement. Describe the task and review the selected provider, current observation and run limits. A proposed action is separate from measured execution and verified task completion.
+Open **ROBOT LAB → AI teleoperation** for saved session jobs, then choose **New job** or **Workspace** for physical SO101 control. **Agent Control** opens with **Physical SO101** selected; choose the USB port, saved calibration and workspace camera before explicitly enabling movement. Describe the task and review the selected provider, current observation and run limits. A proposed action is separate from measured execution and verified task completion.
 
 ## Datasets
 
@@ -20,11 +26,11 @@ Inspect a public dataset or import local files. Open an episode to play its came
 
 ## Real to sim
 
-Open **Real to sim** under **Data** to turn a real dataset episode into an Isaac Sim scene. Choose the dataset, episode, agent model and power, then generate a scene. Saved runs retain source evidence, agent settings and scene bundles; Isaac rendering, physics validation and calibrated replay remain separate acceptance steps.
+Open **Real to sim** under **Data** to turn a real dataset episode into an Isaac Sim scene. Choose **New job**, then select the dataset, episode, agent model and power before generating a scene. Saved runs retain source evidence, agent settings and scene bundles; Isaac rendering, physics validation and calibrated replay remain separate acceptance steps.
 
 ## Augmentation
 
-Select a dataset, camera and clip interval. Choose an appearance edit, review the request, and compare the returned clips before downloading.
+Choose **New job** or **Workspace**, then select a dataset, camera and clip interval. Choose an appearance edit, review the request, and compare the returned clips before downloading.
 
 ## Fine-tune
 
@@ -48,7 +54,7 @@ Choose simulation, observation replay or inference. Select the runtime and input
 
 ## Decision Lab
 
-Select the configured scorer, enter a state and unique criteria, and start scoring.
+Choose **New job** or **Workspace**, enter a state and unique criteria, and start a scoring job. Its result remains saved when you leave the page. Recover an unresolved submission before starting another job.
 
 ## Models
 
@@ -60,6 +66,10 @@ Open an application job or a configured external run to inspect its saved status
 
 ## Settings
 
-Use Modules to manage optional features, Compute to manage workers and provider connections, and Workflow settings to edit recipes. Diagnostics starts checks for the selected project.
+Use **Settings → Compute targets** to add local machines, registered SSH pools, Slurm clusters, or cloud resources. Give each target a name, select a registered worker runtime, set resource requests and concurrency limits, and enable it when jobs may use it. Several targets can use the same infrastructure. A configuration check verifies prerequisites without allocating compute; actual capacity and worker compatibility are checked when a job starts.
+
+Remote targets use SkyPilot infrastructure and provider sign-in configured by the server operator. The bundled **Portable policy worker** recipe supports remote jobs without installing a local machine learning environment. Registered connection references select an API server and workspace without exposing credentials. Targets list only the operations supported by their selected runtime. A saved target does not establish that every model or workload is supported on that destination.
+
+**Local worker setup** manages compatible workers already on this machine. Use Modules to manage optional features, Cloud & APIs for provider connections, and Workflow settings to edit recipes. Diagnostics starts checks for the selected project.
 
 Open the version menu and choose **Update & restart** when an update is available. Normal macOS and Linux installations started with `jensen serve` handle updates automatically, without a separate update configuration. The app prepares the new version, backs up the workspace and restarts; a failed update restores the previous version and data. Finish active jobs and stop Robot Lab before updating.

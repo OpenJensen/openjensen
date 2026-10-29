@@ -74,7 +74,7 @@ const labels: Record<string, string> = {
 const artifactUrl = (id: string, name: string) =>
   `${apiOrigin}/api/v1/scenes/${id}/artifact?name=${encodeURIComponent(name)}`;
 
-export function SceneGenerationPanel({ projectId }: { projectId?: string }) {
+export function SceneGenerationPanel({ projectId, preferredJobId }: { projectId?: string; preferredJobId?: string }) {
   const options = useQuery({
     queryKey: ['scene-options'],
     queryFn: () => agentRequest<Options>('/scene-generation/options'),
@@ -110,7 +110,7 @@ export function SceneGenerationPanel({ projectId }: { projectId?: string }) {
         item.profile?.revision === options.data?.supported_revision,
     ) ?? [];
   const selected = candidates.find((item) => item.job_id === (pending?.source_job_id ?? sourceId)) ?? candidates[0];
-  const latest = runs.data?.[0];
+  const latest = preferredJobId ? runs.data?.find((run) => run.id === preferredJobId) : runs.data?.[0];
   const running = runs.data?.some(active);
   const storageKey = `jensen-scene-request:${projectId}`;
 

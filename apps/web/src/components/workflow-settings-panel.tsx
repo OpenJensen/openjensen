@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect } from 'react';
+import { ComputeTargetsSettings } from '@/components/compute-targets-settings';
+import { WorkbenchDisclosure } from './workbench-disclosure';
 import { LocalComputeSettingsPanel } from '@/components/local-compute-settings';
 import { useWorkspace } from '@/components/workspace-context';
 import { WorkflowDiagnostics } from './workflow-diagnostics';
@@ -32,7 +34,7 @@ export function WorkflowSettingsPanel({
     <section className={`panel ${tab === 'compute' ? 'compute-settings-panel' : 'workflow-panel'}`}>
       <div className="section-tabs settings-tabs">
         <button className={`section-tab ${tab === 'compute' ? 'active' : ''}`} onClick={() => setTab('compute')}>
-          Local compute
+          Compute targets
         </button>
         <button className={`section-tab ${tab === 'settings' ? 'active' : ''}`} onClick={() => setTab('settings')}>
           Workflow settings
@@ -50,17 +52,21 @@ export function WorkflowSettingsPanel({
         </p>
       )}
       {tab === 'compute' ? (
-        trainingInstalled ? (
-          <LocalComputeSettingsPanel />
-        ) : (
-          <div className="cloud-settings">
-            <h2>Local compute</h2>
-            <p>Install Training from Modules to configure local runs.</p>
-            <button className="secondary-button" onClick={() => navigateStage('modules')}>
-              Open Modules
-            </button>
-          </div>
-        )
+        <>
+          <ComputeTargetsSettings />
+          <WorkbenchDisclosure title="Local worker setup">
+            {trainingInstalled ? (
+              <LocalComputeSettingsPanel />
+            ) : (
+              <div className="cloud-settings">
+                <p>Install Training from Modules to configure local workers.</p>
+                <button className="secondary-button" onClick={() => navigateStage('modules')}>
+                  Open Modules
+                </button>
+              </div>
+            )}
+          </WorkbenchDisclosure>
+        </>
       ) : tab === 'settings' ? (
         <WorkflowSettingsForm
           preferences={preferences}
