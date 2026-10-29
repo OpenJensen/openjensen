@@ -82,6 +82,50 @@ class ReadinessTests(unittest.TestCase):
         )
         self.assertTrue(all(not b.writes for b in self.buses))
 
+    def test_saved_follower_uses_its_own_port_after_leader_setup(self):
+        revisions = self.lab.calibration_revisions
+        revisions.mark_dirty("/dev/fake")
+        revisions.acknowledge("/dev/fake", "test-arm", "follower", self.profile)
+        leader = self.lab.calibration_path("test-leader", "leader")
+        leader.parent.mkdir(parents=True, exist_ok=True)
+        leader.write_text(json.dumps(CALIBRATION))
+        revisions.mark_dirty("/dev/leader")
+        revisions.acknowledge("/dev/leader", "test-leader", "leader", leader)
+        self.lab.assembled_state["port"] = "/dev/leader"
+        profiles = {p["robot_id"]: p for p in self.lab.status()["calibrations"]}
+        self.assertEqual(profiles["test-arm"]["setup_port"], "/dev/fake")
+        self.assertTrue(profiles["test-arm"]["setup_fresh"])
+        self.assertEqual(profiles["test-leader"]["setup_port"], "/dev/leader")
+        self.assertTrue(profiles["test-leader"]["setup_fresh"])
+        self.assertEqual(self.buses, [])
+        revisions.mark_dirty("/dev/fake")
+        profiles = {p["robot_id"]: p for p in self.lab.status()["calibrations"]}
+        self.assertFalse(profiles["test-arm"]["setup_fresh"])
+        self.assertTrue(profiles["test-leader"]["setup_fresh"])
+        with self.assertRaisesRegex(ValueError, "Motor IDs changed"):
+            self.lab.load_calibration("test-arm", "follower", "/dev/fake")
+
+    def test_existing_acknowledgements_resolve_name_without_recalibration(self):
+        revisions = self.lab.calibration_revisions
+        revisions.mark_dirty("/dev/fake")
+        revisions.acknowledge("/dev/fake", "test-arm", "follower", self.profile)
+        legacy = json.loads(revisions.path.read_text())
+        del legacy["connections"]
+        revisions.path.write_text(json.dumps(legacy))
+        self.lab.assembled_state["port"] = "/dev/unrelated"
+        profile = self.lab.status()["calibrations"][0]
+        self.assertEqual(profile["setup_port"], "/dev/fake")
+        self.assertTrue(profile["setup_fresh"])
+        self.assertEqual(self.buses, [])
+
+    def test_unbound_profiles_do_not_inherit_another_arms_stale_revision(self):
+        self.lab.calibration_revisions.mark_dirty("/dev/unrelated")
+        self.lab.assembled_state["port"] = "/dev/unrelated"
+        profile = self.lab.status()["calibrations"][0]
+        self.assertIsNone(profile["setup_port"])
+        self.assertTrue(profile["setup_fresh"])
+        self.assertEqual(self.buses, [])
+
     def test_missing_ids_never_claim_calibration_matches(self):
         def factory(*args):
             bus = self.factory(*args)

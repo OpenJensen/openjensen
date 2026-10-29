@@ -315,8 +315,11 @@ class RobotLab:
                 raise ValueError("No valid saved calibration")
             raw = path.read_bytes()
             valid_calibration(json.loads(raw))
+            if port is None:
+                port = self.calibration_revisions.connection(robot_id, role, path)
             result.update(
                 valid=True,
+                setup_port=port,
                 sha256=hashlib.sha256(raw).hexdigest(),
                 setup_fresh=not port
                 or self.calibration_revisions.fresh(port, robot_id, role, path),
@@ -339,9 +342,7 @@ class RobotLab:
                     safe_slug(path.stem)
                 except ValueError:
                     continue
-                calibrations.append(
-                    self.profile_info(path.stem, role, self.assembled_state.get("port"))
-                )
+                calibrations.append(self.profile_info(path.stem, role))
         writer = self.writer
         with self.lifecycle_lock:
             assembled = json.loads(json.dumps(self.assembled_state))
@@ -1083,6 +1084,10 @@ class RobotLab:
                         raise RequestError(
                             "Motor calibration differs from the saved profile; recalibrate "
                             "before motion"
+                        )
+                    if joints == JOINTS:
+                        self.calibration_revisions.acknowledge(
+                            port, robot_id, "follower", self.calibration_path(robot_id, "follower")
                         )
                     bus.disable()
                     raw = validate_raw(bus.positions(), calibration)

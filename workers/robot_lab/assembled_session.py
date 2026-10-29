@@ -66,6 +66,15 @@ class CalibrationRevisions:
                 )
             if any(not isinstance(entry, dict) for entry in record["calibrations"].values()):
                 raise ValueError("Motor setup calibration acknowledgements are invalid")
+        connections = value.get("connections", {})
+        if not isinstance(connections, dict) or any(
+            not isinstance(key, str)
+            or not isinstance(entry, dict)
+            or not isinstance(entry.get("port"), str)
+            or not isinstance(entry.get("sha256"), str)
+            for key, entry in connections.items()
+        ):
+            raise ValueError("Saved robot connections are invalid")
         return value
 
     @staticmethod
@@ -88,14 +97,34 @@ class CalibrationRevisions:
     def acknowledge(self, port, robot_id, role, path):
         with self.lock:
             value = self._read()
+            key = role + "/" + robot_id
+            sha256 = hashlib.sha256(Path(path).read_bytes()).hexdigest()
+            value.setdefault("connections", {})[key] = {"port": port, "sha256": sha256}
             record = value["ports"].get(self._key(port))
-            if record is None:
-                return
-            record["calibrations"][role + "/" + robot_id] = {
-                "revision": record["revision"],
-                "sha256": hashlib.sha256(Path(path).read_bytes()).hexdigest(),
-            }
+            if record is not None:
+                record["calibrations"][key] = {
+                    "revision": record["revision"],
+                    "sha256": sha256,
+                }
             durable_json(self.path, value)
+
+    def connection(self, robot_id, role, path):
+        """Return this calibration's saved port, never another arm's setup port."""
+        with self.lock:
+            value = self._read()
+            key = role + "/" + robot_id
+            sha256 = hashlib.sha256(Path(path).read_bytes()).hexdigest()
+            saved = value.get("connections", {}).get(key)
+            if saved is not None:
+                return saved["port"] if saved["sha256"] == sha256 else None
+            # Older installations already recorded named acknowledgements per port.
+            ports = [
+                record.get("port")
+                for record in value["ports"].values()
+                if record["calibrations"].get(key, {}).get("sha256") == sha256
+                and isinstance(record.get("port"), str)
+            ]
+            return ports[0] if len(ports) == 1 else None
 
     def fresh(self, port, robot_id, role, path):
         with self.lock:

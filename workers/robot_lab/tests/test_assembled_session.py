@@ -381,3 +381,18 @@ class ServerSetupTests(unittest.TestCase):
         revisions.path.write_text('{"version":1,"ports":{"bad":null}}')
         with self.assertRaises(ValueError):
             reloaded.fresh("/dev/fake", "arm", "follower", path)
+
+    def test_remembering_a_name_does_not_invalidate_other_unmodified_profiles(self):
+        path = Path(self.temp.name) / "profile.json"
+        path.write_text("{}")
+        revisions = CalibrationRevisions(self.temp.name)
+        revisions.acknowledge("/dev/fake", "arm", "follower", path)
+        restored = CalibrationRevisions(self.temp.name)
+        self.assertEqual(restored.connection("arm", "follower", path), "/dev/fake")
+        self.assertTrue(restored.fresh("/dev/fake", "other-arm", "follower", path))
+        self.assertFalse(restored.required("/dev/fake"))
+        revisions.mark_dirty("/dev/fake")
+        self.assertEqual(restored.connection("arm", "follower", path), "/dev/fake")
+        self.assertFalse(restored.fresh("/dev/fake", "arm", "follower", path))
+        path.write_text('{"changed":true}')
+        self.assertIsNone(restored.connection("arm", "follower", path))
