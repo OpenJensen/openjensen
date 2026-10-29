@@ -68,6 +68,12 @@ export function RobotLabTeleoperate({ lab }: { lab: RobotLabState }) {
               </Notice>
             )
           ))}
+        {state?.controller?.encoder_range_tolerance_ticks !== undefined && (
+          <p className="robot-lab-subtle">
+            Encoder jitter allowance: {state.controller.encoder_range_tolerance_ticks} ticks during control. Movement
+            targets stay inside the saved range.
+          </p>
+        )}
         {identity}
         <div className="robot-lab-mode-grid" role="group" aria-label="Control mode">
           {(
