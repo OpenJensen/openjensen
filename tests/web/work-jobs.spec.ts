@@ -144,7 +144,7 @@ async function fixture(page: Page) {
     };
     return route.fulfill({ json: replies[path] ?? [] });
   });
-  return { calls };
+  return { calls, items };
 }
 
 test('shared job detail explains failure and exposes correlated logs', async ({ page }) => {
@@ -197,4 +197,140 @@ test('shared job filters remain usable at a narrow viewport', async ({ page }) =
   expect(
     await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1),
   ).toBe(true);
+});
+
+async function sceneResultsFixture(page: Page, status = 'succeeded') {
+  const state = await fixture(page);
+  state.items.push(
+    job('scene-result', {
+      operation: 'scene.generate',
+      module: 'real-to-sim',
+      title: 'Dataset reconstruction',
+      status,
+      source_status: status,
+      stage: status === 'running' ? 'simulating' : 'complete',
+      message: 'Recorded episode simulation',
+      outputs: [{ label: 'Source frame', url: '/api/v1/jobs/scene-result/scene/artifact?name=source-0.jpg' }],
+    }),
+  );
+  await page.route('**/api/v1/projects/project/work-jobs/*/failure', (route) => route.fulfill({ json: null }));
+  return state;
+}
+
+test('shared scene job shows registered environment images and replay inline', async ({ page }) => {
+  await sceneResultsFixture(page);
+  const names = ['simulation/front.png', 'simulation/side.png', 'simulation/overview.png'];
+  const source = Array.from({ length: 20 }, (_, index) => ({
+    role: 'source_image',
+    path: `source-${index}.jpg`,
+    label: `Source frame ${index}`,
+  }));
+  const media = [
+    { role: 'environment_image', path: 'not-registered.png', label: 'Unregistered output' },
+    { role: 'environment_image', path: '../private.png', label: 'Outside output' },
+    ...names.map((path, index) => ({ role: 'environment_image', path, label: `Environment view ${index + 1}` })),
+    { role: 'episode_replay', path: 'simulation/replay.mp4', label: 'Episode 7 replay', episode_index: 7 },
+    ...source,
+  ];
+  await page.route('**/api/v1/jobs/scene-result/scene', (route) =>
+    route.fulfill({
+      json: {
+        id: 'generated-scene',
+        job_id: 'scene-result',
+        project_id: 'project',
+        artifacts: [
+          ...names,
+          'simulation/replay.mp4',
+          'scene-bundle.zip',
+          '../private.png',
+          ...source.map((item) => item.path),
+        ],
+        media,
+        gates: { isaac_runtime: true, calibrated_replay: false },
+        source: { resource_cleanup: 'cluster_removed', replay_episode: 7 },
+      },
+    }),
+  );
+  const mediaRequests: string[] = [];
+  await page.route('**/api/v1/jobs/scene-result/scene/artifact?*', (route) => {
+    mediaRequests.push(new URL(route.request().url()).searchParams.get('name')!);
+    return route.fulfill({
+      contentType: 'image/png',
+      body: Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+        'base64',
+      ),
+    });
+  });
+  await page.goto('/real-to-sim/');
+  await page.locator('[data-job-id="core:scene-result"]').click();
+  const images = page.getByRole('region', { name: 'Environment images', exact: true });
+  await expect(images.getByRole('img')).toHaveCount(3);
+  for (let index = 0; index < names.length; index++) {
+    const url = await images
+      .getByRole('img', { name: `Environment view ${index + 1}`, exact: true })
+      .getAttribute('src');
+    expect(new URL(url!, page.url()).pathname).toBe('/api/v1/jobs/scene-result/scene/artifact');
+    expect(new URL(url!, page.url()).searchParams.get('name')).toBe(names[index]);
+  }
+  const replay = page.getByLabel('Episode 7 replay', { exact: true });
+  await expect(replay).toHaveAttribute('src', /\/jobs\/scene-result\/scene\/artifact\?name=simulation%2Freplay.mp4$/);
+  await expect(replay).toHaveAttribute('controls', '');
+  await expect(replay).toHaveAttribute('preload', 'metadata');
+  await expect(page.getByText('Calibration unverified', { exact: true })).toBeVisible();
+  await expect(page.getByRole('img', { name: /Source frame/ })).toHaveCount(0);
+  await expect(page.getByRole('img', { name: 'Unregistered output', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Source frame', exact: true })).not.toBeVisible();
+  await page.getByText('Simulation details', { exact: true }).click();
+  await expect(page.getByText('Released', { exact: true })).toBeVisible();
+  expect(mediaRequests.every((name) => names.includes(name) || name === 'simulation/replay.mp4')).toBe(true);
+});
+
+test('a queued scene result stays pending and terminal transition fetches its final media', async ({ page }) => {
+  const state = await sceneResultsFixture(page, 'running');
+  let ready = false;
+  await page.route('**/api/v1/jobs/scene-result/scene', (route) =>
+    ready
+      ? route.fulfill({
+          json: {
+            id: 'generated-scene',
+            job_id: 'scene-result',
+            project_id: 'project',
+            artifacts: ['simulation/front.png'],
+            media: [{ role: 'environment_image', path: 'simulation/front.png', label: 'Finished environment' }],
+            gates: { isaac_runtime: true },
+            source: { resource_cleanup: 'cluster_removed' },
+          },
+        })
+      : route.fulfill({ status: 404, json: { detail: 'Worker queued' } }),
+  );
+  await page.goto('/jobs/');
+  await page.locator('[data-job-id="core:scene-result"]').click();
+  await expect(page.getByRole('status').filter({ hasText: 'Simulation results pending' })).toBeVisible();
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  ready = true;
+  const item = state.items.find((item) => item.id === 'core:scene-result')!;
+  item.status = 'succeeded';
+  item.source_status = 'succeeded';
+  await expect(page.getByRole('img', { name: 'Finished environment', exact: true })).toBeVisible({ timeout: 10000 });
+  await expect(page.getByText('Simulation results pending', { exact: true })).toHaveCount(0);
+});
+
+test('a scene result from another job cannot expose its media in shared results', async ({ page }) => {
+  await sceneResultsFixture(page);
+  await page.route('**/api/v1/jobs/scene-result/scene', (route) =>
+    route.fulfill({
+      json: {
+        id: 'other-scene',
+        job_id: 'different-job',
+        project_id: 'project',
+        artifacts: ['simulation/front.png'],
+        media: [{ role: 'environment_image', path: 'simulation/front.png', label: 'Other job environment' }],
+      },
+    }),
+  );
+  await page.goto('/jobs/');
+  await page.locator('[data-job-id="core:scene-result"]').click();
+  await expect(page.getByRole('alert')).toContainText('Simulation results unavailable');
+  await expect(page.getByRole('img', { name: 'Other job environment', exact: true })).toHaveCount(0);
 });

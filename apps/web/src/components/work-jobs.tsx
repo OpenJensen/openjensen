@@ -7,6 +7,7 @@ import { WorkbenchDisclosure } from './workbench-disclosure';
 import { Icon } from './icon';
 import { JobHistory } from './job-history';
 import { WorkJobLogs } from './work-job-logs';
+import { WorkJobSceneResults } from './work-job-scene-results';
 import { workJobs, workStatusLabels, isWorkActive, type WorkJob, type JobOperation } from '@/lib/work-jobs';
 import { computeTargets } from '@/lib/compute-targets';
 import { selectedJobCompute, saveJobCompute } from '@/lib/job-compute-selection';
@@ -286,7 +287,22 @@ function JobDetail({
           </section>
           <section className="panel">
             <h3>Results</h3>
-            {job.outputs.length ? (
+            {job.operation === 'scene.generate' ? (
+              <>
+                <WorkJobSceneResults job={job} />
+                {!!job.outputs.length && (
+                  <WorkbenchDisclosure title="Files">
+                    <div className="workbench-actions">
+                      {job.outputs.map((output) => (
+                        <a key={output.url} className="secondary-button" href={`${apiOrigin}${output.url}`}>
+                          {output.label}
+                        </a>
+                      ))}
+                    </div>
+                  </WorkbenchDisclosure>
+                )}
+              </>
+            ) : job.outputs.length ? (
               <div className="workbench-actions">
                 {job.outputs.map((output) => (
                   <a key={output.url} className="secondary-button" href={`${apiOrigin}${output.url}`}>
