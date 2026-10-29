@@ -210,3 +210,34 @@ test('legacy teaching URL keeps the canonical AI teleoperation navigation', asyn
   expect(writes).toEqual([]);
   expect(errors).toEqual([]);
 });
+
+test('sidebar preloads routes without mounting their tools or submitting work', async ({ page }) => {
+  const { writes, errors } = await fixture(page);
+  const destinationReads: string[] = [];
+  page.on('request', (request) => {
+    const path = new URL(request.url()).pathname;
+    if (path === '/api/v1/augmentation-options') destinationReads.push(path);
+  });
+  const prefetched = page.waitForResponse((response) => {
+    const path = new URL(response.url()).pathname;
+    return path.startsWith('/augmentation/') && path.endsWith('.txt');
+  });
+  await page.goto('/dashboard/');
+  const link = page
+    .getByRole('navigation', { name: 'Policy lifecycle' })
+    .getByRole('link', { name: 'Augmentation', exact: true });
+  await link.scrollIntoViewIfNeeded();
+  expect((await prefetched).status()).toBe(200);
+  await expect(page).toHaveURL(/\/dashboard\/$/);
+  expect(destinationReads).toEqual([]);
+  expect(writes).toEqual([]);
+  await page.evaluate(() => {
+    (window as any).__preloadedNavigation = 'same document';
+  });
+  await link.click();
+  await expect(page.getByRole('heading', { name: 'Augmentation', level: 1, exact: true })).toBeVisible();
+  await expect.poll(() => destinationReads.length).toBeGreaterThan(0);
+  expect(await page.evaluate(() => (window as any).__preloadedNavigation)).toBe('same document');
+  expect(writes).toEqual([]);
+  expect(errors).toEqual([]);
+});
