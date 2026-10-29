@@ -8700,6 +8700,31 @@
         ]
       }
     },
+    "/api/v1/agent/openai/models": {
+      "get": {
+        "operationId": "openai_models_api_v1_agent_openai_models_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "title": "Response Openai Models Api V1 Agent Openai Models Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Openai Models",
+        "tags": [
+          "Agent Control"
+        ]
+      }
+    },
     "/api/v1/agent/providers": {
       "get": {
         "operationId": "providers_api_v1_agent_providers_get",

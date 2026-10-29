@@ -29,6 +29,21 @@ def service(request: Request) -> AgentControl:
 AgentDep = Annotated[AgentControl, Depends(service)]
 
 
+@router.get("/agent/openai/models", response_model=list[str])
+async def openai_models(agent: AgentDep):
+    from vla_platform.agent_control.model_catalog import ModelCatalogError, list_openai_models
+
+    if not agent.profiles.integration_installed():
+        raise AgentError("Install OpenAI in Modules before loading models", 409)
+    key = agent.profiles.shared_key()
+    if not key:
+        raise AgentError("Save an OpenAI API key in Cloud & APIs before loading models", 422)
+    try:
+        return await list_openai_models(key)
+    except ModelCatalogError as error:
+        raise AgentError(str(error), 503) from None
+
+
 @router.get("/agent/providers", response_model=list[ProviderStatus])
 async def providers(agent: AgentDep):
     return agent.profiles.list()
