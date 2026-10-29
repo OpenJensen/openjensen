@@ -57,7 +57,7 @@ export function RobotLabCalibrate({ lab }: { lab: RobotLabState }) {
         </div>
         {calibrationError && <HardwareNotice label="Calibration error" message={calibrationError} />}
         {calibration?.recoverable ? (
-          <Notice kind="warning">
+          <Notice kind={calibrationError ? 'warning' : 'info'}>
             <strong>Calibration paused</strong>
             <p>
               {calibration.interrupted_stage === 'center' ||
@@ -73,6 +73,8 @@ export function RobotLabCalibrate({ lab }: { lab: RobotLabState }) {
                   'Captured calibration resumed. Torque remains off.',
                   robotApi.resumeCalibration,
                   ownSession,
+                  true,
+                  'resume',
                 )
               }
             >
@@ -105,6 +107,8 @@ export function RobotLabCalibrate({ lab }: { lab: RobotLabState }) {
                   'Calibration started. Position each joint near its middle.',
                   () => robotApi.startCalibration(port, robotId, role),
                   ownSession,
+                  true,
+                  'start',
                 )
               }
             >
@@ -160,7 +164,8 @@ export function RobotLabCalibrate({ lab }: { lab: RobotLabState }) {
         {session?.mode === 'calibration' && calibration?.phase === 'ranges' && (
           <>
             <Notice>
-              Move each joint through its usable range without forcing it. Wrist roll uses its full encoder range.
+              Move each joint through its full travel without forcing it. Keep cables clear. Wrist roll uses its full
+              encoder range.
             </Notice>
             <div className="robot-lab-mapping-heading">
               <h3>Joint ranges</h3>
