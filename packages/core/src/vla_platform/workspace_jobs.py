@@ -176,7 +176,8 @@ def core_job(job):
         inputs=request,
         result=job.result.model_dump(mode="json") if job.result else None,
         outputs=links,
-        parent_ids=["core:" + ident for ident in parents],
+        parent_ids=["core:" + ident for ident in parents]
+        + (["scene:" + request["source_scene_id"]] if request.get("source_scene_id") else []),
         can_cancel=job.status not in TERMINAL,
     )
 

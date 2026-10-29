@@ -13,7 +13,8 @@ from vla_platform.job_observability import (
     ObservabilityError,
     ObservabilityPolicy,
 )
-from vla_platform.workspace_jobs import get_job
+from vla_platform.scenes.agent import SceneError
+from vla_platform.workspace_jobs import core_job, get_job
 
 router = APIRouter(prefix="/api/v1", tags=["Job diagnostics"])
 
@@ -25,6 +26,23 @@ async def context(request, project_id, key):
     job = await get_job(state, project_id, key)
     if job is None:
         raise HTTPException(404, "Job not found in this project")
+    if job.id.startswith("scene:"):
+        try:
+            run = state.scenes.get(job.source_id)
+        except SceneError:
+            raise HTTPException(404, "Job not found in this project") from None
+        if run.job_id:
+            owner = await state.execution.get(run.job_id)
+            if (
+                owner is None
+                or owner.project_id != project_id
+                or owner.kind != "scene.generate"
+                or getattr(owner.request, "request_id", None) != run.id
+            ):
+                raise HTTPException(404, "Job not found in this project")
+            # A scene alias remains stable in detail navigation, but its core
+            # supervisor owns diagnostics and the exported accepted request.
+            job = core_job(owner)
     try:
         store = getattr(state, "job_observability", None)
         if store is None:

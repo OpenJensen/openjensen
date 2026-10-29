@@ -414,3 +414,120 @@ def test_scene_still_needing_simulation_never_appears_fully_validated():
     assert core_job(job).status == "waiting"
     assert core_job(job).source_status == "succeeded"
     assert core_job(job).outputs
+
+
+def saved_scene_retry_fixture(client):
+    ident = project(client)
+    dataset = accept(
+        client, ident, submission(client.app.state.execution.settings.local_root)
+    ).json()
+    parent_request = SceneRequest(request_id="e" * 32, source_job_id=dataset["source_id"])
+    parent = Job(
+        id="parent-scene-job",
+        project_id=ident,
+        kind="scene.generate",
+        request=parent_request,
+        status="failed",
+        stage="simulation",
+        created_at=now(),
+        updated_at=now(),
+        result=SceneJobResult(
+            scene_id=parent_request.request_id,
+            validation_status="failed",
+            scene_artifacts=["scene.usda"],
+        ),
+    )
+    client.portal.call(client.app.state.execution._accept, parent, None)
+    run = SceneRun(
+        id=parent_request.request_id,
+        job_id=parent.id,
+        project_id=ident,
+        request=parent_request,
+        status="failed",
+        stage="simulation",
+        created_at=now(),
+        updated_at=now(),
+        message="Previous simulation failed",
+        artifacts=["scene.usda"],
+    )
+    folder = client.app.state.scenes.folder(run.id)
+    folder.mkdir(parents=True)
+    (folder / "scene.usda").write_text("#usda 1.0\n")
+    client.app.state.scenes.save(run)
+    child_request = SceneRequest(
+        request_id="f" * 32, source_job_id=dataset["source_id"], source_scene_id=run.id
+    )
+    child = Job(
+        id="child-scene-job",
+        project_id=ident,
+        kind="scene.generate",
+        request=child_request,
+        status="queued",
+        created_at=now(),
+        updated_at=now(),
+    )
+    client.portal.call(client.app.state.execution._accept, child, None)
+    return ident, dataset, parent, child, run
+
+
+def test_saved_scene_lineage_resolves_hidden_parent_and_preserves_artifacts(client, monkeypatch):
+    ident, dataset, parent, child, run = saved_scene_retry_fixture(client)
+    rows = client.get(f"/api/v1/projects/{ident}/work-jobs").json()
+    assert "scene:" + run.id not in {row["id"] for row in rows}
+    projected = next(row for row in rows if row["id"] == "core:" + child.id)
+    assert projected["parent_ids"] == [dataset["id"], "scene:" + run.id]
+
+    def forbidden(*args):
+        raise AssertionError("A direct parent lookup must not scan job history")
+
+    monkeypatch.setattr(client.app.state.scenes, "list", forbidden)
+    endpoint = f"/api/v1/projects/{ident}/work-jobs/scene:{run.id}"
+    detail = client.get(endpoint)
+    assert detail.status_code == 200 and detail.json()["id"] == "scene:" + run.id
+    assert detail.json()["outputs"][0]["label"] == "scene.usda"
+    artifact = client.get(detail.json()["outputs"][0]["url"])
+    assert artifact.status_code == 200 and artifact.text.startswith("#usda")
+    other = project(client, "Other project")
+    assert client.get(f"/api/v1/projects/{other}/work-jobs/scene:{run.id}").status_code == 404
+
+
+def test_scene_alias_diagnostics_use_the_scoped_core_owner(client):
+    import io
+    import zipfile
+
+    ident, dataset, parent, child, run = saved_scene_retry_fixture(client)
+    store = client.app.state.job_observability
+    store.record(parent.id, "Parent worker output", kind="log", stream="stderr")
+    store.failure(
+        parent.id,
+        stage="simulation",
+        message="Parent runtime failure",
+        code="WORKER_EXIT",
+        exit_code=1,
+    )
+    endpoint = f"/api/v1/projects/{ident}/work-jobs/scene:{run.id}"
+    logs = client.get(endpoint + "/logs").json()
+    assert any(row["message"] == "Parent worker output" for row in logs["records"])
+    assert all(row["job_id"] == "core:" + parent.id for row in logs["records"])
+    assert client.get(endpoint + "/failure").json()["exit_code"] == 1
+    archive = client.get(endpoint + "/diagnostics.zip")
+    assert archive.status_code == 200
+    with zipfile.ZipFile(io.BytesIO(archive.content)) as exported:
+        assert json.loads(exported.read("job.json"))["id"] == "core:" + parent.id
+        assert b"Parent worker output" in exported.read("diagnostics.jsonl")
+    # Canonical diagnostic identity never changes the alias used for navigation.
+    assert client.get(endpoint).json()["id"] == "scene:" + run.id
+    other = project(client, "Other project")
+    for suffix in ("logs", "failure", "diagnostics.zip"):
+        assert (
+            client.get(f"/api/v1/projects/{other}/work-jobs/scene:{run.id}/{suffix}").status_code
+            == 404
+        )
+    # Even a scene record pointing at a real core job in another project cannot
+    # turn its valid same-project alias into cross-project diagnostic access.
+    foreign = parent.model_copy(update={"id": "foreign-scene-job", "project_id": other})
+    client.portal.call(client.app.state.execution._accept, foreign, None)
+    run.job_id = foreign.id
+    client.app.state.scenes.save(run)
+    for suffix in ("logs", "failure", "diagnostics.zip"):
+        assert client.get(endpoint + "/" + suffix).status_code == 404
