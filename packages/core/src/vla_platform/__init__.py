@@ -1,3 +1,3 @@
 """GPU-independent application core. Native ML dependencies belong in workers."""
 
-__version__ = "0.1.17"
+__version__ = "0.1.18"
