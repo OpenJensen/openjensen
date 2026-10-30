@@ -1,9 +1,10 @@
 """Reconcile an attested local Linux robot service with the installed application.
 
 Pairing with a loopback URL is not proof of locality: it may be an SSH tunnel.
-Only a private installer receipt, matching service/process arguments and matching
-pairing credential permit replacement. Runtime, device data and credentials stay
-at their existing paths. No dependency installation or motor command is issued.
+Only an owned user service, matching live process arguments and matching private
+pairing credential permit replacement. Existing installer receipts must also
+match. Runtime, device data and credentials stay at their existing paths. No
+dependency installation or motor command is issued.
 """
 
 import configparser
@@ -323,12 +324,12 @@ def _reconcile(source, pairing_path, *, allow_update=False):
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             if attest(pairing) != local or not idle(pairing):
                 raise ValueError("The local robot service changed during update preparation")
-            return replace_sources(source, desired, installed, local, pairing)
+            return replace_sources(desired, installed, local, pairing)
     except OSError, ValueError, KeyError, TypeError, RuntimeError, subprocess.SubprocessError:
         return result("needs_update", HELP)
 
 
-def replace_sources(source, desired, installed, local, pairing):
+def replace_sources(desired, installed, local, pairing):
     operation = uuid.uuid4().hex
     candidate = installed.with_name(installed.name + ".candidate-" + operation)
     backup = installed.with_name(installed.name + ".rollback-" + operation)
