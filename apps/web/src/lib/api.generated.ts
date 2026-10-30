@@ -2060,6 +2060,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/robot-lab/calibration/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Robot Lab Get Calibration Export */
+        get: operations["robot_lab_get_calibration_export"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/robot-lab/calibration/finish": {
         parameters: {
             query?: never;
@@ -2071,6 +2088,23 @@ export interface paths {
         put?: never;
         /** Robot Lab Post Calibration Finish */
         post: operations["robot_lab_post_calibration_finish"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/robot-lab/calibration/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Robot Lab Post Calibration Import */
+        post: operations["robot_lab_post_calibration_import"];
         delete?: never;
         options?: never;
         head?: never;
@@ -10658,6 +10692,26 @@ export interface operations {
             };
         };
     };
+    robot_lab_get_calibration_export: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
     robot_lab_post_calibration_finish: {
         parameters: {
             query?: never;
@@ -10666,6 +10720,54 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    robot_lab_post_calibration_import: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /**
+                     * Confirm
+                     * @constant
+                     */
+                    confirm: "IMPORT CALIBRATION";
+                    /** Document */
+                    document: {
+                        [key: string]: unknown;
+                    };
+                    /** Port */
+                    port?: string | null;
+                    /**
+                     * Replace Existing
+                     * @default false
+                     */
+                    replace_existing?: boolean;
+                    /** Robot Id */
+                    robot_id: string;
+                    /**
+                     * Role
+                     * @enum {string}
+                     */
+                    role: "follower" | "leader";
+                };
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

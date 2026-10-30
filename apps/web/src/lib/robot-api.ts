@@ -43,7 +43,22 @@ export type RobotDiagnostics = {
   last_stop: RobotDiagnosticEvent | null;
   events: RobotDiagnosticEvent[];
 };
+export type MotorCalibration = {
+  id: number;
+  drive_mode: number;
+  homing_offset: number;
+  range_min: number;
+  range_max: number;
+};
+export type CalibrationDocument = {
+  format: 'openjensen.so101.calibration';
+  version: 1;
+  robot_id: string;
+  role: RobotRole;
+  calibration: Record<RobotJoint, MotorCalibration>;
+};
 export type RobotStatus = {
+  calibration_transfer?: { robot_id: string; role: RobotRole; verified: boolean; backup_created: boolean };
   diagnostics?: RobotDiagnostics;
   controller?: {
     name: string;
@@ -70,6 +85,7 @@ export type RobotStatus = {
     arm_readiness?: boolean;
     joint_sliders?: boolean;
     calibration_persistence?: boolean;
+    calibration_transfer?: boolean;
     partial_control?: boolean;
     rest_position?: boolean;
     move_to_middle?: boolean;
@@ -298,6 +314,15 @@ export const robotApi = {
     request<RobotStatus>('/setup/assembled/accept', { joint, motor_id }),
   finishAssembled: () => request<RobotStatus>('/setup/assembled/finish', { confirm: 'SAVE MOTOR IDS' }),
   cancelAssembled: () => request<RobotStatus>('/setup/assembled/cancel', {}),
+  exportCalibration: (robot_id: string, role: RobotRole) =>
+    request<CalibrationDocument>(`/calibration/export?${new URLSearchParams({ robot_id, role })}`),
+  importCalibration: (input: {
+    robot_id: string;
+    role: RobotRole;
+    document: unknown;
+    port?: string;
+    replace_existing: boolean;
+  }) => request<RobotStatus>('/calibration/import', { ...input, confirm: 'IMPORT CALIBRATION' }),
   startCalibration: (port: string, robot_id: string, role: RobotRole) =>
     request<RobotStatus>(
       '/calibration/start',

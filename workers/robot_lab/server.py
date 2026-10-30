@@ -121,11 +121,12 @@ def valid_calibration(value):
         raise RequestError("Calibration must contain all six joints")
     for joint, entry in value.items():
         if (
-            entry.get("id") != IDS[joint]
+            not isinstance(entry, dict)
+            or entry.get("id") != IDS[joint]
             or entry.get("drive_mode") != 0
             or not all(
                 isinstance(entry.get(key), int) and not isinstance(entry.get(key), bool)
-                for key in ("homing_offset", "range_min", "range_max")
+                for key in ("id", "drive_mode", "homing_offset", "range_min", "range_max")
             )
         ):
             raise RequestError("Calibration has invalid joint data")
@@ -417,6 +418,122 @@ class RobotLab:
             )
         return calibration
 
+    def calibration_export(self, robot_id, role):
+        with self.lock:
+            info = self.profile_info(robot_id, role)
+            if not info["valid"]:
+                raise RequestError(info["error"] or "No valid calibration to export")
+            return {
+                "format": "openjensen.so101.calibration",
+                "version": 1,
+                "robot_id": robot_id,
+                "role": role,
+                "calibration": self.load_calibration(robot_id, role),
+            }
+
+    def calibration_import(self, payload):
+        require(payload, "confirm", "IMPORT CALIBRATION")
+        if set(payload) - {"confirm", "robot_id", "role", "document", "port", "replace_existing"}:
+            raise RequestError("Invalid calibration import request")
+        robot_id, role = payload.get("robot_id"), payload.get("role")
+        path = self.calibration_path(robot_id, role)
+        replace = payload.get("replace_existing", False)
+        if type(replace) is not bool:
+            raise RequestError("Choose whether to replace the existing profile")
+        document = payload.get("document")
+        if not isinstance(document, dict):
+            raise RequestError("Choose a calibration JSON file")
+        if document.get("format") == "openjensen.so101.calibration":
+            if (
+                set(document) != {"format", "version", "robot_id", "role", "calibration"}
+                or type(document.get("version")) is not int
+                or document["version"] != 1
+            ):
+                raise RequestError("Unsupported calibration export version or fields")
+            safe_slug(document.get("robot_id"))
+            if document.get("role") != role:
+                raise RequestError(
+                    "This file is for a different arm role; select its leader or follower role"
+                )
+            document = document["calibration"]
+        calibration = valid_calibration(document)
+        fields = ("id", "drive_mode", "homing_offset", "range_min", "range_max")
+        if any(set(entry) != set(fields) for entry in calibration.values()):
+            raise RequestError("Calibration contains unsupported joint fields")
+        calibration = {joint: {key: calibration[joint][key] for key in fields} for joint in JOINTS}
+        with self.lock:
+            self._idle()
+            generation = self.generation
+            if path.is_symlink() or (path.exists() and not path.is_file()):
+                raise RequestError("Calibration destination must be a regular file")
+            if path.exists() and not replace:
+                raise RequestError(
+                    "Confirm replacing the existing calibration; a backup will be kept"
+                )
+            verified = payload.get("port") is not None
+            port = self._port(payload["port"]) if verified else None
+            if verified:
+                bus = self.bus_factory(port)
+                try:
+                    with bus.lock:
+                        bus.check_six()
+                        actual = bus.read_calibration()
+                        different = [
+                            joint.replace("_", " ")
+                            for joint in JOINTS
+                            if actual.get(joint) != calibration[joint]
+                        ]
+                        if different:
+                            raise RequestError(
+                                "Calibration file does not match the connected motors: "
+                                + ", ".join(different)
+                                + ". Choose the file from the computer that last "
+                                "calibrated this arm."
+                            )
+                finally:
+                    # Import verification is read only, including on failure.
+                    bus.close()
+            with self.stop_lock:
+                if generation != self.generation or self.stopping:
+                    raise RequestError("Calibration import cancelled by Stop")
+                backup = None
+                if path.exists():
+                    backup = path.with_name(path.stem + f".backup-{time.time_ns()}.json")
+                    shutil.copy2(path, backup)
+                    backup.chmod(0o600)
+                try:
+                    atomic_json(path, calibration)
+                    path.chmod(0o600)
+                    if verified:
+                        self.calibration_revisions.acknowledge(port, robot_id, role, path)
+                except Exception:
+                    if backup is not None:
+                        shutil.copy2(backup, path)
+                    else:
+                        path.unlink(missing_ok=True)
+                    raise
+                if verified and self.error in (
+                    "Motor calibration differs from the saved profile; recalibrate before motion",
+                    "Leader calibration differs from its saved profile",
+                ):
+                    self.error = None
+                self.diagnostics.emit(
+                    "calibration_imported",
+                    robot_id=robot_id,
+                    role=role,
+                    verified=verified,
+                    previous_profile_backed_up=backup is not None,
+                )
+            return {
+                **self.status(),
+                "calibration_transfer": {
+                    "robot_id": robot_id,
+                    "role": role,
+                    "verified": verified,
+                    "backup_created": backup is not None,
+                },
+            }
+
     def _port(self, value):
         if not isinstance(value, str) or value not in {
             entry["device"] for entry in self.port_provider()
@@ -517,6 +634,7 @@ class RobotLab:
                 "arm_readiness": hardware,
                 "calibration": hardware,
                 "calibration_persistence": hardware,
+                "calibration_transfer": True,
                 "control": hardware,
                 "lerobot_position_control": hardware,
                 "rest_position": hardware,
@@ -1940,6 +2058,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, lab.diagnostics.snapshot(full=True))
             if path == "/v1/status":
                 return self._send(200, lab.status())
+            if path == "/v1/calibration/export":
+                if set(query) != {"robot_id", "role"} or any(len(v) != 1 for v in query.values()):
+                    raise RequestError("Choose one calibration profile and arm role")
+                return self._send(
+                    200, lab.calibration_export(query["robot_id"][0], query["role"][0])
+                )
             if path == "/v1/devices":
                 return self._send(200, lab.devices())
             if path == "/v1/camera.jpg":
@@ -2030,6 +2154,8 @@ class Handler(BaseHTTPRequestHandler):
                 result = lab.assembled_action(path.rsplit("/", 1)[-1], payload)
             elif path == "/v1/setup/assembled/cancel":
                 result = lab.stop()
+            elif path == "/v1/calibration/import":
+                result = lab.calibration_import(payload)
             elif path == "/v1/calibration/start":
                 result = lab.calibration_start(payload)
             elif path == "/v1/calibration/center":

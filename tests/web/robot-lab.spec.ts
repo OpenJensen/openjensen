@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { fulfillApplicationUpdateRead } from './application-update-controls';
 import { expect, test, type Page } from '@playwright/test';
 import { selectProject } from './project-controls';
@@ -10,6 +11,9 @@ const pixel = Buffer.from(
   'base64',
 );
 const joints = ['shoulder_pan', 'shoulder_lift', 'elbow_flex', 'wrist_flex', 'wrist_roll', 'gripper'];
+const transferCalibration = Object.fromEntries(
+  joints.map((joint, i) => [joint, { id: i + 1, drive_mode: 0, homing_offset: 0, range_min: 100, range_max: 4000 }]),
+);
 const values = (value: number) => Object.fromEntries(joints.map((name) => [name, value]));
 function initialStatus(calibrated = false): any {
   return {
@@ -32,6 +36,7 @@ function initialStatus(calibrated = false): any {
       middle_tolerance: true,
       joint_sliders: true,
       calibration_persistence: true,
+      calibration_transfer: true,
       partial_control: true,
       move_to_middle: true,
       mapping_verification: true,
@@ -83,6 +88,7 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin') 
     stopError: null as string | null,
     centerError: null as string | null,
     calibrationStartError: null as string | null,
+    calibrationImportError: null as string | null,
     portsConnected: true,
     middleInProgress: false,
     encoderLag: false,
@@ -139,6 +145,39 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin') 
           ? route.fulfill({ status: 503, json: { detail: 'Camera disconnected.' } })
           : route.fulfill({ contentType: 'image/png', body: pixel });
       if (action === '/diagnostics') return route.fulfill({ json: { ...state.status.diagnostics, samples: [] } });
+      if (action === '/calibration/export')
+        return route.fulfill({
+          json: {
+            format: 'openjensen.so101.calibration',
+            version: 1,
+            robot_id: new URL(request.url()).searchParams.get('robot_id'),
+            role: new URL(request.url()).searchParams.get('role'),
+            calibration: transferCalibration,
+          },
+        });
+      if (action === '/calibration/import') {
+        if (state.calibrationImportError)
+          return route.fulfill({ status: 422, json: { detail: state.calibrationImportError } });
+        state.status.calibrations = [
+          ...state.status.calibrations.filter(
+            (profile: any) => profile.robot_id !== body.robot_id || profile.role !== body.role,
+          ),
+          {
+            robot_id: body.robot_id,
+            role: body.role,
+            path: 'imported-calibration.json',
+            valid: true,
+            sha256: 'imported-hash',
+          },
+        ];
+        state.status.calibration_transfer = {
+          robot_id: body.robot_id,
+          role: body.role,
+          verified: !!body.port,
+          backup_created: body.replace_existing,
+        };
+        return route.fulfill({ json: state.status });
+      }
       if (action === '/datasets') {
         state.robotDatasetReads++;
         return route.fulfill({ json: { datasets: state.status.datasets } });
@@ -498,6 +537,144 @@ test('arm role is visible throughout setup and keeps separate USB ports and name
   await expect(page.getByLabel('Follower USB port')).toHaveValue(port);
   await expect(page.getByLabel('Follower name', { exact: true })).toHaveValue('task-arm');
   expect(state.errors).toEqual([]);
+});
+
+test('calibration export downloads a portable file and imports into a different profile', async ({
+  page,
+}, testInfo) => {
+  const state = await fixture(page, true);
+  await tab(page, 'Calibrate').click();
+  const transfer = page.getByRole('region', { name: 'Transfer calibration', exact: true });
+  const downloadPromise = page.waitForEvent('download');
+  await transfer.getByRole('button', { name: 'Export calibration', exact: true }).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe('my-so101-follower-calibration.json');
+  const document = JSON.parse(await readFile((await download.path())!, 'utf8'));
+  expect(document.calibration).toEqual(transferCalibration);
+  expect(document.role).toBe('follower');
+  expect(state.writes).toEqual([]);
+  await page.getByLabel('Follower name', { exact: true }).fill('transferred-arm');
+  await page.getByRole('button', { name: 'Save name', exact: true }).click();
+  const chooser = page.waitForEvent('filechooser');
+  await transfer.getByRole('button', { name: 'Import calibration', exact: true }).click();
+  await (
+    await chooser
+  ).setFiles({
+    name: download.suggestedFilename(),
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(document)),
+  });
+  const review = transfer.getByRole('region', { name: 'Review calibration import', exact: true });
+  await expect(review).toContainText('my-so101 · follower');
+  await expect(review).toContainText('transferred-arm · follower');
+  expect(writes(state, '/calibration/import')).toHaveLength(0);
+  await page.screenshot({ path: testInfo.outputPath('calibration-import-review.png'), fullPage: true });
+  await review.getByRole('button', { name: 'Save imported calibration', exact: true }).click();
+  await expect(page.getByText('Calibration imported. Connected motor settings match.', { exact: true })).toBeVisible();
+  expect(writes(state, '/calibration/import')[0].body).toEqual({
+    robot_id: 'transferred-arm',
+    role: 'follower',
+    document,
+    port,
+    replace_existing: false,
+    confirm: 'IMPORT CALIBRATION',
+  });
+  expect(writes(state, '/control/start')).toEqual([]);
+  expect(writes(state, '/calibration/start')).toEqual([]);
+  expect(state.errors).toEqual([]);
+});
+
+test('calibration import previews raw LeRobot files and requires explicit replacement', async ({ page }) => {
+  const state = await fixture(page, true);
+  await tab(page, 'Calibrate').click();
+  await page.getByLabel('Calibration JSON file', { exact: true }).setInputFiles({
+    name: 'lerobot.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(transferCalibration)),
+  });
+  const review = page.getByRole('region', { name: 'Review calibration import', exact: true });
+  await expect(review).toContainText('LeRobot calibration file');
+  const save = review.getByRole('button', { name: 'Save imported calibration', exact: true });
+  await expect(save).toBeDisabled();
+  await review.getByRole('checkbox', { name: /Replace this profile/ }).check();
+  state.calibrationImportError = 'Calibration file does not match the connected motors: elbow flex.';
+  await save.click();
+  await expect(page.locator('.robot-lab').getByRole('alert')).toContainText(state.calibrationImportError);
+  await expect(review).toBeVisible();
+  await expect(page.getByText('Calibration imported. Connected motor settings match.', { exact: true })).toHaveCount(0);
+  expect(writes(state, '/calibration/import')[0].body.replace_existing).toBe(true);
+  expect(writes(state, '/control/start')).toEqual([]);
+});
+
+test('calibration import rejects invalid files and wrong arm roles before saving', async ({ page }) => {
+  const state = await fixture(page, true);
+  await tab(page, 'Calibrate').click();
+  const input = page.getByLabel('Calibration JSON file', { exact: true });
+  await input.setInputFiles({ name: 'broken.json', mimeType: 'application/json', buffer: Buffer.from('{') });
+  await expect(
+    page.getByRole('region', { name: 'Transfer calibration', exact: true }).getByRole('alert'),
+  ).toContainText('This file is not valid JSON.');
+  await input.setInputFiles({
+    name: 'leader.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(
+      JSON.stringify({
+        format: 'openjensen.so101.calibration',
+        version: 1,
+        role: 'leader',
+        robot_id: 'guide',
+        calibration: transferCalibration,
+      }),
+    ),
+  });
+  await expect(
+    page.getByRole('region', { name: 'Transfer calibration', exact: true }).getByRole('alert'),
+  ).toContainText('This file is for a leader arm.');
+  await input.setInputFiles({
+    name: 'bad-ranges.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(
+      JSON.stringify({
+        ...transferCalibration,
+        gripper: { id: 6, drive_mode: 0, homing_offset: 0, range_min: 4000, range_max: 100 },
+      }),
+    ),
+  });
+  await expect(
+    page.getByRole('region', { name: 'Transfer calibration', exact: true }).getByRole('alert'),
+  ).toContainText('Invalid calibration values for gripper.');
+  expect(writes(state, '/calibration/import')).toEqual([]);
+});
+
+test('calibration profiles can be imported offline without claiming motor verification', async ({ page }) => {
+  const state = await fixture(page);
+  state.portsConnected = false;
+  await page.getByRole('button', { name: 'Refresh devices', exact: true }).click();
+  await tab(page, 'Calibrate').click();
+  await page.getByLabel('Calibration JSON file', { exact: true }).setInputFiles({
+    name: 'offline.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(transferCalibration)),
+  });
+  await page.getByRole('button', { name: 'Save imported calibration', exact: true }).click();
+  await expect(
+    page.getByText('Calibration imported. Check the connected arm before control.', { exact: true }),
+  ).toBeVisible();
+  expect(writes(state, '/calibration/import')[0].body.port).toBeUndefined();
+  expect(writes(state, '/control/start')).toEqual([]);
+});
+
+test('calibration transfer explains an older companion instead of calling unsupported routes', async ({ page }) => {
+  const state = await fixture(page, true);
+  state.status.capabilities.calibration_transfer = false;
+  await page.getByRole('button', { name: 'Refresh devices', exact: true }).click();
+  await tab(page, 'Calibrate').click();
+  await expect(
+    page.getByText('Update the robot companion to transfer calibration files.', { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Export calibration', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Import calibration', exact: true })).toBeDisabled();
+  expect(state.writes).toEqual([]);
 });
 
 test('operator Stop clears the old page-closed warning and confirms completion', async ({ page }, testInfo) => {

@@ -4,11 +4,21 @@ from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
-from pydantic import BaseModel, ConfigDict, StrictBool, ValidationError, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, ValidationError, model_validator
 
 from vla_platform.robot_lab_bridge import RobotLabError, safe_id, strict_json
 
 router = APIRouter(prefix="/api/v1", tags=["Robot Lab"])
+
+
+class CalibrationImportRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    robot_id: str = Field(min_length=1, max_length=80, pattern=r"^[A-Za-z0-9_-]+$")
+    role: Literal["follower", "leader"]
+    document: dict
+    port: str | None = None
+    replace_existing: StrictBool = False
+    confirm: Literal["IMPORT CALIBRATION"]
 
 
 class RecordingFinishRequest(BaseModel):
@@ -62,6 +72,13 @@ async def proxy(path: str, request: Request):
                     raise ValueError
             except ValueError, UnicodeDecodeError, RecursionError:
                 raise HTTPException(422, "Supply a JSON object for this operation") from None
+        if path == "calibration/import":
+            try:
+                CalibrationImportRequest.model_validate(payload)
+            except ValidationError:
+                raise HTTPException(
+                    422, "Choose a calibration file, destination profile and arm role"
+                ) from None
         if path == "recording/finish":
             try:
                 RecordingFinishRequest.model_validate(payload)
@@ -88,7 +105,7 @@ async def proxy(path: str, request: Request):
 
 
 PROTOCOL = {
-    "GET": {"devices", "datasets", "camera.jpg", "diagnostics"},
+    "GET": {"devices", "datasets", "camera.jpg", "diagnostics", "calibration/export"},
     "POST": {
         "probe",
         "setup/motor",
@@ -101,6 +118,7 @@ PROTOCOL = {
         "setup/assembled/finish",
         "setup/assembled/cancel",
         "calibration/start",
+        "calibration/import",
         "calibration/center",
         "calibration/finish",
         "calibration/cancel",
@@ -150,12 +168,16 @@ for method, protocol_paths in PROTOCOL.items():
                     "required": False,
                     "content": {
                         "application/json": {
-                            "schema": RecordingFinishRequest.model_json_schema(),
+                            "schema": (
+                                CalibrationImportRequest
+                                if protocol_path == "calibration/import"
+                                else RecordingFinishRequest
+                            ).model_json_schema(),
                         }
                     },
                 }
             }
-            if protocol_path == "recording/finish"
+            if protocol_path in {"recording/finish", "calibration/import"}
             else None,
         )
 
