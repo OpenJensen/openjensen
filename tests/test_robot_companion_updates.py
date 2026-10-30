@@ -348,6 +348,19 @@ def test_missing_or_different_local_process_never_updates(service, monkeypatch):
     assert controls(service) == []
 
 
+def process_fixture(root, pid, args, children="", uids=None, started=12345):
+    folder = root / str(pid)
+    folder.mkdir()
+    (folder / "cmdline").write_bytes(b"\0".join(arg.encode() for arg in args) + b"\0")
+    identities = [updates.os.getuid()] * 4 if uids is None else uids
+    (folder / "status").write_text(f"Pid:\t{pid}\nUid:\t" + "\t".join(map(str, identities)) + "\n")
+    (folder / "stat").write_text(f"{pid} (fixture process) S " + "0 " * 18 + str(started))
+    child_list = folder / "task" / str(pid) / "children"
+    child_list.parent.mkdir(parents=True)
+    child_list.write_text(children)
+    return folder
+
+
 def test_group_wrapper_requires_exact_owned_descendant_arguments(tmp_path):
     expected = ["/runtime/python", "/source/server.py", "--port", "18101"]
     for pid, args, children in (
@@ -355,17 +368,92 @@ def test_group_wrapper_requires_exact_owned_descendant_arguments(tmp_path):
         (102, ["/bin/sh", "-c", "command"], "103"),
         (103, expected, ""),
     ):
-        folder = tmp_path / str(pid)
-        folder.mkdir()
-        (folder / "cmdline").write_bytes(b"\0".join(arg.encode() for arg in args) + b"\0")
-        child_list = folder / "task" / str(pid) / "children"
-        child_list.parent.mkdir(parents=True)
-        child_list.write_text(children)
+        process_fixture(tmp_path, pid, args, children)
     assert updates.process_matches(101, expected, descendants=True, proc_root=tmp_path)
     assert not updates.process_matches(101, expected, proc_root=tmp_path)
     assert not updates.process_matches(
         101, [*expected, "--unexpected"], descendants=True, proc_root=tmp_path
     )
+
+
+def test_nondumpable_root_owned_proc_directory_can_hold_current_user_process(tmp_path, monkeypatch):
+    args = ["/runtime/python", "/source/server.py"]
+    folder = process_fixture(tmp_path, 101, args)
+    original = updates.Path.stat
+    monkeypatch.setattr(
+        updates.Path,
+        "stat",
+        lambda self, **kwargs: (
+            SimpleNamespace(st_uid=0) if self == folder else original(self, **kwargs)
+        ),
+    )
+    assert folder.stat().st_uid == 0
+    assert updates.process_matches(101, args, proc_root=tmp_path)
+
+
+def test_exact_managed_setuid_sg_wrapper_can_lead_to_owned_python_child(tmp_path):
+    expected = ["/runtime/python", "/source/server.py"]
+    wrapper = ["/usr/bin/sg", "dialout", "-c", " ".join(expected)]
+    process_fixture(tmp_path, 101, wrapper, "102", uids=[updates.os.getuid(), 0, 0, 0])
+    process_fixture(tmp_path, 102, expected)
+    assert updates.process_matches(
+        101, expected, descendants=True, wrapper_arguments=wrapper, proc_root=tmp_path
+    )
+    with pytest.raises(ValueError, match="not owned"):
+        updates.process_matches(101, expected, descendants=True, proc_root=tmp_path)
+    with pytest.raises(ValueError, match="does not match"):
+        updates.process_matches(
+            101,
+            expected,
+            descendants=True,
+            wrapper_arguments=[*wrapper[:3], "/different/command"],
+            proc_root=tmp_path,
+        )
+
+
+def test_privileged_wrapper_never_counts_as_the_owned_python_process(tmp_path):
+    wrapper = ["/usr/bin/sg", "dialout", "-c", "command"]
+    process_fixture(tmp_path, 101, wrapper, uids=[updates.os.getuid(), 0, 0, 0])
+    assert not updates.process_matches(
+        101, wrapper, descendants=True, wrapper_arguments=wrapper, proc_root=tmp_path
+    )
+
+
+def test_root_descendant_is_rejected_even_below_attested_sg_wrapper(tmp_path):
+    expected = ["/runtime/python", "/source/server.py"]
+    wrapper = ["/usr/bin/sg", "dialout", "-c", " ".join(expected)]
+    process_fixture(tmp_path, 101, wrapper, "102", uids=[updates.os.getuid(), 0, 0, 0])
+    process_fixture(tmp_path, 102, expected, uids=[updates.os.getuid(), 0, 0, 0])
+    with pytest.raises(ValueError, match="not owned"):
+        updates.process_matches(
+            101, expected, descendants=True, wrapper_arguments=wrapper, proc_root=tmp_path
+        )
+
+
+@pytest.mark.parametrize("changed", [0, 1, 2, 3])
+def test_foreign_real_effective_saved_or_filesystem_uid_is_rejected(tmp_path, changed):
+    args = ["/runtime/python", "/source/server.py"]
+    uids = [updates.os.getuid()] * 4
+    uids[changed] += 1
+    process_fixture(tmp_path, 101, args, uids=uids)
+    with pytest.raises(ValueError, match="not owned"):
+        updates.process_matches(101, args, proc_root=tmp_path)
+
+
+def test_pid_reuse_during_command_inspection_is_rejected(tmp_path, monkeypatch):
+    args = ["/runtime/python", "/source/server.py"]
+    folder = process_fixture(tmp_path, 101, args)
+    original = updates.Path.read_bytes
+
+    def read_bytes(path):
+        result = original(path)
+        if path == folder / "cmdline":
+            (folder / "stat").write_text("101 (replacement) S " + "0 " * 18 + "99999")
+        return result
+
+    monkeypatch.setattr(updates.Path, "read_bytes", read_bytes)
+    with pytest.raises(ValueError, match="changed during inspection"):
+        updates.process_matches(101, args, proc_root=tmp_path)
 
 
 def test_command_deadline_caps_subprocess_timeout_and_expiration_blocks_launch(monkeypatch):

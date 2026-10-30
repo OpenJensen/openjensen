@@ -66,7 +66,31 @@ def remaining(maximum):
     return min(maximum, budget)
 
 
-def process_matches(pid, arguments, *, descendants=False, proc_root=Path("/proc")):
+def process_identity(process, pid, *, allow_setuid_wrapper=False):
+    status = dict(
+        line.split(":", 1)
+        for line in process.joinpath("status").read_text().splitlines()
+        if ":" in line
+    )
+    # A non-dumpable setgid wrapper can have a root-owned /proc directory while
+    # all its user identities remain the caller's. Check actual kernel UIDs,
+    # never infer process ownership from the procfs directory's metadata.
+    identities = [int(value) for value in status.get("Uid", "").split()]
+    allowed = identities == [os.getuid()] * 4 or (
+        allow_setuid_wrapper and identities == [os.getuid(), 0, 0, 0]
+    )
+    if not allowed or int(status.get("Pid", "-1")) != pid:
+        raise ValueError("The robot process is not owned by this user")
+    fields = process.joinpath("stat").read_text().rpartition(")")[2].split()
+    if len(fields) < 20:
+        raise ValueError("The robot process identity is unavailable")
+    # Kernel start time (field 22) plus credentials guard PID reuse/UID changes.
+    return (int(fields[19]), *identities)
+
+
+def process_matches(
+    pid, arguments, *, descendants=False, wrapper_arguments=None, proc_root=Path("/proc")
+):
     pending = [(pid, 0)]
     visited = set()
     while pending and len(visited) < 16:
@@ -75,13 +99,26 @@ def process_matches(pid, arguments, *, descendants=False, proc_root=Path("/proc"
             continue
         visited.add(current)
         process = proc_root / str(current)
-        if process.stat().st_uid != os.getuid():
-            raise ValueError("The robot process is not owned by this user")
+        allow_wrapper = (
+            depth == 0
+            and current == pid
+            and wrapper_arguments is not None
+            and len(wrapper_arguments) == 4
+            and wrapper_arguments[:3] == ["/usr/bin/sg", "dialout", "-c"]
+        )
+        identity = process_identity(process, current, allow_setuid_wrapper=allow_wrapper)
         running = process.joinpath("cmdline").read_bytes().rstrip(b"\0").decode().split("\0")
-        if running == arguments:
-            return True
-        if descendants and depth < 3:
+        owned = identity[1:] == (os.getuid(),) * 4
+        if not owned and (not allow_wrapper or running != wrapper_arguments):
+            raise ValueError("The privileged robot wrapper does not match its managed command")
+        children = []
+        if descendants and depth < 3 and (not owned or running != arguments):
             children = process.joinpath("task", str(current), "children").read_text().split()
+        if process_identity(process, current, allow_setuid_wrapper=allow_wrapper) != identity:
+            raise ValueError("The robot process changed during inspection")
+        if owned and running == arguments:
+            return True
+        if children:
             pending.extend((int(child), depth + 1) for child in children)
     return False
 
@@ -136,7 +173,12 @@ def service_info():
             raise ValueError("The robot group wrapper contains shell operations")
         arguments = shlex.split(arguments[3])
     pid = int(value["MainPID"])
-    if not process_matches(pid, arguments, descendants=wrapped):
+    if not process_matches(
+        pid,
+        arguments,
+        descendants=wrapped,
+        wrapper_arguments=launch_arguments if wrapped else None,
+    ):
         raise ValueError("The running robot process does not match the managed service")
     return {
         "arguments": arguments,
