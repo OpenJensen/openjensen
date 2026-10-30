@@ -226,6 +226,7 @@ class SafetyTests(unittest.TestCase):
         for reason in (
             "Robot Lab page was hidden; motor torque disabled",
             "Robot Lab page was closed; motor torque disabled",
+            "Browser heartbeat timed out; motor torque disabled",
         ):
             with self.subTest(reason=reason):
                 self.start()
