@@ -1078,6 +1078,31 @@ class SafetyTests(unittest.TestCase):
         self.assertEqual(self.lab.calibration_state["mins"]["shoulder_pan"], 1500)
         self.assertFalse(any(r == "Torque_Enable" and v for r, _, v in self.lab.bus.writes))
 
+    def test_concurrent_checkpoint_writers_keep_independent_atomic_files(self):
+        import os
+        from concurrent.futures import ThreadPoolExecutor
+        from threading import Barrier
+
+        from calibration_draft import CalibrationDraft
+
+        self.begin_calibration_ranges()
+        value = self.lab.calibration_draft.read()
+        writers = [CalibrationDraft(self.root / "data") for _ in range(2)]
+        barrier = Barrier(2)
+        original_fsync = os.fsync
+
+        def overlap(descriptor):
+            original_fsync(descriptor)
+            barrier.wait(timeout=5)
+
+        with patch("calibration_draft.os.fsync", side_effect=overlap):
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                futures = [pool.submit(writer.write, value, force=True) for writer in writers]
+                for future in futures:
+                    future.result(timeout=10)
+        self.assertEqual(self.lab.calibration_draft.read(), value)
+        self.assertEqual(list((self.root / "data").glob("*.pending")), [])
+
     def test_captured_ranges_resume_after_stop_without_repeating_middle(self):
         self.begin_calibration_ranges()
         before = json.loads(json.dumps(self.lab.calibration_state))

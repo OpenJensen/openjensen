@@ -914,7 +914,9 @@ export function useRobotLab() {
       ? `${session.active_joints?.length || 6} in session`
       : !scan
         ? 'Not scanned'
-        : `${responding}/6 responding`;
+        : scan.scan_scope === 'all_addresses'
+          ? `${scan.motors.filter((motor) => motor.stable && motor.model === 777).length} addresses responding · ${responding}/6 expected IDs`
+          : `${responding}/6 expected IDs responding`;
   const mappingLabel = mismatched
     ? 'Mismatch'
     : !mappingComplete
@@ -966,7 +968,12 @@ export function useRobotLab() {
     remember();
     void perform(
       'Arm scan completed.',
-      () => robotApi.probe(port, robotId, role),
+      async () => {
+        const result = await robotApi.probe(port, robotId, role);
+        return result.ready || result.scan_scope !== 'expected_ids'
+          ? result
+          : robotApi.probe(port, robotId, role, true);
+      },
       (result) => setProbe(result),
       false,
     );

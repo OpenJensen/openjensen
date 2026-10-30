@@ -1964,7 +1964,7 @@ test('readiness separates USB, motor responses, mapping and selected calibration
   await page.getByRole('button', { name: 'Refresh devices', exact: true }).click();
   expect(state.writes).toEqual([]);
   await readiness.getByRole('button', { name: 'Scan arm', exact: true }).click();
-  await expect(readiness).toContainText('1/6 responding');
+  await expect(readiness).toContainText('1/6 expected IDs');
   const results = page.getByRole('region', { name: 'Motor scan results' });
   await expect(results.getByRole('row')).toHaveCount(7);
   await expect(results.getByText('No reply at this ID', { exact: true })).toHaveCount(5);
@@ -2299,13 +2299,14 @@ test('read-only discovery finds temporary motor IDs without claiming physical jo
   state.discoveryIds = [1, 2, 3, 103, 104, 105];
   await page.getByRole('button', { name: 'Scan motor IDs', exact: true }).click();
   const results = page.getByRole('region', { name: 'Motor scan results' });
-  await expect(results).toContainText('3/6 expected IDs responding');
+  await expect(results).toContainText('6 motor addresses responding');
   await expect(results.getByText('No reply at this ID', { exact: true })).toHaveCount(3);
-  await results.getByRole('button', { name: 'Find other motor IDs', exact: true }).click();
   await expect(results).toContainText('Other motor IDs found: 103, 104, 105');
   await expect(results).toContainText('6 addresses replied');
-  await expect(results).toContainText('3/6 expected IDs responding');
-  await expect(page.getByRole('region', { name: 'Arm readiness', exact: true })).toContainText('3/6 responding');
+  await expect(results).toContainText('6 motor addresses responding');
+  await expect(page.getByRole('region', { name: 'Arm readiness', exact: true })).toContainText(
+    '6 addresses responding · 3/6 expected IDs',
+  );
   expect(writes(state, '/probe').map((request) => request.body)).toEqual([
     { port, robot_id: 'my-so101', role: 'follower' },
     { port, robot_id: 'my-so101', role: 'follower', discover: true },
