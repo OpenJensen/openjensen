@@ -24,6 +24,7 @@ SOURCE_MODULES = (
     "diagnostics.py",
     "device_registry.py",
     "server.py",
+    "recording.py",
     "agent_control.py",
     "hardware.py",
     "lerobot_control.py",
