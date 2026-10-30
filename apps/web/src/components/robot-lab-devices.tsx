@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { Icon } from './icon';
 import { Notice } from './robot-lab-shared';
 import type { RobotLabState } from './robot-lab-state';
@@ -72,12 +73,32 @@ export function RobotLabDevices({ lab }: { lab: RobotLabState }) {
           </button>
         ))}
       </div>
+      {!!devices.data?.removed_devices?.length && (
+        <details className="robot-lab-removed-devices">
+          <summary>Removed devices ({devices.data.removed_devices.length})</summary>
+          <p>Saved calibration files are kept. Restore a device to use its saved name and role again.</p>
+          {devices.data.removed_devices.map((device) => (
+            <div className="robot-lab-removed-device" key={device.id}>
+              <span>{device.name || device.port || device.robot_id}</span>
+              <button
+                className="secondary-button"
+                aria-label={`Restore ${device.name || device.port || device.robot_id}`}
+                disabled={!online || lab.busy || lab.active || !!lab.recording?.active}
+                onClick={() => void lab.restoreDevice(device.id)}
+              >
+                Restore device
+              </button>
+            </div>
+          ))}
+        </details>
+      )}
     </section>
   );
 }
 
 export function RobotLabDeviceDetail({ lab, children }: { lab: RobotLabState; children: React.ReactNode }) {
   const device = lab.selectedDevice;
+  const [removingId, setRemovingId] = useState<string | null>(null);
   if (!device) return null;
   return (
     <>
@@ -96,6 +117,39 @@ export function RobotLabDeviceDetail({ lab, children }: { lab: RobotLabState; ch
           </p>
         </div>
       </header>
+      {!!device.role && lab.state?.capabilities?.device_removal && (
+        <div className="robot-lab-device-removal">
+          {removingId === device.id ? (
+            <section aria-label="Remove saved device">
+              <p>
+                Remove {device.name || device.port || device.robot_id} from your saved devices? Calibration files and
+                recordings are kept. You can restore it from Removed devices.
+              </p>
+              {device.connected && <p>This connected controller will still appear by its USB address.</p>}
+              <div className="robot-lab-actions">
+                <button
+                  className="secondary-button"
+                  disabled={!lab.online || lab.busy || lab.active || !!lab.recording?.active}
+                  onClick={() => void lab.removeDevice()}
+                >
+                  Remove saved device
+                </button>
+                <button className="secondary-button" disabled={lab.busy} onClick={() => setRemovingId(null)}>
+                  Cancel
+                </button>
+              </div>
+            </section>
+          ) : (
+            <button
+              className="text-button"
+              disabled={!lab.online || lab.busy || lab.active || !!lab.recording?.active}
+              onClick={() => setRemovingId(device.id)}
+            >
+              Remove device
+            </button>
+          )}
+        </div>
+      )}
       {!device.role ? (
         <section className="robot-lab-role-onboarding" aria-label="Choose device role">
           <h3>How will you usually use this arm?</h3>

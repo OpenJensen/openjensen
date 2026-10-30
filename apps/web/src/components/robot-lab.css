@@ -1229,6 +1229,20 @@
   gap: 18px;
   margin: 20px 0 24px;
 }
+
+.robot-lab-device-removal,
+.robot-lab-removed-devices {
+  margin-block: 1rem;
+}
+
+.robot-lab-removed-device {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding-block: 0.5rem;
+}
 .robot-lab-role-buttons {
   display: flex;
   gap: 8px;

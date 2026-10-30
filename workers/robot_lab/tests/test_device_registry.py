@@ -171,6 +171,76 @@ class DeviceRegistryTests(unittest.TestCase):
         self.assertEqual(self.lab.load_calibration(device["robot_id"], "leader"), CALIBRATION)
         self.assertEqual(self.opens, [])
 
+    def test_remove_offline_profile_survives_discovery_and_restart_and_can_restore(self):
+        path = self.lab.calibration_path("stored-arm", "follower")
+        path.parent.mkdir(parents=True)
+        path.write_text(json.dumps(CALIBRATION))
+        before = path.read_bytes()
+        self.ports.clear()
+        device = self.lab.devices()["saved_devices"][0]
+        result = self.lab.change_device_visibility({"id": device["id"]})
+        self.assertEqual(result["saved_devices"], [])
+        self.assertEqual(self.lab.devices()["saved_devices"], [])
+        self.assertEqual(DeviceRegistry(self.root / "data").removed()[0]["id"], device["id"])
+        self.assertEqual(path.read_bytes(), before)
+        restored = self.lab.change_device_visibility({"id": device["id"]}, restore=True)
+        self.assertEqual(restored["saved_devices"][0]["name"], "stored-arm")
+        self.assertEqual(restored["removed_devices"], [])
+        self.assertEqual(path.read_bytes(), before)
+        self.assertEqual(self.opens, [])
+
+    def test_remove_connected_device_rediscovers_usb_without_saved_role(self):
+        device = self.configure()
+        result = self.lab.change_device_visibility({"id": device["id"]})
+        self.assertEqual(len(result["saved_devices"]), 1)
+        detected = result["saved_devices"][0]
+        self.assertTrue(detected["connected"])
+        self.assertEqual(detected["port"], device["port"])
+        self.assertEqual(detected["name"], "")
+        self.assertIsNone(detected["role"])
+        self.assertEqual(self.opens, [])
+
+    def test_restore_never_overwrites_new_configuration_and_other_saves_keep_archive(self):
+        device = self.configure()
+        self.lab.change_device_visibility({"id": device["id"]})
+        self.configure(name="New configuration", role="leader")
+        with self.assertRaisesRegex(ValueError, "current configuration"):
+            self.lab.change_device_visibility({"id": device["id"]}, restore=True)
+        self.assertEqual(self.lab.device_registry.read()[0]["name"], "New configuration")
+        self.assertEqual(self.lab.device_registry.removed()[0]["name"], "Desk arm")
+
+    def test_remove_rejects_active_sessions_recording_and_unknown_devices(self):
+        device = self.configure()
+        for mode in ("manual", "calibration", "leader"):
+            self.lab.mode = mode
+            with self.assertRaises(RequestError):
+                self.lab.change_device_visibility({"id": device["id"]})
+        self.lab.mode = "idle"
+        self.lab.writer = object()
+        try:
+            with self.assertRaisesRegex(RequestError, "Finish recording"):
+                self.lab.change_device_visibility({"id": device["id"]})
+        finally:
+            self.lab.writer = None
+        for payload in ({}, {"id": "unknown"}, {"id": device["id"], "delete_calibration": True}):
+            with self.assertRaises(ValueError):
+                self.lab.change_device_visibility(payload)
+        self.assertEqual(self.lab.device_registry.read()[0]["id"], device["id"])
+        self.assertEqual(self.opens, [])
+
+    def test_restore_old_serial_does_not_take_over_recycled_usb_address(self):
+        device = self.configure()
+        self.lab.change_device_visibility({"id": device["id"]})
+        self.ports[0]["serial_number"] = "serial-B"
+        self.configure(name="Replacement")
+        result = self.lab.change_device_visibility({"id": device["id"]}, restore=True)
+        self.assertEqual(len(result["saved_devices"]), 2)
+        old = next(d for d in result["saved_devices"] if d["id"] == device["id"])
+        self.assertFalse(old["connected"])
+        self.assertEqual(
+            [d["name"] for d in result["saved_devices"] if d["connected"]], ["Replacement"]
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

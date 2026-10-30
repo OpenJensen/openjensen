@@ -87,6 +87,7 @@ export type RobotStatus = {
     calibration_persistence?: boolean;
     calibration_transfer?: boolean;
     device_registry?: boolean;
+    device_removal?: boolean;
     partial_control?: boolean;
     rest_position?: boolean;
     move_to_middle?: boolean;
@@ -230,6 +231,7 @@ export type RobotDevice = {
 };
 export type RobotDevices = {
   saved_devices?: RobotDevice[];
+  removed_devices?: Pick<RobotDevice, 'id' | 'name' | 'port' | 'robot_id'>[];
   ports: { device: string; description: string; manufacturer: string | null; serial_number: string | null }[];
   cameras: { index: number; name: string; width: number; height: number }[];
   camera_error: string | null;
@@ -304,6 +306,8 @@ export const robotApi = {
   devices: () => request<RobotDevices>('/devices', undefined, { timeoutMs: 30_000 }),
   configureDevice: (input: { id: string; port: string; name: string; role: RobotRole }) =>
     request<RobotDevices>('/devices/configure', input),
+  removeDevice: (id: string) => request<RobotDevices>('/devices/remove', { id }),
+  restoreDevice: (id: string) => request<RobotDevices>('/devices/restore', { id }),
   datasets: () => request<{ datasets: RobotDataset[] }>('/datasets'),
   probe: (port: string, robot_id?: string, role: RobotRole = 'follower', discover = false) =>
     request<RobotProbe>(

@@ -15715,6 +15715,90 @@
         ]
       }
     },
+    "/api/v1/robot-lab/devices/remove": {
+      "post": {
+        "operationId": "robot_lab_post_devices_remove",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "title": "Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id"
+                ],
+                "title": "DeviceVisibilityRequest",
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Devices Remove",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/devices/restore": {
+      "post": {
+        "operationId": "robot_lab_post_devices_restore",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "title": "Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id"
+                ],
+                "title": "DeviceVisibilityRequest",
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Devices Restore",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
     "/api/v1/robot-lab/diagnostics": {
       "get": {
         "operationId": "robot_lab_get_diagnostics",

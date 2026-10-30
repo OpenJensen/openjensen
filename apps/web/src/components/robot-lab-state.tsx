@@ -215,6 +215,36 @@ export function useRobotLab() {
       },
     );
   }
+  async function removeDevice() {
+    if (!selectedDevice || active || busy || recording?.active) return;
+    const removed = selectedDevice;
+    await perform(
+      'Device removed. Its calibration files are kept; you can restore it from Removed devices.',
+      () => robotApi.removeDevice(removed.id),
+      (result) => {
+        client.setQueryData(['robot-lab', 'devices'], result);
+        setSelectedDeviceId(null);
+        if (followerId === removed.robot_id) {
+          setFollowerDevice('');
+          setFollowerId('');
+        }
+        if (leaderId === removed.robot_id) {
+          setLeaderPort('');
+          setLeaderId('');
+        }
+        setProbe(null);
+        setMotionReady(false);
+      },
+    );
+  }
+  async function restoreDevice(id: string) {
+    if (active || busy || recording?.active) return;
+    await perform(
+      'Device restored.',
+      () => robotApi.restoreDevice(id),
+      (result) => client.setQueryData(['robot-lab', 'devices'], result),
+    );
+  }
   const session = state?.session;
   const calibration =
     state?.calibration && (!state.calibration.port || state.calibration.port === port) ? state.calibration : undefined;
@@ -1090,6 +1120,8 @@ export function useRobotLab() {
     chooseDevice,
     selectControlDevice,
     saveDeviceConfiguration,
+    removeDevice,
+    restoreDevice,
     calibrationLabel,
     mappingLabel,
     stepStates,

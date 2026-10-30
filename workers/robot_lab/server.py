@@ -650,6 +650,7 @@ class RobotLab:
                 "calibration_persistence": hardware,
                 "calibration_transfer": True,
                 "device_registry": True,
+                "device_removal": True,
                 "control": hardware,
                 "lerobot_position_control": hardware,
                 "rest_position": hardware,
@@ -760,6 +761,7 @@ class RobotLab:
             return {
                 "ports": ports,
                 "saved_devices": catalog,
+                "removed_devices": self.device_registry.removed(),
                 "cameras": cameras,
                 "camera_error": error,
             }
@@ -770,6 +772,15 @@ class RobotLab:
             if self.writer is not None:
                 raise RequestError("Finish recording before changing devices")
             self.device_registry.save(payload, self.devices()["saved_devices"])
+            return self.devices()
+
+    def change_device_visibility(self, payload, *, restore=False):
+        with self.lock:
+            self._idle()
+            if self.writer is not None:
+                raise RequestError("Finish recording before changing devices")
+            operation = self.device_registry.restore if restore else self.device_registry.remove
+            operation(payload)
             return self.devices()
 
     def probe(self, payload):
@@ -2211,6 +2222,8 @@ class Handler(BaseHTTPRequestHandler):
                 result = lab.stop()
             elif path == "/v1/devices/configure":
                 result = lab.configure_device(payload)
+            elif path in ("/v1/devices/remove", "/v1/devices/restore"):
+                result = lab.change_device_visibility(payload, restore=path.endswith("/restore"))
             elif path == "/v1/calibration/import":
                 result = lab.calibration_import(payload)
             elif path == "/v1/calibration/start":

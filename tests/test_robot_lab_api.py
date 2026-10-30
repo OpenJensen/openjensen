@@ -512,3 +512,29 @@ def test_device_configuration_is_a_validated_finite_proxy_operation(tmp_path):
             )
         assert len(commands) == 1
     asyncio.run(companion.close())
+
+
+def test_device_removal_and_restore_validate_identity_and_proxy_only_registry_operations(tmp_path):
+    connection(tmp_path)
+    commands = []
+
+    def handler(request):
+        commands.append((request.method, request.url.path, json.loads(request.content)))
+        return httpx.Response(200, json={"saved_devices": [], "removed_devices": []})
+
+    companion = bridge(tmp_path, handler)
+    with browser(tmp_path, companion) as client:
+        for action in ("remove", "restore"):
+            route = "/api/v1/robot-lab/devices/" + action
+            assert client.post(route, json={"id": "arm-a"}).status_code == 200
+            for payload in (
+                {},
+                {"id": ""},
+                {"id": "x" * 101},
+                {"id": "arm-a", "delete_calibration": True},
+            ):
+                assert client.post(route, json=payload).status_code == 422
+    assert commands == [
+        ("POST", "/v1/devices/" + action, {"id": "arm-a"}) for action in ("remove", "restore")
+    ]
+    asyncio.run(companion.close())
