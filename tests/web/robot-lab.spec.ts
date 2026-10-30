@@ -470,9 +470,37 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin', 
           episode_active: false,
           frames: 0,
           episodes: 0,
-          fps: body.fps,
+          fps: body.fps ?? 12,
+          ...(state.status.capabilities.auto_recording_fps
+            ? {
+                fps_mode: body.fps == null ? 'auto' : 'manual',
+                rate_status: 'ready',
+                rate_message: 'Camera and robot capture measured.',
+                collection: body.collection
+                  ? {
+                      ...body.collection,
+                      enabled: true,
+                      phase: 'idle',
+                      remaining_s: 0,
+                      completed: 0,
+                      cue_id: 0,
+                      cue: 'Prepare the scene.',
+                      saving: false,
+                    }
+                  : null,
+              }
+            : {}),
           error: null,
         };
+      } else if (action.startsWith('/recording/collection/')) {
+        const collection = state.status.recording.collection;
+        const command = action.split('/').at(-1);
+        collection.phase = command === 'pause' ? 'paused' : 'countdown';
+        collection.remaining_s = collection.countdown_s;
+        collection.cue_id++;
+        collection.cue = command === 'pause' ? 'Collection paused.' : 'Get ready.';
+        state.status.recording.episode_active = false;
+        if (command === 'rerecord') state.status.recording.frames = 0;
       } else if (action === '/recording/episode/start') {
         state.status.recording.episode_active = true;
         state.status.recording.frames = 10;
@@ -2402,4 +2430,191 @@ test('device removal failures keep the device and older services do not offer re
   await page.reload();
   await page.getByTestId('device-arm-a').click();
   await expect(page.getByRole('button', { name: 'Remove device', exact: true })).toHaveCount(0);
+});
+
+test('guided recording defaults to measured FPS and follows server episode cues', async ({ page }, testInfo) => {
+  const state = await fixture(page, true);
+  state.status.capabilities.auto_recording_fps = true;
+  state.status.capabilities.guided_recording = true;
+  await page.evaluate(() => {
+    (window as any).__spoken = [];
+    Object.defineProperty(window, 'speechSynthesis', {
+      configurable: true,
+      value: {
+        cancel() {},
+        speak(message: any) {
+          (window as any).__spoken.push(message.text);
+        },
+      },
+    });
+    Object.defineProperty(window, 'SpeechSynthesisUtterance', {
+      configurable: true,
+      value: class {
+        text: string;
+        constructor(text: string) {
+          this.text = text;
+        }
+      },
+    });
+  });
+  await startManual(page);
+  await openTab(page, 'Record');
+  await page.getByLabel('Dataset name', { exact: true }).fill('pen-demo');
+  await page.getByLabel('Task instruction', { exact: true }).fill('Pick up the pen.');
+  await expect(page.getByLabel('Collection mode')).toHaveValue('guided');
+  await expect(page.getByLabel('Recording frame rate', { exact: true })).not.toBeVisible();
+  await page.getByRole('button', { name: 'Create recording dataset', exact: true }).click();
+  expect(writes(state, '/recording/start')[0].body).toEqual({
+    dataset_id: 'pen-demo',
+    task: 'Pick up the pen.',
+    fps: null,
+    camera_index: 0,
+    collection: { episode_time_s: 30, reset_time_s: 10, num_episodes: 10, countdown_s: 3 },
+  });
+  await expect(page.getByText(/12 fps · selected automatically/)).toBeVisible();
+  await page.getByRole('button', { name: 'Start collection', exact: true }).click();
+  const collection = page.getByRole('region', { name: 'Guided collection' });
+  await expect(collection.getByLabel('Time remaining')).toHaveText('3s');
+  await expect.poll(() => page.evaluate(() => (window as any).__spoken)).toEqual(['Get ready.']);
+  state.status.recording.collection = {
+    ...state.status.recording.collection,
+    phase: 'recording',
+    remaining_s: 24,
+    cue_id: 2,
+    cue: 'Recording episode 1.',
+  };
+  state.status.recording.episode_active = true;
+  state.status.recording.frames = 72;
+  await expect(collection.getByRole('heading')).toHaveText('Recording demonstration');
+  await expect
+    .poll(() => page.evaluate(() => (window as any).__spoken))
+    .toEqual(['Get ready.', 'Recording episode 1.']);
+  await expect(page.getByRole('button', { name: 'Finish dataset', exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: 'Pause collection', exact: true }).click();
+  await expect(collection).toContainText('These frames are preserved.');
+  await expect(page.getByRole('button', { name: 'Resume collection', exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: 'Re-record episode', exact: true }).click();
+  expect(writes(state, '/recording/collection/rerecord')).toHaveLength(1);
+  state.status.recording.collection = {
+    ...state.status.recording.collection,
+    phase: 'reset',
+    remaining_s: 8,
+    completed: 1,
+    cue_id: 5,
+    cue: 'Reset the scene.',
+  };
+  state.status.recording.episodes = 1;
+  await expect(collection.getByRole('heading')).toHaveText('Reset the scene');
+  await expect(collection.getByLabel('Collection progress')).toHaveAttribute('value', '1');
+  expect(writes(state, '/recording/episode/start')).toEqual([]);
+  expect(writes(state, '/recording/episode/save')).toEqual([]);
+  await page.screenshot({ path: testInfo.outputPath('guided-recording-reset.png'), fullPage: true });
+  expect(state.errors).toEqual([]);
+});
+
+test('advanced recording allows manual frame rate and manual episodes', async ({ page }) => {
+  const state = await fixture(page, true);
+  state.status.capabilities.auto_recording_fps = true;
+  state.status.capabilities.guided_recording = true;
+  await startManual(page);
+  await openTab(page, 'Record');
+  await page.getByLabel('Dataset name', { exact: true }).fill('manual-demo');
+  await page.getByLabel('Task instruction', { exact: true }).fill('Pick up the pen.');
+  await page.getByLabel('Collection mode').selectOption('manual');
+  await page.getByText('Advanced recording settings', { exact: true }).click();
+  await page.getByLabel('Recording frame rate', { exact: true }).selectOption('5');
+  await page.getByRole('button', { name: 'Create recording dataset', exact: true }).click();
+  expect(writes(state, '/recording/start')[0].body).toEqual({
+    dataset_id: 'manual-demo',
+    task: 'Pick up the pen.',
+    fps: 5,
+    camera_index: 0,
+  });
+  await expect(page.getByRole('button', { name: 'Start episode', exact: true })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Guided collection' })).toHaveCount(0);
+});
+
+test('recording measurement errors keep capture blocked and allow a clean retry', async ({ page }) => {
+  const state = await fixture(page, true);
+  state.status.capabilities.auto_recording_fps = true;
+  state.status.capabilities.guided_recording = true;
+  await startManual(page);
+  await openTab(page, 'Record');
+  await page.getByLabel('Dataset name', { exact: true }).fill('measurement-demo');
+  await page.getByLabel('Task instruction', { exact: true }).fill('Pick up the pen.');
+  await page.getByRole('button', { name: 'Create recording dataset', exact: true }).click();
+  state.status.recording.rate_status = 'measuring';
+  await expect(page.getByRole('button', { name: 'Start collection', exact: true })).toBeDisabled();
+  state.status.recording.rate_status = 'error';
+  state.status.recording.rate_message = 'No fresh camera frames received.';
+  await expect(page.getByText('No fresh camera frames received.', { exact: false })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Start collection', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Close unsaved recording', exact: true })).toBeEnabled();
+  expect(writes(state, '/recording/collection/start')).toEqual([]);
+});
+
+test('recording signals use a local tone when speech voices are unavailable', async ({ page }) => {
+  const state = await fixture(page, true);
+  state.status.capabilities.guided_recording = true;
+  await page.evaluate(() => {
+    (window as any).__tones = 0;
+    Object.defineProperty(window, 'speechSynthesis', {
+      configurable: true,
+      value: {
+        getVoices: () => [],
+        cancel() {},
+        speak() {
+          throw new Error('No voices installed');
+        },
+      },
+    });
+    Object.defineProperty(window, 'AudioContext', {
+      configurable: true,
+      value: class {
+        state = 'running';
+        currentTime = 0;
+        destination = {};
+        resume() {
+          return Promise.resolve();
+        }
+        close() {
+          return Promise.resolve();
+        }
+        createOscillator() {
+          return {
+            frequency: { value: 0 },
+            connect() {},
+            disconnect() {},
+            start() {
+              (window as any).__tones++;
+            },
+            stop() {},
+            onended: null,
+          };
+        }
+        createGain() {
+          return { gain: { setValueAtTime() {}, linearRampToValueAtTime() {} }, connect() {}, disconnect() {} };
+        }
+      },
+    });
+  });
+  await startManual(page);
+  await openTab(page, 'Record');
+  await page.getByRole('button', { name: 'Test voice', exact: true }).click();
+  expect(await page.evaluate(() => (window as any).__tones)).toBe(1);
+  expect(writes(state, '/recording/start')).toEqual([]);
+  expect(state.errors).toEqual([]);
+});
+
+test('recording file work prevents overlapping dataset creation', async ({ page }) => {
+  const state = await fixture(page, true);
+  state.status.recording.saving = true;
+  await startManual(page);
+  await openTab(page, 'Record');
+  await page.getByLabel('Dataset name', { exact: true }).fill('saving-demo');
+  await page.getByLabel('Task instruction', { exact: true }).fill('Pick up the pen.');
+  await expect(page.getByRole('button', { name: 'Create recording dataset', exact: true })).toBeDisabled();
+  state.status.recording.saving = false;
+  await expect(page.getByRole('button', { name: 'Create recording dataset', exact: true })).toBeEnabled();
+  expect(writes(state, '/recording/start')).toEqual([]);
 });

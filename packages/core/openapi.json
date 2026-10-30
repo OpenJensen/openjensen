@@ -15875,6 +15875,166 @@
         ]
       }
     },
+    "/api/v1/robot-lab/recording/collection/next": {
+      "post": {
+        "operationId": "robot_lab_post_recording_collection_next",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "title": "RecordingCollectionActionRequest",
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Recording Collection Next",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/recording/collection/pause": {
+      "post": {
+        "operationId": "robot_lab_post_recording_collection_pause",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "title": "RecordingCollectionActionRequest",
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Recording Collection Pause",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/recording/collection/rerecord": {
+      "post": {
+        "operationId": "robot_lab_post_recording_collection_rerecord",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "title": "RecordingCollectionActionRequest",
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Recording Collection Rerecord",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/recording/collection/resume": {
+      "post": {
+        "operationId": "robot_lab_post_recording_collection_resume",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "title": "RecordingCollectionActionRequest",
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Recording Collection Resume",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/recording/collection/start": {
+      "post": {
+        "operationId": "robot_lab_post_recording_collection_start",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "title": "RecordingCollectionActionRequest",
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Recording Collection Start",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
     "/api/v1/robot-lab/recording/episode/discard": {
       "post": {
         "operationId": "robot_lab_post_recording_episode_discard",
@@ -16009,6 +16169,104 @@
     "/api/v1/robot-lab/recording/start": {
       "post": {
         "operationId": "robot_lab_post_recording_start",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "camera_index": {
+                    "anyOf": [
+                      {
+                        "maximum": 63.0,
+                        "minimum": 0.0,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": 0,
+                    "title": "Camera Index"
+                  },
+                  "collection": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "countdown_s": {
+                            "default": 3,
+                            "maximum": 30.0,
+                            "minimum": 0.0,
+                            "title": "Countdown S",
+                            "type": "integer"
+                          },
+                          "episode_time_s": {
+                            "default": 30,
+                            "maximum": 300.0,
+                            "minimum": 1.0,
+                            "title": "Episode Time S",
+                            "type": "integer"
+                          },
+                          "num_episodes": {
+                            "default": 10,
+                            "maximum": 1000.0,
+                            "minimum": 1.0,
+                            "title": "Num Episodes",
+                            "type": "integer"
+                          },
+                          "reset_time_s": {
+                            "default": 10,
+                            "maximum": 300.0,
+                            "minimum": 0.0,
+                            "title": "Reset Time S",
+                            "type": "integer"
+                          }
+                        },
+                        "title": "RecordingCollectionRequest",
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "dataset_id": {
+                    "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+                    "title": "Dataset Id",
+                    "type": "string"
+                  },
+                  "fps": {
+                    "anyOf": [
+                      {
+                        "maximum": 40.0,
+                        "minimum": 1.0,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Fps"
+                  },
+                  "task": {
+                    "maxLength": 1000,
+                    "minLength": 1,
+                    "title": "Task",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "dataset_id",
+                  "task"
+                ],
+                "title": "RecordingStartRequest",
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
         "responses": {
           "200": {
             "content": {

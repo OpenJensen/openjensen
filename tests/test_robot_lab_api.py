@@ -538,3 +538,79 @@ def test_device_removal_and_restore_validate_identity_and_proxy_only_registry_op
         ("POST", "/v1/devices/" + action, {"id": "arm-a"}) for action in ("remove", "restore")
     ]
     asyncio.run(companion.close())
+
+
+@pytest.mark.parametrize("action", ["start", "pause", "resume", "next", "rerecord"])
+def test_guided_recording_actions_are_finite_proxy_routes(tmp_path, action):
+    connection(tmp_path)
+    calls = []
+
+    def handler(request):
+        calls.append((request.url.path, json.loads(request.content)))
+        return httpx.Response(200, json={"ok": True})
+
+    companion = bridge(tmp_path, handler)
+    with browser(tmp_path, companion) as client:
+        route = "/api/v1/robot-lab/recording/collection/" + action
+        assert client.post(route, json={}).status_code == 200
+        assert client.post(route, json={"move_arm": True}).status_code == 422
+        assert (
+            client.post("/api/v1/robot-lab/recording/collection/arbitrary", json={}).status_code
+            == 404
+        )
+    assert calls == [("/v1/recording/collection/" + action, {})]
+    asyncio.run(companion.close())
+
+
+@pytest.mark.parametrize("fps", [None, 1, 40])
+def test_recording_auto_rate_and_guided_configuration_reach_companion(tmp_path, fps):
+    connection(tmp_path)
+    payload = {
+        "dataset_id": "pick-up-pen",
+        "task": "Pick up the pen.",
+        "fps": fps,
+        "camera_index": 0,
+        "collection": {
+            "episode_time_s": 30,
+            "reset_time_s": 10,
+            "countdown_s": 3,
+            "num_episodes": 10,
+        },
+    }
+    calls = []
+
+    def handler(request):
+        calls.append(json.loads(request.content))
+        return httpx.Response(200, json={"ok": True})
+
+    companion = bridge(tmp_path, handler)
+    with browser(tmp_path, companion) as client:
+        assert client.post("/api/v1/robot-lab/recording/start", json=payload).status_code == 200
+    assert calls == [payload]
+    asyncio.run(companion.close())
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"fps": True},
+        {"fps": 41},
+        {"fps": 0},
+        {"collection": {"episode_time_s": 301}},
+        {"collection": {"reset_time_s": -1}},
+        {"collection": {"num_episodes": 0}},
+        {"collection": {"countdown_s": True}},
+    ],
+)
+def test_invalid_guided_recording_settings_never_contact_hardware(tmp_path, changes):
+    connection(tmp_path)
+    companion = bridge(tmp_path, lambda _: pytest.fail("Invalid settings reached hardware"))
+    with browser(tmp_path, companion) as client:
+        assert (
+            client.post(
+                "/api/v1/robot-lab/recording/start",
+                json={"dataset_id": "test", "task": "Pick up the pen", **changes},
+            ).status_code
+            == 422
+        )
+    asyncio.run(companion.close())

@@ -96,7 +96,7 @@ export function useRobotLab() {
   const [cameraError, setCameraError] = useState(false);
   const [datasetId, setDatasetId] = useState('');
   const [task, setTask] = useState('');
-  const [fps, setFps] = useState(10);
+  const [fps, setFps] = useState<number | null>(null);
   const [recordCamera, setRecordCamera] = useState(true);
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);

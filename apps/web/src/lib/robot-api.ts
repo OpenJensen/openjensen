@@ -100,6 +100,8 @@ export type RobotStatus = {
     calibration: boolean;
     control: boolean;
     recording: boolean;
+    auto_recording_fps?: boolean;
+    guided_recording?: boolean;
   };
   session?: {
     mode: 'idle' | 'calibration' | 'setup' | 'verification' | 'agent' | ControlMode;
@@ -155,9 +157,27 @@ export type RobotStatus = {
     active: boolean;
     dataset_id: string | null;
     episode_active: boolean;
+    saving?: boolean;
     frames: number;
     episodes: number;
     fps: number;
+    fps_mode?: 'auto' | 'manual';
+    rate_status?: 'measuring' | 'ready' | 'error';
+    rate_message?: string;
+    actual_fps?: number | null;
+    collection?: {
+      enabled: boolean;
+      saving?: boolean;
+      phase: 'idle' | 'countdown' | 'recording' | 'saving' | 'reset' | 'paused' | 'complete';
+      episode_time_s: number;
+      reset_time_s: number;
+      num_episodes: number;
+      countdown_s: number;
+      remaining_s: number;
+      completed: number;
+      cue_id: number;
+      cue: string;
+    } | null;
     error: string | null;
   };
   assembled?: {
@@ -398,8 +418,15 @@ export const robotApi = {
       },
       { timeoutMs: 10_000, keepalive },
     ),
-  startRecording: (input: { dataset_id: string; task: string; fps: number; camera_index: number | null }) =>
-    request<RobotStatus>('/recording/start', input, { timeoutMs: 90_000 }),
+  startRecording: (input: {
+    dataset_id: string;
+    task: string;
+    fps: number | null;
+    camera_index: number | null;
+    collection?: { episode_time_s: number; reset_time_s: number; num_episodes: number; countdown_s: number };
+  }) => request<RobotStatus>('/recording/start', input, { timeoutMs: 90_000 }),
+  collectionAction: (action: 'start' | 'pause' | 'resume' | 'next' | 'rerecord') =>
+    request<RobotStatus>(`/recording/collection/${action}`, {}, { timeoutMs: 90_000 }),
   startEpisode: () => request<RobotStatus>('/recording/episode/start', {}),
   saveEpisode: () => request<RobotStatus>('/recording/episode/save', {}, { timeoutMs: 90_000 }),
   discardEpisode: () => request<RobotStatus>('/recording/episode/discard', {}),
