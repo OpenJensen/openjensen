@@ -2221,3 +2221,33 @@ test('session slots select actual devices independently of default roles and loc
   await expect(page.getByLabel('Leader device', { exact: true })).toBeDisabled();
   await page.screenshot({ path: testInfo.outputPath('recording-device-selection.png'), fullPage: true });
 });
+
+test('an unbound saved profile requires an explicit USB selection before binding', async ({ page }) => {
+  const state = await fixture(page, true, 'Darwin', false);
+  state.catalog.push({
+    id: 'unbound-profile',
+    port: '',
+    name: 'Stored arm',
+    robot_id: 'stored-arm',
+    role: 'follower',
+    profile_role: 'follower',
+    serial_number: null,
+    connected: false,
+    description: 'Saved profile',
+  });
+  await page.getByRole('button', { name: 'Refresh devices', exact: true }).click();
+  await page.getByTestId('device-unbound-profile').click();
+  const connection = page.getByLabel('Device USB connection', { exact: true });
+  await expect(connection).toHaveValue('');
+  await expect(page.getByRole('button', { name: 'Scan motor IDs', exact: true })).toBeDisabled();
+  expect(state.writes).toEqual([]);
+  await connection.selectOption(port);
+  await page.getByRole('button', { name: 'Save device', exact: true }).click();
+  expect(writes(state, '/devices/configure')[0].body).toMatchObject({
+    id: 'unbound-profile',
+    port,
+    name: 'Stored arm',
+    role: 'follower',
+  });
+  expect(writes(state, '/control/start')).toEqual([]);
+});

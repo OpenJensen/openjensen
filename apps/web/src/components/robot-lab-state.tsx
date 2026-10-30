@@ -362,7 +362,7 @@ export function useRobotLab() {
   }, []);
   useEffect(() => {
     if (!devices.data) return;
-    if (role === 'follower' && !followerDevice)
+    if (!devices.data.saved_devices && role === 'follower' && !followerDevice)
       setFollowerDevice(devices.data.ports.find((item) => item.device !== leaderPort)?.device ?? '');
     const cameras = devices.data.cameras;
     if (!cameras.some((camera) => camera.index === cameraIndex)) setCameraIndex(cameras[0]?.index ?? 0);

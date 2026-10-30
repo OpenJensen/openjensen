@@ -124,7 +124,7 @@ export function RobotLabDeviceDetail({ lab, children }: { lab: RobotLabState; ch
                   disabled={lab.busy || lab.active}
                   onClick={() => void lab.saveDeviceConfiguration()}
                 >
-                  Save name
+                  {device.port ? 'Save name' : 'Save device'}
                 </button>
               </div>
             </label>
@@ -144,7 +144,7 @@ export function RobotLabDeviceDetail({ lab, children }: { lab: RobotLabState; ch
                     </option>
                   ))}
                 </select>
-                <small>Save the name to bind this profile to the selected connection.</small>
+                <small>Save the device to bind this profile to the selected connection.</small>
               </label>
             )}
             <div>

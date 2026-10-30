@@ -154,6 +154,23 @@ class DeviceRegistryTests(unittest.TestCase):
                 self.assertEqual(path.stem, "same-name")
         self.assertEqual(len(self.lab.devices()["saved_devices"]), 2)
 
+    def test_unbound_legacy_profile_binds_only_to_an_explicitly_selected_connection(self):
+        path = self.lab.calibration_path("stored-arm", "follower")
+        path.parent.mkdir(parents=True)
+        path.write_text(json.dumps(CALIBRATION))
+        entries = self.lab.devices()["saved_devices"]
+        saved = next(d for d in entries if d["robot_id"] == "stored-arm")
+        self.assertEqual(saved["port"], "")
+        result = self.lab.configure_device(
+            dict(id=saved["id"], port="/dev/ttyACM0", name="Stored arm", role="follower")
+        )
+        self.assertEqual(len(result["saved_devices"]), 1)
+        device = result["saved_devices"][0]
+        self.assertEqual(device["robot_id"], "stored-arm")
+        self.assertEqual(device["port"], "/dev/ttyACM0")
+        self.assertEqual(self.lab.load_calibration(device["robot_id"], "leader"), CALIBRATION)
+        self.assertEqual(self.opens, [])
+
 
 if __name__ == "__main__":
     unittest.main()
