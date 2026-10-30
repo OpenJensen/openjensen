@@ -1,5 +1,6 @@
 'use client';
 
+import { RobotLabControlDevices } from './robot-lab-devices';
 import { Icon } from '@/components/icon';
 import { robotApi, robotJoints } from '@/lib/robot-api';
 import { Heading, Notice, RangeTable, JointControl } from './robot-lab-shared';
@@ -16,9 +17,7 @@ export function RobotLabTeleoperate({ lab }: { lab: RobotLabState }) {
     controlJointOptions,
     controlJoints,
     controlling,
-    devices,
     followerMismatch,
-    identity,
     jog,
     jogging,
     jointStep,
@@ -41,8 +40,6 @@ export function RobotLabTeleoperate({ lab }: { lab: RobotLabState }) {
     session,
     sessionJoints,
     setJogStep,
-    setLeaderId,
-    setLeaderPort,
     setMiddleTolerance,
     setMode,
     setMotionReady,
@@ -74,7 +71,7 @@ export function RobotLabTeleoperate({ lab }: { lab: RobotLabState }) {
             targets stay inside the saved range.
           </p>
         )}
-        {identity}
+        <RobotLabControlDevices lab={lab} />
         <div className="robot-lab-mode-grid" role="group" aria-label="Control mode">
           {(
             [
@@ -104,40 +101,6 @@ export function RobotLabTeleoperate({ lab }: { lab: RobotLabState }) {
             </button>
           ))}
         </div>
-        {mode === 'leader' && (
-          <div className="robot-lab-fields">
-            <label>
-              Leader USB port
-              <select
-                value={leaderPort}
-                disabled={active || busy}
-                aria-label="Leader USB port"
-                onChange={(event) => setLeaderPort(event.target.value)}
-              >
-                <option value="">Select the second arm</option>
-                {devices.data?.ports
-                  .filter((item) => item.device !== port)
-                  .map((item) => (
-                    <option key={item.device} value={item.device}>
-                      {item.device}
-                    </option>
-                  ))}
-              </select>
-            </label>
-            <label>
-              Leader name
-              <input
-                value={leaderId}
-                disabled={active || busy}
-                aria-label="Leader name"
-                onChange={(event) => setLeaderId(event.target.value)}
-              />
-              <small>
-                {leaderCalibrated ? 'Leader calibration found.' : 'Calibrate this arm with the leader role first.'}
-              </small>
-            </label>
-          </div>
-        )}
         {controlJointOptions}
         {mode === 'manual' && !partialSelection && state?.capabilities?.middle_tolerance && (
           <label>

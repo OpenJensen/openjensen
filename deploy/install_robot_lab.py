@@ -22,7 +22,9 @@ REQUIREMENTS = [
 SOURCE_MODULES = (
     "dispatch.py",
     "diagnostics.py",
+    "device_registry.py",
     "server.py",
+    "recording.py",
     "agent_control.py",
     "hardware.py",
     "lerobot_control.py",

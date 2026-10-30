@@ -2060,6 +2060,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/robot-lab/calibration/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Robot Lab Get Calibration Export */
+        get: operations["robot_lab_get_calibration_export"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/robot-lab/calibration/finish": {
         parameters: {
             query?: never;
@@ -2071,6 +2088,23 @@ export interface paths {
         put?: never;
         /** Robot Lab Post Calibration Finish */
         post: operations["robot_lab_post_calibration_finish"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/robot-lab/calibration/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Robot Lab Post Calibration Import */
+        post: operations["robot_lab_post_calibration_import"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2247,6 +2281,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/robot-lab/devices/configure": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Robot Lab Post Devices Configure */
+        post: operations["robot_lab_post_devices_configure"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/robot-lab/devices/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Robot Lab Post Devices Remove */
+        post: operations["robot_lab_post_devices_remove"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/robot-lab/devices/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Robot Lab Post Devices Restore */
+        post: operations["robot_lab_post_devices_restore"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/robot-lab/diagnostics": {
         parameters: {
             query?: never;
@@ -2309,6 +2394,91 @@ export interface paths {
         put?: never;
         /** Robot Lab Post Probe */
         post: operations["robot_lab_post_probe"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/robot-lab/recording/collection/next": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Robot Lab Post Recording Collection Next */
+        post: operations["robot_lab_post_recording_collection_next"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/robot-lab/recording/collection/pause": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Robot Lab Post Recording Collection Pause */
+        post: operations["robot_lab_post_recording_collection_pause"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/robot-lab/recording/collection/rerecord": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Robot Lab Post Recording Collection Rerecord */
+        post: operations["robot_lab_post_recording_collection_rerecord"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/robot-lab/recording/collection/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Robot Lab Post Recording Collection Resume */
+        post: operations["robot_lab_post_recording_collection_resume"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/robot-lab/recording/collection/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Robot Lab Post Recording Collection Start */
+        post: operations["robot_lab_post_recording_collection_start"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3565,6 +3735,21 @@ export interface components {
              * @default 90
              */
             stale_after_seconds: number;
+        };
+        /** CompanionUpdateStatus */
+        CompanionUpdateStatus: {
+            /**
+             * Managed
+             * @default false
+             */
+            managed: boolean;
+            /** Message */
+            message: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "current" | "updated" | "needs_update";
         };
         /** ComputeSettingsResponse */
         ComputeSettingsResponse: {
@@ -6356,6 +6541,7 @@ export interface components {
             channel: "main";
             /** Checked At */
             checked_at?: string | null;
+            companion_update?: components["schemas"]["CompanionUpdateStatus"] | null;
             installed: components["schemas"]["ApplicationVersion"];
             /** Latest Release */
             latest_release?: string | null;
@@ -10658,6 +10844,26 @@ export interface operations {
             };
         };
     };
+    robot_lab_get_calibration_export: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
     robot_lab_post_calibration_finish: {
         parameters: {
             query?: never;
@@ -10666,6 +10872,54 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    robot_lab_post_calibration_import: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /**
+                     * Confirm
+                     * @constant
+                     */
+                    confirm: "IMPORT CALIBRATION";
+                    /** Document */
+                    document: {
+                        [key: string]: unknown;
+                    };
+                    /** Port */
+                    port?: string | null;
+                    /**
+                     * Replace Existing
+                     * @default false
+                     */
+                    replace_existing?: boolean;
+                    /** Robot Id */
+                    robot_id: string;
+                    /**
+                     * Role
+                     * @enum {string}
+                     */
+                    role: "follower" | "leader";
+                };
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -10878,6 +11132,96 @@ export interface operations {
             };
         };
     };
+    robot_lab_post_devices_configure: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** Id */
+                    id: string;
+                    /** Name */
+                    name: string;
+                    /** Port */
+                    port: string;
+                    /**
+                     * Role
+                     * @enum {string}
+                     */
+                    role: "follower" | "leader";
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    robot_lab_post_devices_remove: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** Id */
+                    id: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    robot_lab_post_devices_restore: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** Id */
+                    id: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
     robot_lab_get_diagnostics: {
         parameters: {
             query?: never;
@@ -10946,6 +11290,126 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    robot_lab_post_recording_collection_next: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    robot_lab_post_recording_collection_pause: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    robot_lab_post_recording_collection_rerecord: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    robot_lab_post_recording_collection_resume: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    robot_lab_post_recording_collection_start: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -11057,7 +11521,45 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /**
+                     * Camera Index
+                     * @default 0
+                     */
+                    camera_index?: number | null;
+                    collection?: {
+                        /**
+                         * Countdown S
+                         * @default 3
+                         */
+                        countdown_s?: number;
+                        /**
+                         * Episode Time S
+                         * @default 30
+                         */
+                        episode_time_s?: number;
+                        /**
+                         * Num Episodes
+                         * @default 10
+                         */
+                        num_episodes?: number;
+                        /**
+                         * Reset Time S
+                         * @default 10
+                         */
+                        reset_time_s?: number;
+                    } | null;
+                    /** Dataset Id */
+                    dataset_id: string;
+                    /** Fps */
+                    fps?: number | null;
+                    /** Task */
+                    task: string;
+                };
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

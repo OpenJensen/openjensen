@@ -28,6 +28,7 @@ from assembled_session import AssembledSession, CalibrationRevisions, empty_asse
 from calibration_draft import CalibrationDraft, file_hash
 from camera import MAX_CAMERA_INDEX, CameraPool
 from dataset import DatasetWriter, atomic_json, dataset_file, list_datasets, manifest, safe_slug
+from device_registry import DeviceRegistry
 from diagnostics import Diagnostics
 from dispatch import MainThreadDispatcher
 from hardware import (
@@ -49,6 +50,7 @@ from lerobot_control import (
     prepare_single_turn_feedback,
 )
 from motion import MiddleMotion, RestMotion, control_limits, middle_targets, step_target
+from recording import MAX_RECORDING_FPS, CaptureRate, Collection
 from rest_position import RestPositions
 from verification import (
     MappingChecks,
@@ -121,11 +123,12 @@ def valid_calibration(value):
         raise RequestError("Calibration must contain all six joints")
     for joint, entry in value.items():
         if (
-            entry.get("id") != IDS[joint]
+            not isinstance(entry, dict)
+            or entry.get("id") != IDS[joint]
             or entry.get("drive_mode") != 0
             or not all(
                 isinstance(entry.get(key), int) and not isinstance(entry.get(key), bool)
-                for key in ("homing_offset", "range_min", "range_max")
+                for key in ("id", "drive_mode", "homing_offset", "range_min", "range_max")
             )
         ):
             raise RequestError("Calibration has invalid joint data")
@@ -206,6 +209,7 @@ class RobotLab:
         self.assembled_factory = assembled_factory
         self.movement_detector = movement_detector
         self.observe_timeout = observe_timeout
+        self.device_registry = DeviceRegistry(self.data_dir)
         self.calibration_revisions = CalibrationRevisions(self.data_dir)
         self.assembled_session = None
         self.assembled_state = empty_assembled_state()
@@ -270,6 +274,14 @@ class RobotLab:
         self.last_jog = 0.0
         self.writer = None
         self.recording_error = None
+        self.recording_fps_mode = "manual"
+        self.recording_rate_status = "ready"
+        self.recording_rate_message = ""
+        self.recording_rate = None
+        self.collection = None
+        self.recording_io = False
+        self.recording_thread = None
+        self.last_recorded_image = None
         self.camera_index = None
         self.next_record = 0.0
         self.finished = threading.Event()
@@ -400,6 +412,10 @@ class RobotLab:
         safe_slug(robot_id)
         if role not in ("follower", "leader"):
             raise RequestError("Role must be follower or leader")
+        device = next((d for d in self.device_registry.read() if d["robot_id"] == robot_id), None)
+        if device and device.get("profile_role"):
+            role = device["profile_role"]
+            robot_id = safe_slug(device.get("calibration_id", robot_id))
         return (
             self.calibration_root
             / ("robots/so_follower" if role == "follower" else "teleoperators/so_leader")
@@ -416,6 +432,122 @@ class RobotLab:
                 "Motor IDs changed on this port; save a new calibration before control"
             )
         return calibration
+
+    def calibration_export(self, robot_id, role):
+        with self.lock:
+            info = self.profile_info(robot_id, role)
+            if not info["valid"]:
+                raise RequestError(info["error"] or "No valid calibration to export")
+            return {
+                "format": "openjensen.so101.calibration",
+                "version": 1,
+                "robot_id": robot_id,
+                "role": role,
+                "calibration": self.load_calibration(robot_id, role),
+            }
+
+    def calibration_import(self, payload):
+        require(payload, "confirm", "IMPORT CALIBRATION")
+        if set(payload) - {"confirm", "robot_id", "role", "document", "port", "replace_existing"}:
+            raise RequestError("Invalid calibration import request")
+        robot_id, role = payload.get("robot_id"), payload.get("role")
+        path = self.calibration_path(robot_id, role)
+        replace = payload.get("replace_existing", False)
+        if type(replace) is not bool:
+            raise RequestError("Choose whether to replace the existing profile")
+        document = payload.get("document")
+        if not isinstance(document, dict):
+            raise RequestError("Choose a calibration JSON file")
+        if document.get("format") == "openjensen.so101.calibration":
+            if (
+                set(document) != {"format", "version", "robot_id", "role", "calibration"}
+                or type(document.get("version")) is not int
+                or document["version"] != 1
+            ):
+                raise RequestError("Unsupported calibration export version or fields")
+            safe_slug(document.get("robot_id"))
+            if document.get("role") != role:
+                raise RequestError(
+                    "This file is for a different arm role; select its leader or follower role"
+                )
+            document = document["calibration"]
+        calibration = valid_calibration(document)
+        fields = ("id", "drive_mode", "homing_offset", "range_min", "range_max")
+        if any(set(entry) != set(fields) for entry in calibration.values()):
+            raise RequestError("Calibration contains unsupported joint fields")
+        calibration = {joint: {key: calibration[joint][key] for key in fields} for joint in JOINTS}
+        with self.lock:
+            self._idle()
+            generation = self.generation
+            if path.is_symlink() or (path.exists() and not path.is_file()):
+                raise RequestError("Calibration destination must be a regular file")
+            if path.exists() and not replace:
+                raise RequestError(
+                    "Confirm replacing the existing calibration; a backup will be kept"
+                )
+            verified = payload.get("port") is not None
+            port = self._port(payload["port"]) if verified else None
+            if verified:
+                bus = self.bus_factory(port)
+                try:
+                    with bus.lock:
+                        bus.check_six()
+                        actual = bus.read_calibration()
+                        different = [
+                            joint.replace("_", " ")
+                            for joint in JOINTS
+                            if actual.get(joint) != calibration[joint]
+                        ]
+                        if different:
+                            raise RequestError(
+                                "Calibration file does not match the connected motors: "
+                                + ", ".join(different)
+                                + ". Choose the file from the computer that last "
+                                "calibrated this arm."
+                            )
+                finally:
+                    # Import verification is read only, including on failure.
+                    bus.close()
+            with self.stop_lock:
+                if generation != self.generation or self.stopping:
+                    raise RequestError("Calibration import cancelled by Stop")
+                backup = None
+                if path.exists():
+                    backup = path.with_name(path.stem + f".backup-{time.time_ns()}.json")
+                    shutil.copy2(path, backup)
+                    backup.chmod(0o600)
+                try:
+                    atomic_json(path, calibration)
+                    path.chmod(0o600)
+                    if verified:
+                        self.calibration_revisions.acknowledge(port, robot_id, role, path)
+                except Exception:
+                    if backup is not None:
+                        shutil.copy2(backup, path)
+                    else:
+                        path.unlink(missing_ok=True)
+                    raise
+                if verified and self.error in (
+                    "Motor calibration differs from the saved profile; recalibrate before motion",
+                    "Leader calibration differs from its saved profile",
+                ):
+                    self.error = None
+                self.diagnostics.emit(
+                    "calibration_imported",
+                    robot_id=robot_id,
+                    role=role,
+                    verified=verified,
+                    previous_profile_backed_up=backup is not None,
+                )
+            return {
+                **self.status(),
+                "calibration_transfer": {
+                    "robot_id": robot_id,
+                    "role": role,
+                    "verified": verified,
+                    "backup_created": backup is not None,
+                },
+            }
 
     def _port(self, value):
         if not isinstance(value, str) or value not in {
@@ -480,11 +612,21 @@ class RobotLab:
                 except ValueError:
                     continue
                 calibrations.append(self.profile_info(path.stem, role))
+        for device in self.device_registry.read():
+            for role in ("leader", "follower"):
+                if not any(
+                    p["robot_id"] == device["robot_id"] and p["role"] == role for p in calibrations
+                ):
+                    info = self.profile_info(device["robot_id"], role)
+                    if info["valid"]:
+                        calibrations.append(info)
         writer = self.writer
         with self.lifecycle_lock:
             assembled = json.loads(json.dumps(self.assembled_state))
             copy_verification = json.loads(json.dumps(self.verification_state))
             middle_motion = self.middle_motion
+            plan = self.collection
+            collection = plan.snapshot(time.monotonic()) if plan else None
             rest_motion, rest_phase = self.rest_motion, self.rest_phase
             rest_calibration = dict(self.calibration)
             rest_targets = (
@@ -517,6 +659,9 @@ class RobotLab:
                 "arm_readiness": hardware,
                 "calibration": hardware,
                 "calibration_persistence": hardware,
+                "calibration_transfer": True,
+                "device_registry": True,
+                "device_removal": True,
                 "control": hardware,
                 "lerobot_position_control": hardware,
                 "rest_position": hardware,
@@ -524,6 +669,8 @@ class RobotLab:
                 "gripper_load_tolerance": True,
                 "lerobot_observation_ranges": True,
                 "background_recording_io": True,
+                "guided_recording": True,
+                "auto_recording_fps": True,
                 "agent_control": hardware,
                 "move_to_middle": hardware,
                 "middle_tolerance": hardware,
@@ -584,6 +731,11 @@ class RobotLab:
                 "episodes": len(writer.episodes) if writer else 0,
                 "fps": writer.fps if writer else 10,
                 "error": self.recording_error,
+                "fps_mode": self.recording_fps_mode,
+                "rate_status": self.recording_rate_status,
+                "rate_message": self.recording_rate_message,
+                "saving": self.recording_io,
+                "collection": collection,
             },
             "calibrations": calibrations,
             "datasets": list_datasets(self.datasets_dir),
@@ -605,17 +757,63 @@ class RobotLab:
             cameras = self.camera.discover()
         except Exception as caught:
             cameras, error = [], str(caught)
-        return {"ports": self.port_provider(), "cameras": cameras, "camera_error": error}
+        with self.lock:
+            ports = self.port_provider()
+            catalog = self.device_registry.discover(ports, self.status()["calibrations"])
+            for device in catalog:
+                try:
+                    saved_mapping(self.data_dir, device["port"])
+                    device["motor_ids"] = True
+                except ValueError, OSError:
+                    device["motor_ids"] = False
+                profile = self.profile_info(
+                    device["robot_id"], device["profile_role"] or "follower"
+                )
+                device["calibration"] = (
+                    "saved"
+                    if profile["valid"] and profile["setup_fresh"]
+                    else "needs_attention"
+                    if profile["valid"]
+                    else "missing"
+                )
+            return {
+                "ports": ports,
+                "saved_devices": catalog,
+                "removed_devices": self.device_registry.removed(),
+                "cameras": cameras,
+                "camera_error": error,
+            }
+
+    def configure_device(self, payload):
+        with self.lock:
+            self._idle()
+            if self.writer is not None:
+                raise RequestError("Finish recording before changing devices")
+            self.device_registry.save(payload, self.devices()["saved_devices"])
+            return self.devices()
+
+    def change_device_visibility(self, payload, *, restore=False):
+        with self.lock:
+            self._idle()
+            if self.writer is not None:
+                raise RequestError("Finish recording before changing devices")
+            operation = self.device_registry.restore if restore else self.device_registry.remove
+            operation(payload)
+            return self.devices()
 
     def probe(self, payload):
         with self.lock:
             self._idle()
+            discover = payload.get("discover", False)
+            if type(discover) is not bool:
+                raise RequestError("Motor discovery must be true or false")
             port = self._port(payload.get("port"))
             baud = payload.get("baudrate", 1_000_000)
             if baud not in BAUDRATES:
                 raise RequestError("Unsupported STS3215 baudrate")
             if payload.get("robot_id") is not None:
                 self.calibration_path(payload["robot_id"], payload.get("role", "follower"))
+            generation = self.generation
             bus = self.bus_factory(port, baud)
             try:
                 with bus.lock:
@@ -623,7 +821,11 @@ class RobotLab:
                         "port": port,
                         "baudrate": baud,
                         "checked_at": time.time(),
-                        **probe_bus(bus),
+                        **probe_bus(
+                            bus,
+                            discover=discover,
+                            is_current=lambda: generation == self.generation and not self.stopping,
+                        ),
                     }
                     if payload.get("robot_id") is not None:
                         robot_id, role = payload["robot_id"], payload.get("role", "follower")
@@ -1367,6 +1569,12 @@ class RobotLab:
                 raise RequestError(
                     "Save or discard the recording episode before using rest positions"
                 )
+            if (
+                not save
+                and self.collection
+                and self.collection.phase not in {"idle", "paused", "complete"}
+            ):
+                raise RequestError("Pause timed collection before returning to rest")
             if time.monotonic() - self.heartbeat > 2:
                 raise RequestError("Control heartbeat expired; stop and reconnect")
             if not save and (self.mode == "handguide" or not self.torque):
@@ -1509,6 +1717,8 @@ class RobotLab:
                 self.error = reason
             if self.writer:
                 self.writer.episode_active = False
+            if self.collection:
+                self.collection.pause(time.monotonic(), "Control stopped. Collection paused")
         errors = []
         if verification is not None:
             try:
@@ -1596,79 +1806,336 @@ class RobotLab:
 
     def recording_start(self, payload):
         with self.lock:
-            if self.mode not in ("manual", "leader", "handguide"):
-                raise RequestError("Connect a calibrated arm in Teleoperate before recording")
-            if set(self.calibration) != set(JOINTS):
-                raise RequestError("Dataset recording requires all six joints")
-            if self.rest_motion is not None:
-                raise RequestError("Wait for the return to rest before recording")
-            if self.middle_motion is not None:
-                raise RequestError("Wait for movement to the recorded middle before recording")
+            self._recording_control_ready()
+        requested_fps = payload.get("fps")
+        fps = (
+            MAX_RECORDING_FPS
+            if requested_fps is None
+            else integer(requested_fps, 1, MAX_RECORDING_FPS, "FPS")
+        )
+        collection = (
+            Collection(payload["collection"]) if payload.get("collection") is not None else None
+        )
+        task = payload.get("task")
+        if not isinstance(task, str) or not task.strip() or len(task) > 1000:
+            raise RequestError("Describe the task in 1–1000 characters")
+        camera_index = payload.get("camera_index", 0)
+        if camera_index is not None:
+            integer(camera_index, 0, MAX_CAMERA_INDEX, "Camera index")
+        with self.lock:
+            self._recording_control_ready()
+            if self.recording_io:
+                raise RequestError("Recording files are busy; wait for completion")
             if self.writer and not self.writer.finalized:
                 raise RequestError("Finalize the previous dataset before starting another")
-            fps = integer(payload.get("fps", 10), 1, 20, "FPS")
-            task = payload.get("task")
-            if not isinstance(task, str) or not task.strip() or len(task) > 1000:
-                raise RequestError("Describe the task in 1–1000 characters")
-            camera_index = payload.get("camera_index", 0)
+            generation = self.generation
+            self.recording_io = True
+        writer = None
+        try:
             image_shape = None
             if camera_index is not None:
-                integer(camera_index, 0, MAX_CAMERA_INDEX, "Camera index")
-                image_shape = tuple(self.camera.read(camera_index).shape)
+                initial_image = self.camera.read(camera_index)
+                image_shape = tuple(initial_image.shape)
                 if hasattr(self.camera, "start_reader"):
                     self.camera.start_reader(camera_index)
             if shutil.disk_usage(self.datasets_dir).free < 1024**3:
                 raise RequestError(
                     "Less than 1 GiB disk space remains; free space before recording"
                 )
-            self.writer = DatasetWriter(
+            writer = DatasetWriter(
                 self.datasets_dir, payload.get("dataset_id"), task.strip(), fps, image_shape
             )
-            self.camera_index = camera_index
-            self.recording_error = None
+            with self.lock, self.lifecycle_lock:
+                if generation != self.generation or self.stopping or self.finished.is_set():
+                    raise RequestError("Control stopped while recording was being prepared")
+                self._recording_control_ready()
+                self.writer = writer
+                self.camera_index = camera_index
+                self.recording_error = None
+                self.recording_fps_mode = "auto" if requested_fps is None else "manual"
+                self.recording_rate = (
+                    CaptureRate(time.monotonic(), camera_index is not None)
+                    if requested_fps is None
+                    else None
+                )
+                if self.recording_rate and camera_index is not None:
+                    self.recording_rate.measure_image_io(initial_image, writer.root)
+                self.recording_rate_status = "measuring" if self.recording_rate else "ready"
+                self.recording_rate_message = (
+                    "Measuring camera, robot and storage speed…"
+                    if self.recording_rate
+                    else f"Manual frame rate: {fps} FPS"
+                )
+                self.collection = collection
+                self.last_recorded_image = None
+        except Exception:
+            if writer is not None and writer is not self.writer:
+                writer.close()
+            raise
+        finally:
+            with self.lock:
+                self.recording_io = False
         return self.status()
+
+    def _recording_control_ready(self):
+        if self.mode not in ("manual", "leader", "handguide"):
+            raise RequestError("Connect a calibrated arm in Teleoperate before recording")
+        if set(self.calibration) != set(JOINTS):
+            raise RequestError("Dataset recording requires all six joints")
+        if self.rest_motion is not None:
+            raise RequestError("Wait for the return to rest before recording")
+        if self.middle_motion is not None:
+            raise RequestError("Wait for movement to the recorded middle before recording")
+
+    def _start_recording_episode(self):
+        self._recording_control_ready()
+        if self.recording_rate_status != "ready":
+            raise RequestError("Measuring capture speed; wait for the automatic frame rate")
+        if self.collection and self.writer.fps * self.collection.config["episode_time_s"] < 2:
+            raise RequestError(
+                "Timed episodes need at least two frames; "
+                "use an episode duration of at least 2 seconds"
+            )
+        self.writer.start_episode()
+        self.next_record = time.monotonic()
+        self.last_recorded_image = None
+        self.recording_error = None
 
     def recording_action(self, action, payload=None):
         payload = {} if payload is None else payload
-        with self.lock:
+        with self.lock, self.lifecycle_lock:
             writer = self.writer
             if writer is None or writer.finalized:
                 raise RequestError("Create a dataset first")
+            if self.recording_io:
+                raise RequestError("Episode files are being saved; wait for completion")
             if action == "start":
-                if set(self.calibration) != set(JOINTS):
-                    raise RequestError("Dataset recording requires all six joints")
-                if self.rest_motion is not None:
-                    raise RequestError("Wait for the return to rest before recording")
-                if self.middle_motion is not None:
-                    raise RequestError("Wait for movement to the recorded middle before recording")
-                if self.mode not in ("manual", "leader", "handguide"):
-                    raise RequestError("Reconnect the calibrated arm before recording")
-                writer.start_episode()
-                self.next_record = time.monotonic()
-                self.recording_error = None
-            elif action == "save":
-                writer.save_episode()
-            elif action == "discard":
-                writer.discard_episode()
-            elif action == "finish":
-                abandon_empty = payload.get("abandon_empty", False)
+                if self.collection and self.collection.phase not in {"idle", "paused", "complete"}:
+                    raise RequestError(
+                        "Pause automatic collection before starting a manual episode"
+                    )
+                self._start_recording_episode()
+                return self.status()
+            if action not in {"save", "discard", "finish"}:
+                raise RequestError("Unknown recording action")
+            if self.collection:
+                self.collection.pause(time.monotonic())
+            abandon_empty = payload.get("abandon_empty", False)
+            if action == "finish":
                 if type(abandon_empty) is not bool:
                     raise RequestError("abandon_empty must be true or false")
                 if abandon_empty:
                     require(payload, "confirm", "ABANDON EMPTY RECORDING")
-                    writer.abandon_empty()
-                    # The recording loop rechecks writer identity under this
-                    # lock before publishing a frame, so an in-flight capture
-                    # cannot append to this retired writer after detachment.
+            self.recording_io = True
+            writer.episode_active = False
+        # Encoding and disk waits must never hold the motor loop's global lock.
+        try:
+            if action == "save":
+                writer.save_episode()
+            elif action == "discard":
+                writer.discard_episode()
+            elif abandon_empty:
+                writer.abandon_empty()
+                with self.lock, self.lifecycle_lock:
                     self.writer = None
                     self.camera_index = None
                     self.next_record = 0.0
                     self.recording_error = None
-                else:
-                    writer.finalize()
+                    self.recording_rate = None
+                    self.collection = None
             else:
-                raise RequestError("Unknown recording action")
+                writer.finalize()
+        finally:
+            with self.lock:
+                self.recording_io = False
+            if self.finished.is_set():
+                writer.close()
         return self.status()
+
+    def collection_action(self, action):
+        with self.lock, self.lifecycle_lock:
+            plan, writer = self.collection, self.writer
+            if plan is None or writer is None or writer.finalized:
+                raise RequestError("Create a dataset with timed collection settings first")
+            now = time.monotonic()
+            if action == "pause":
+                writer.episode_active = False
+                plan.pause(now)
+                return self.status()
+            if self.recording_io:
+                raise RequestError("Episode files are being saved; wait for completion")
+            self._recording_control_ready()
+            if self.recording_rate_status == "error":
+                raise RequestError(
+                    "Frame-rate measurement failed; close this unsaved recording "
+                    "and create a new one"
+                )
+            if action in {"start", "resume"}:
+                expected = "idle" if action == "start" else "paused"
+                if plan.phase != expected:
+                    raise RequestError(f"Collection must be {expected} first")
+                if writer.frames or writer.episode_active:
+                    raise RequestError(
+                        "Save or discard the interrupted episode, or choose Rerecord"
+                    )
+                if plan.completed >= plan.config["num_episodes"]:
+                    plan.transition("complete", "Collection complete", now)
+                else:
+                    plan.transition("countdown", "Get ready", now, plan.config["countdown_s"])
+            elif action == "next":
+                if plan.phase != "reset":
+                    raise RequestError("Skip reset is available only during reset time")
+                plan.transition("countdown", "Get ready", now, plan.config["countdown_s"])
+            elif action == "rerecord":
+                if plan.phase not in {"recording", "paused"}:
+                    raise RequestError("Rerecord is available for the current pending episode")
+                # Discard may wait for image writes; use the same background lane as saving.
+                writer.episode_active = False
+                self._collection_io(writer, plan, discard=True)
+            else:
+                raise RequestError("Unknown collection action")
+        return self.status()
+
+    def _collection_io(self, writer, plan, *, discard=False):
+        generation = self.generation
+        self.recording_io = plan.saving = True
+        plan.transition(
+            "saving", "Preparing to rerecord" if discard else "Saving episode", time.monotonic()
+        )
+
+        def work():
+            try:
+                if discard:
+                    writer.discard_episode()
+                else:
+                    writer.save_episode()
+                with self.lock, self.lifecycle_lock:
+                    if writer is not self.writer or plan is not self.collection:
+                        return
+                    if not discard:
+                        plan.completed += 1
+                    # Stop, pause, and a replacement controller revoke progression.
+                    if (
+                        generation != self.generation
+                        or plan.phase == "paused"
+                        or self.finished.is_set()
+                    ):
+                        plan.pause(time.monotonic())
+                    elif plan.completed >= plan.config["num_episodes"]:
+                        plan.transition("complete", "Collection complete", time.monotonic())
+                    elif discard:
+                        plan.transition(
+                            "countdown",
+                            "Rerecord episode. Get ready",
+                            time.monotonic(),
+                            plan.config["countdown_s"],
+                        )
+                    else:
+                        plan.transition(
+                            "reset",
+                            "Episode saved. Reset the scene",
+                            time.monotonic(),
+                            plan.config["reset_time_s"],
+                        )
+            except Exception as error:
+                with self.lock, self.lifecycle_lock:
+                    if writer is self.writer:
+                        self.recording_error = "Episode files could not be saved: " + str(error)
+                        plan.pause(time.monotonic(), "Saving failed. Pending frames are preserved")
+            finally:
+                with self.lock:
+                    self.recording_io = plan.saving = False
+                if self.finished.is_set():
+                    writer.close()
+
+        self.recording_thread = threading.Thread(
+            target=work, name="robot-lab-episode-save", daemon=True
+        )
+        self.recording_thread.start()
+
+    def _recording_prepare_tick(self, now):
+        """Runs only after a successful motor tick; observes without writing goals."""
+        writer = self.writer
+        if writer is None or writer.finalized or self.recording_io:
+            return
+        if self.recording_rate is not None:
+            image_time = None
+            if self.camera_index is not None:
+                if not hasattr(self.camera, "read_latest_timed"):
+                    raise RequestError(
+                        "Camera service cannot measure fresh frames; select a manual frame rate"
+                    )
+                _, image_time = self.camera.read_latest_timed(self.camera_index)
+            self.recording_rate.sample(now, image_time)
+            fps = self.recording_rate.select(now)
+            if fps is not None:
+                if writer.frames or writer.episodes or writer.episode_active:
+                    raise RequestError("Cannot change a dataset frame rate after capture begins")
+                self.recording_rate = None
+                self.recording_io = True
+
+                def publish_rate():
+                    try:
+                        writer.fps = fps
+                        writer.write_metadata()
+                        with self.lock, self.lifecycle_lock:
+                            if writer is self.writer:
+                                self.recording_rate_status = "ready"
+                                self.recording_rate_message = (
+                                    f"Automatic: {fps} FPS from camera, robot and storage "
+                                    f"measurements (up to {MAX_RECORDING_FPS} FPS)"
+                                )
+                    except Exception as error:
+                        with self.lock, self.lifecycle_lock:
+                            if writer is self.writer:
+                                self.recording_error = "Frame-rate preparation failed: " + str(
+                                    error
+                                )
+                                self.recording_rate_status = "error"
+                                self.recording_rate_message = str(error)
+                                if self.collection:
+                                    self.collection.pause(time.monotonic())
+                    finally:
+                        with self.lock:
+                            self.recording_io = False
+                        if self.finished.is_set():
+                            writer.close()
+
+                self.recording_thread = threading.Thread(
+                    target=publish_rate, name="robot-lab-recording-rate", daemon=True
+                )
+                self.recording_thread.start()
+                return
+            elif now - self.recording_rate.started > 15:
+                raise RequestError(
+                    "Not enough fresh camera or robot samples. Check the connection, "
+                    "then create a new recording."
+                )
+        plan = self.collection
+        if not plan or self.recording_rate_status != "ready":
+            if plan and plan.phase == "countdown":
+                plan.deadline = now + plan.config["countdown_s"]
+            return
+        if plan.phase == "reset" and now >= plan.deadline:
+            plan.transition("countdown", "Get ready", now, plan.config["countdown_s"])
+        if plan.phase == "countdown" and now >= plan.deadline:
+            self._start_recording_episode()
+            plan.transition(
+                "recording",
+                f"Recording episode {plan.completed + 1} of {plan.config['num_episodes']}",
+                now,
+                plan.config["episode_time_s"],
+            )
+        if plan.phase == "recording":
+            target = writer.fps * plan.config["episode_time_s"]
+            if writer.frames >= target:
+                writer.episode_active = False
+                self._collection_io(writer, plan)
+            elif now > plan.deadline + max(0.5, 2 / writer.fps):
+                raise RequestError(
+                    "Timed episode could not capture its full frame count. "
+                    "Pending frames are preserved; rerecord this episode."
+                )
 
     def _tick(self):
         bus, leader, mode, generation = self.bus, self.leader, self.mode, self.generation
@@ -1795,13 +2262,41 @@ class RobotLab:
                 }
             elif mode == "handguide":
                 self.action = dict(positions)
+        try:
+            with self.lock, self.lifecycle_lock:
+                if generation == self.generation:
+                    self._recording_prepare_tick(time.monotonic())
+        except Exception as error:
+            with self.lifecycle_lock:
+                if generation != self.generation:
+                    return
+                if self.writer:
+                    self.writer.episode_active = False
+                if self.collection:
+                    self.collection.pause(time.monotonic(), "Collection paused")
+                self.recording_error = "Recording paused: " + str(error)
+                if self.recording_rate_status == "measuring":
+                    self.recording_rate_status = "error"
+                    self.recording_rate_message = str(error)
+                self.recording_rate = None
+            return
         writer = self.writer
         if writer and writer.episode_active and time.monotonic() >= self.next_record:
             try:
                 image = None
                 if self.camera_index is not None:
                     read_image = getattr(self.camera, "read_latest", self.camera.read)
-                    image = read_image(self.camera_index)[:, :, ::-1].copy()
+                    if hasattr(self.camera, "read_latest_timed"):
+                        frame, image_time = self.camera.read_latest_timed(self.camera_index)
+                        if (
+                            self.last_recorded_image is not None
+                            and image_time <= self.last_recorded_image
+                        ):
+                            return
+                        image = frame[:, :, ::-1].copy()
+                    else:
+                        image_time = None
+                        image = read_image(self.camera_index)[:, :, ::-1].copy()
                 with self.lock:
                     if (
                         generation == self.generation
@@ -1812,7 +2307,12 @@ class RobotLab:
                         writer.add_frame(
                             dict(self.positions), dict(self.action), image, captured_at
                         )
+                        if self.camera_index is not None:
+                            self.last_recorded_image = image_time
                         self.next_record += 1.0 / writer.fps
+                        # Never burst backlogged samples after a scheduling delay.
+                        if captured_at - self.next_record >= 1.0 / writer.fps:
+                            self.next_record = captured_at + 1.0 / writer.fps
             except Exception as error:
                 # A recorder failure pauses collection, without conflating it
                 # with motor feedback or bypassing the independent Stop/watchdog.
@@ -1821,6 +2321,8 @@ class RobotLab:
                         return
                     writer.episode_active = False
                     self.recording_error = "Recording paused: " + str(error)
+                    if self.collection:
+                        self.collection.pause(time.monotonic())
                 self.diagnostics.emit(
                     "recording_paused",
                     reason=self.recording_error,
@@ -1881,7 +2383,9 @@ class RobotLab:
         self.finished.set()
         self.stop("Companion shutting down")
         self.camera.close()
-        if self.writer and hasattr(self.writer, "close"):
+        if self.recording_thread:
+            self.recording_thread.join(timeout=5)
+        if self.writer and hasattr(self.writer, "close") and not self.recording_io:
             try:
                 self.writer.close()
             except Exception as error:
@@ -1941,6 +2445,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, lab.diagnostics.snapshot(full=True))
             if path == "/v1/status":
                 return self._send(200, lab.status())
+            if path == "/v1/calibration/export":
+                if set(query) != {"robot_id", "role"} or any(len(v) != 1 for v in query.values()):
+                    raise RequestError("Choose one calibration profile and arm role")
+                return self._send(
+                    200, lab.calibration_export(query["robot_id"][0], query["role"][0])
+                )
             if path == "/v1/devices":
                 return self._send(200, lab.devices())
             if path == "/v1/camera.jpg":
@@ -1949,7 +2459,7 @@ class Handler(BaseHTTPRequestHandler):
                 )
                 image = (
                     lab.camera.cached_jpeg(index)
-                    if lab.writer and lab.writer.episode_active and lab.camera_index == index
+                    if lab.writer and not lab.writer.finalized and lab.camera_index == index
                     else lab.camera.jpeg(index)
                 )
                 return self._send(200, image, "image/jpeg")
@@ -2031,6 +2541,12 @@ class Handler(BaseHTTPRequestHandler):
                 result = lab.assembled_action(path.rsplit("/", 1)[-1], payload)
             elif path == "/v1/setup/assembled/cancel":
                 result = lab.stop()
+            elif path == "/v1/devices/configure":
+                result = lab.configure_device(payload)
+            elif path in ("/v1/devices/remove", "/v1/devices/restore"):
+                result = lab.change_device_visibility(payload, restore=path.endswith("/restore"))
+            elif path == "/v1/calibration/import":
+                result = lab.calibration_import(payload)
             elif path == "/v1/calibration/start":
                 result = lab.calibration_start(payload)
             elif path == "/v1/calibration/center":
@@ -2076,6 +2592,14 @@ class Handler(BaseHTTPRequestHandler):
                 "discard",
             ):
                 result = lab.recording_action(path.rsplit("/", 1)[-1])
+            elif path.startswith("/v1/recording/collection/") and path.rsplit("/", 1)[-1] in (
+                "start",
+                "pause",
+                "resume",
+                "next",
+                "rerecord",
+            ):
+                result = lab.collection_action(path.rsplit("/", 1)[-1])
             elif path == "/v1/recording/finish":
                 result = lab.recording_action("finish", payload)
             else:

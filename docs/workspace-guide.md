@@ -14,7 +14,7 @@ Open a job for its status, inputs, results and source jobs. **Timeline** explain
 
 ## Initial setup
 
-Connect the computer beside your SO-101, preview its camera, and work through **Connect → Motor IDs → Calibrate → Teleoperate → Record**. USB access stays on that computer; captures stay there until you add them to a project.
+Open **Devices** to see connected SO-101 USB controllers and saved devices. Each tile shows its name or USB address, motor-ID setup and calibration status. Open a tile to choose its default role, edit its name, and use its **Motor IDs** and **Calibration** sections. Then choose actual devices in **Teleoperation** and **Record**. Default leader/follower roles are suggestions for those sessions. USB access and captures stay on the robot computer until you add recordings to a project.
 
 **Understanding an unexpected stop**
 

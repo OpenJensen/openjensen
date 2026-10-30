@@ -10,12 +10,13 @@ import {
   robotJoints,
   type ControlMode,
   type RobotJoint,
+  type RobotDevice,
   type RobotProbe,
   type RobotRole,
   type RobotStatus,
 } from '@/lib/robot-api';
 import { So101JointGuide } from './so101-joint-guide';
-import { steps, setupOrder, statusKey, readable, isStatus } from './robot-lab-shared';
+import { setupOrder, statusKey, readable, isStatus } from './robot-lab-shared';
 
 type CalibrationConfirmation = {
   phase: 'center' | 'ranges' | 'saved';
@@ -57,6 +58,8 @@ export function useRobotLab() {
   const { projectId, navigateStage } = useWorkspace();
   const client = useQueryClient();
   const [step, setStep] = useState(0);
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
+  const [deviceName, setDeviceName] = useState('');
   const [followerDevice, setFollowerDevice] = useState('');
   const [followerId, setFollowerId] = useState('my-so101');
   const [role, setRole] = useState<RobotRole>('follower');
@@ -65,9 +68,7 @@ export function useRobotLab() {
   const port = role === 'leader' ? leaderPort : followerDevice;
   const robotId = role === 'leader' ? leaderId : followerId;
   const setPort = role === 'leader' ? setLeaderPort : setFollowerDevice;
-  const setRobotId = role === 'leader' ? setLeaderId : setFollowerId;
   const armLabel = role === 'leader' ? 'Leader' : 'Follower';
-  const validRobotName = /^[A-Za-z0-9_-]{1,64}$/.test(robotId);
   const [mode, setMode] = useState<ControlMode>('manual');
   const [isolated, setIsolated] = useState(false);
   const [assembledReady, setAssembledReady] = useState(false);
@@ -95,7 +96,7 @@ export function useRobotLab() {
   const [cameraError, setCameraError] = useState(false);
   const [datasetId, setDatasetId] = useState('');
   const [task, setTask] = useState('');
-  const [fps, setFps] = useState(10);
+  const [fps, setFps] = useState<number | null>(null);
   const [recordCamera, setRecordCamera] = useState(true);
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -135,8 +136,127 @@ export function useRobotLab() {
     retry: false,
     refetchInterval: 10_000,
   });
+  const catalog: RobotDevice[] =
+    devices.data?.saved_devices ??
+    (devices.data?.ports ?? []).map((entry, index) => {
+      const profile =
+        state?.calibrations?.find((p) => p.setup_port === entry.device) ??
+        (index === 0 ? state?.calibrations?.find((p) => p.robot_id === followerId) : undefined);
+      return {
+        id: entry.device,
+        port: entry.device,
+        serial_number: entry.serial_number,
+        name: profile?.robot_id ?? '',
+        robot_id: profile?.robot_id ?? (index === 0 ? followerId : leaderId),
+        role: profile?.role ?? null,
+        profile_role: profile?.role ?? null,
+        connected: true,
+        description: entry.description,
+        calibration: profile ? 'saved' : 'missing',
+      };
+    });
+  const selectedDevice = catalog.find((d) => d.id === selectedDeviceId);
+  function chooseDevice(device: RobotDevice) {
+    if (active || busy) return;
+    const deviceRole = device.role ?? 'follower';
+    setSelectedDeviceId(device.id);
+    setDeviceName(device.name);
+    setRole(deviceRole);
+    if (deviceRole === 'leader') {
+      setLeaderPort(device.port);
+      setLeaderId(device.robot_id);
+    } else {
+      setFollowerDevice(device.port);
+      setFollowerId(device.robot_id);
+    }
+    setStep(0);
+    setNotice(null);
+    setError(null);
+  }
+  function selectControlDevice(id: string, slot: RobotRole) {
+    if (active || busy || recording?.active) return;
+    const device = catalog.find((d) => d.id === id);
+    setRole('follower');
+    if (slot === 'follower') {
+      setFollowerDevice(device?.port ?? '');
+      setFollowerId(device?.robot_id ?? '');
+    } else {
+      setLeaderPort(device?.port ?? '');
+      setLeaderId(device?.robot_id ?? '');
+    }
+    setMotionReady(false);
+    setNotice(null);
+    setError(null);
+  }
+  async function saveDeviceConfiguration(nextRole: RobotRole = role) {
+    if (!selectedDevice || active || busy) return;
+    await perform(
+      'Device configuration saved.',
+      () =>
+        robotApi.configureDevice({
+          id: selectedDevice.id,
+          port,
+          name: deviceName,
+          role: nextRole,
+        }),
+      (result) => {
+        client.setQueryData(['robot-lab', 'devices'], result);
+        setSelectedDeviceId(
+          result.saved_devices?.find((d) => d.robot_id === selectedDevice.robot_id)?.id ?? selectedDevice.id,
+        );
+        setRole(nextRole);
+        if (nextRole === 'leader') {
+          setLeaderPort(port);
+          setLeaderId(robotId);
+        } else {
+          setFollowerDevice(port);
+          setFollowerId(robotId);
+        }
+      },
+    );
+  }
+  async function removeDevice() {
+    if (!selectedDevice || active || busy || recording?.active) return;
+    const removed = selectedDevice;
+    await perform(
+      'Device removed. Its calibration files are kept; you can restore it from Removed devices.',
+      () => robotApi.removeDevice(removed.id),
+      (result) => {
+        client.setQueryData(['robot-lab', 'devices'], result);
+        setSelectedDeviceId(null);
+        if (followerId === removed.robot_id) {
+          setFollowerDevice('');
+          setFollowerId('');
+        }
+        if (leaderId === removed.robot_id) {
+          setLeaderPort('');
+          setLeaderId('');
+        }
+        try {
+          const key = 'openjensen.robot-lab.preferences';
+          const saved = JSON.parse(localStorage.getItem(key) ?? '{}');
+          if (saved.robotId === removed.robot_id) Object.assign(saved, { port: '', robotId: '' });
+          if (saved.leaderId === removed.robot_id) Object.assign(saved, { leaderPort: '', leaderId: '' });
+          localStorage.setItem(key, JSON.stringify(saved));
+        } catch {
+          // Browser preference storage is optional; the registry removal succeeded.
+        }
+        setProbe(null);
+        setMotionReady(false);
+      },
+    );
+  }
+  async function restoreDevice(id: string) {
+    if (active || busy || recording?.active) return;
+    await perform(
+      'Device restored.',
+      () => robotApi.restoreDevice(id),
+      (result) => client.setQueryData(['robot-lab', 'devices'], result),
+    );
+  }
   const session = state?.session;
-  const calibration = state?.calibration;
+  const calibration =
+    state?.calibration && (!state.calibration.port || state.calibration.port === port) ? state.calibration : undefined;
   localCalibrationRef.current = session?.mode === 'calibration' && !!state?.capabilities?.calibration_persistence;
   const calibrationStage = calibration?.phase === 'interrupted' ? calibration.interrupted_stage : calibration?.phase;
   const calibrationSession = session?.mode === 'calibration' || calibration?.phase === 'interrupted';
@@ -147,9 +267,22 @@ export function useRobotLab() {
     step === 2
       ? error || (!recoveredCheckpoint && calibration?.error) || (calibrationSession && session?.error) || null
       : null;
-  const previousSessionError = step === 2 && !calibrationSession && session?.error !== error ? session?.error : null;
+  const previousSessionError =
+    session?.mode === 'idle' && (step !== 2 || !calibrationSession) && session.error !== error ? session.error : null;
   const recording = state?.recording;
-  const assembled = state?.assembled?.port === port ? state.assembled : undefined;
+  const assembled =
+    state?.assembled?.port === port
+      ? state.assembled
+      : selectedDevice?.motor_ids && state?.assembled
+        ? {
+            ...state.assembled,
+            port,
+            phase: 'complete' as const,
+            mapping: Object.fromEntries(robotJoints.map((j) => [j.name, j.id])),
+            ids: [1, 2, 3, 4, 5, 6],
+            calibration_required: false,
+          }
+        : undefined;
   const verification = state?.verification;
   const mappingComplete = assembled?.phase === 'complete' && assembled.port === port;
   const active = !!session && session.mode !== 'idle';
@@ -176,8 +309,13 @@ export function useRobotLab() {
     probe.profile.role === 'follower' &&
     ['missing', 'invalid', 'stale'].includes(probe.profile.state) &&
     (!followerProfile?.sha256 || probe.profile.sha256 === followerProfile.sha256);
+  const assignedFollower = catalog.find((d) => d.port === port && d.robot_id === robotId);
   const calibrated =
-    session?.mode !== 'setup' && profileUsable(followerProfile) && !followerMismatch && !followerScanInvalid;
+    (!devices.data?.saved_devices || (!!assignedFollower?.role && assignedFollower.connected)) &&
+    session?.mode !== 'setup' &&
+    profileUsable(followerProfile) &&
+    !followerMismatch &&
+    !followerScanInvalid;
   const persistedMotionChecks = state?.capabilities?.arm_readiness
     ? state.mapping_checks?.port === port && mappingComplete
       ? (Object.fromEntries(
@@ -199,7 +337,11 @@ export function useRobotLab() {
         ),
     ),
   ) as typeof localMotionChecks;
-  const leaderCalibrated = profileFor(leaderId, 'leader')?.valid !== false && !!profileFor(leaderId, 'leader');
+  const leaderCalibrated =
+    (!devices.data?.saved_devices ||
+      !!catalog.find((d) => d.port === leaderPort && d.robot_id === leaderId && d.role && d.connected)) &&
+    profileFor(leaderId, 'leader')?.valid !== false &&
+    !!profileFor(leaderId, 'leader');
   const motorDefinition = robotJoints.find((item) => item.name === setupOrder[motorIndex])!;
   const selectedMotor =
     role === 'leader' && motorDefinition.name === 'gripper'
@@ -209,7 +351,11 @@ export function useRobotLab() {
   const busy = !!pending;
   const canAct = online && !busy && !reconnecting && !awaitingCalibration;
   const portConnected =
-    online && !!port && !devices.isError && !!devices.data?.ports.some((item) => item.device === port);
+    online &&
+    !!port &&
+    !devices.isError &&
+    !!devices.data?.ports.some((item) => item.device === port) &&
+    (step >= 3 || !selectedDevice || selectedDevice.connected);
   const leaderConnected =
     online && !!leaderPort && !devices.isError && !!devices.data?.ports.some((item) => item.device === leaderPort);
   const canUseArm = canAct && portConnected;
@@ -256,11 +402,18 @@ export function useRobotLab() {
   }, []);
   useEffect(() => {
     if (!devices.data) return;
-    if (role === 'follower' && !followerDevice)
+    if (!devices.data.saved_devices && role === 'follower' && !followerDevice)
       setFollowerDevice(devices.data.ports.find((item) => item.device !== leaderPort)?.device ?? '');
     const cameras = devices.data.cameras;
     if (!cameras.some((camera) => camera.index === cameraIndex)) setCameraIndex(cameras[0]?.index ?? 0);
   }, [devices.data, followerDevice, leaderPort, role, cameraIndex]);
+  useEffect(() => {
+    if (active || busy || !selectedDevice || !selectedDevice.connected || step >= 3) return;
+    if (selectedDevice.port !== port) {
+      if (role === 'leader') setLeaderPort(selectedDevice.port);
+      else setFollowerDevice(selectedDevice.port);
+    }
+  }, [selectedDevice?.port, selectedDevice?.connected, step, active, busy, port, role]);
   useEffect(() => {
     setIsolated(false);
     setAssembledReady(false);
@@ -303,6 +456,7 @@ export function useRobotLab() {
     ) {
       ownedRef.current = true;
       setOwnsSession(true);
+      setSelectedDeviceId(null);
       setStep(2);
       if (session.role === 'leader') {
         if (session.port) setLeaderPort(session.port);
@@ -324,6 +478,14 @@ export function useRobotLab() {
     session?.role,
     state?.capabilities?.calibration_persistence,
   ]);
+  useEffect(() => {
+    if (session?.mode !== 'calibration' || !session.port || selectedDeviceId) return;
+    const device = catalog.find((d) => d.port === session.port && d.robot_id === session.robot_id);
+    if (device) {
+      setSelectedDeviceId(device.id);
+      setDeviceName(device.name);
+    }
+  }, [devices.data, session?.mode, session?.port, session?.robot_id, selectedDeviceId]);
   useEffect(() => {
     if (
       !awaitingCalibration ||
@@ -653,17 +815,6 @@ export function useRobotLab() {
       return false;
     }
   }
-  function saveDeviceName() {
-    if (active || busy || !validRobotName) return;
-    if (!remember()) {
-      setError('The browser could not save this name. Check that local storage is available.');
-      return;
-    }
-    setError(null);
-    setNotice(
-      `${armLabel} name saved in this browser: ${robotId}. ${selectedProfile?.valid !== false && selectedProfile ? 'Saved calibration found; scan the arm to check it.' : 'Calibrate this arm to save motor settings under this name.'}`,
-    );
-  }
   async function jog(joint: RobotJoint, delta: number) {
     return commandJoint(() => robotApi.jog(joint, delta));
   }
@@ -720,73 +871,17 @@ export function useRobotLab() {
     setPort(value);
     setProbe(null);
   }
-  const followerPort = (
-    <label>
-      {armLabel} USB port
-      <select
-        aria-label={`${armLabel} USB port`}
-        value={port}
-        disabled={active || busy || !online}
-        onChange={(event) => updatePort(event.target.value)}
-      >
-        <option value="">Select the {role} USB device</option>
-        {port && !portConnected && (
-          <option value={port} disabled>
-            {port} · Disconnected
-          </option>
-        )}
-        {devices.data?.ports.map((item) => (
-          <option key={item.device} value={item.device}>
-            {item.device} · {item.description}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-  const identity = (
-    <div className="robot-lab-fields">
-      {followerPort}
-      <div className="robot-lab-name-field">
-        <label htmlFor="robot-profile-name">{armLabel} name</label>
-        <div className="robot-lab-name-controls">
-          <input
-            id="robot-profile-name"
-            aria-label={`${armLabel} name`}
-            aria-describedby="robot-profile-name-help"
-            aria-invalid={!validRobotName}
-            value={robotId}
-            disabled={active || busy}
-            onChange={(event) => {
-              setRobotId(event.target.value);
-              setMotionReady(false);
-              setNotice(null);
-            }}
-            maxLength={64}
-            pattern="[A-Za-z0-9_-]+"
-          />
-          <button
-            type="button"
-            className="secondary-button"
-            disabled={active || busy || !validRobotName}
-            onClick={saveDeviceName}
-          >
-            Save name
-          </button>
-        </div>
-        <small id="robot-profile-name-help">
-          {validRobotName
-            ? 'Used for this arm’s calibration profile.'
-            : 'Use 1–64 letters, numbers, hyphens or underscores.'}
-        </small>
-      </div>
-    </div>
-  );
+  const followerPort = <p className="robot-lab-subtle">USB · {port || 'Not assigned'}</p>;
+
+  const identity = null;
 
   const checkedCount = Object.values(motionChecks).filter((check) => check.correct).length;
   const mismatched = robotJoints.find((joint) => motionChecks[joint.name]?.correct === false);
   const nextUnchecked = setupOrder.find((joint) => !motionChecks[joint]?.correct);
   const scan = probe?.port === port && portConnected ? probe : null;
-  const responding = scan?.motors.filter((motor) => motor.stable && motor.model === 777).length ?? 0;
+  const responding =
+    scan?.motors.filter((motor) => scan.expected_ids.includes(motor.id) && motor.stable && motor.model === 777)
+      .length ?? 0;
   const profileCheck =
     selectedProfile &&
     selectedProfile.valid !== false &&
@@ -819,7 +914,9 @@ export function useRobotLab() {
       ? `${session.active_joints?.length || 6} in session`
       : !scan
         ? 'Not scanned'
-        : `${responding}/6 responding`;
+        : scan.scan_scope === 'all_addresses'
+          ? `${scan.motors.filter((motor) => motor.stable && motor.model === 777).length} addresses responding · ${responding}/6 expected IDs`
+          : `${responding}/6 expected IDs responding`;
   const mappingLabel = mismatched
     ? 'Mismatch'
     : !mappingComplete
@@ -829,6 +926,13 @@ export function useRobotLab() {
         : `${checkedCount}/6 verified`;
   function selectArmRole(nextRole: RobotRole) {
     if (active || busy || nextRole === role) return;
+    if (nextRole === 'leader') {
+      setLeaderPort(port);
+      setLeaderId(robotId);
+    } else {
+      setFollowerDevice(port);
+      setFollowerId(robotId);
+    }
     setRole(nextRole);
     setMotionReady(false);
     setNotice(null);
@@ -841,6 +945,21 @@ export function useRobotLab() {
       setMode('leader');
       setMotionReady(false);
     }
+    if (index >= 3 && step < 3 && !active) {
+      const follower =
+        catalog.find((d) => d.port === followerDevice && d.role === 'follower') ??
+        catalog.find((d) => d.role === 'follower' && d.connected);
+      const leader = catalog.find((d) => d.role === 'leader' && d.connected && d.id !== follower?.id);
+      if (follower) {
+        setFollowerDevice(follower.port);
+        setFollowerId(follower.robot_id);
+      }
+      if (leader) {
+        setLeaderPort(leader.port);
+        setLeaderId(leader.robot_id);
+      }
+      setRole('follower');
+    }
     setStep(index);
     setNotice(null);
     setError(null);
@@ -849,7 +968,26 @@ export function useRobotLab() {
     remember();
     void perform(
       'Arm scan completed.',
-      () => robotApi.probe(port, robotId, role),
+      async () => {
+        const result = await robotApi.probe(port, robotId, role);
+        return result.ready || result.scan_scope !== 'expected_ids'
+          ? result
+          : robotApi.probe(port, robotId, role, true);
+      },
+      (result) => setProbe(result),
+      false,
+    );
+  }
+  function discoverMotorIds() {
+    remember();
+    void perform(
+      'Motor address search completed.',
+      async () => {
+        const result = await robotApi.probe(port, robotId, role, true);
+        if (result.scan_scope !== 'all_addresses')
+          throw new Error('Robot control service needs an update before searching all motor IDs.');
+        return result;
+      },
       (result) => setProbe(result),
       false,
     );
@@ -889,7 +1027,7 @@ export function useRobotLab() {
       ? { text: 'Check the connected arm without moving it.', label: 'Scan arm', action: checkArm }
       : !scan.ready
         ? {
-            text: `${responding}/6 motors respond reliably. Review the missing IDs.`,
+            text: `${responding}/6 expected IDs respond reliably. Review the motor addresses.`,
             label: 'Review motors',
             target: 0,
             action: () => openStep(0),
@@ -965,49 +1103,7 @@ export function useRobotLab() {
       warn: false,
     },
   ];
-  const readiness = (
-    <section className="robot-lab-readiness" aria-label="Arm readiness">
-      <nav className="robot-lab-steps" aria-label="Robot setup steps">
-        {steps.map((item, index) => {
-          const itemState = stepStates[index];
-          return (
-            <button
-              key={item.title}
-              className={`robot-lab-step${step === index ? ' selected' : ''}${itemState.good ? ' verified' : itemState.warn ? ' attention' : ''}`}
-              onClick={() => openStep(index)}
-              aria-current={step === index ? 'step' : undefined}
-              disabled={busy || (active && role === 'leader' && index >= 3)}
-            >
-              <span className="robot-lab-step-title">{item.title}</span>
-              <span className="robot-lab-step-state">
-                {itemState.good && <Icon name="check" size={12} />}
-                {itemState.value}
-              </span>
-            </button>
-          );
-        })}
-      </nav>
-      {!active && (
-        <div className="robot-lab-next">
-          <span>{nextAction.text}</span>
-          {nextAction.target !== step && (
-            <button
-              className="text-button"
-              disabled={
-                busy ||
-                (nextAction.action === checkArm &&
-                  (!canUseArm || !state?.capabilities?.probe || !/^[A-Za-z0-9_-]+$/.test(robotId)))
-              }
-              onClick={nextAction.action}
-            >
-              {pending === 'Arm scan completed.' ? 'Scanning…' : nextAction.label}
-              <Icon name="arrow" size={13} />
-            </button>
-          )}
-        </div>
-      )}
-    </section>
-  );
+  const readiness = null;
   const capturedRanges = robotJoints.filter(
     (joint) =>
       joint.name !== 'wrist_roll' &&
@@ -1030,6 +1126,22 @@ export function useRobotLab() {
   );
 
   return {
+    updatePort,
+    catalog,
+    selectedDevice,
+    selectedDeviceId,
+    setSelectedDeviceId,
+    deviceName,
+    setDeviceName,
+    chooseDevice,
+    selectControlDevice,
+    saveDeviceConfiguration,
+    removeDevice,
+    restoreDevice,
+    calibrationLabel,
+    mappingLabel,
+    stepStates,
+    nextAction,
     active,
     armLabel,
     allJointsMapped,
@@ -1051,6 +1163,7 @@ export function useRobotLab() {
     capturedRanges,
     centering,
     checkArm,
+    discoverMotorIds,
     checkedCount,
     checkingConnection,
     client,

@@ -43,7 +43,22 @@ export type RobotDiagnostics = {
   last_stop: RobotDiagnosticEvent | null;
   events: RobotDiagnosticEvent[];
 };
+export type MotorCalibration = {
+  id: number;
+  drive_mode: number;
+  homing_offset: number;
+  range_min: number;
+  range_max: number;
+};
+export type CalibrationDocument = {
+  format: 'openjensen.so101.calibration';
+  version: 1;
+  robot_id: string;
+  role: RobotRole;
+  calibration: Record<RobotJoint, MotorCalibration>;
+};
 export type RobotStatus = {
+  calibration_transfer?: { robot_id: string; role: RobotRole; verified: boolean; backup_created: boolean };
   diagnostics?: RobotDiagnostics;
   controller?: {
     name: string;
@@ -70,6 +85,9 @@ export type RobotStatus = {
     arm_readiness?: boolean;
     joint_sliders?: boolean;
     calibration_persistence?: boolean;
+    calibration_transfer?: boolean;
+    device_registry?: boolean;
+    device_removal?: boolean;
     partial_control?: boolean;
     rest_position?: boolean;
     move_to_middle?: boolean;
@@ -82,6 +100,8 @@ export type RobotStatus = {
     calibration: boolean;
     control: boolean;
     recording: boolean;
+    auto_recording_fps?: boolean;
+    guided_recording?: boolean;
   };
   session?: {
     mode: 'idle' | 'calibration' | 'setup' | 'verification' | 'agent' | ControlMode;
@@ -137,9 +157,27 @@ export type RobotStatus = {
     active: boolean;
     dataset_id: string | null;
     episode_active: boolean;
+    saving?: boolean;
     frames: number;
     episodes: number;
     fps: number;
+    fps_mode?: 'auto' | 'manual';
+    rate_status?: 'measuring' | 'ready' | 'error';
+    rate_message?: string;
+    actual_fps?: number | null;
+    collection?: {
+      enabled: boolean;
+      saving?: boolean;
+      phase: 'idle' | 'countdown' | 'recording' | 'saving' | 'reset' | 'paused' | 'complete';
+      episode_time_s: number;
+      reset_time_s: number;
+      num_episodes: number;
+      countdown_s: number;
+      remaining_s: number;
+      completed: number;
+      cue_id: number;
+      cue: string;
+    } | null;
     error: string | null;
   };
   assembled?: {
@@ -198,13 +236,30 @@ export type RobotStatus = {
   }[];
   datasets?: RobotDataset[];
 };
+export type RobotDevice = {
+  id: string;
+  port: string;
+  serial_number: string | null;
+  name: string;
+  robot_id: string;
+  role: RobotRole | null;
+  profile_role: RobotRole | null;
+  connected: boolean;
+  description: string;
+  motor_ids?: boolean;
+  calibration?: 'saved' | 'needs_attention' | 'missing';
+};
 export type RobotDevices = {
+  saved_devices?: RobotDevice[];
+  removed_devices?: Pick<RobotDevice, 'id' | 'name' | 'port' | 'robot_id'>[];
   ports: { device: string; description: string; manufacturer: string | null; serial_number: string | null }[];
   cameras: { index: number; name: string; width: number; height: number }[];
   camera_error: string | null;
 };
 export type RobotProbe = {
   checked_at?: number;
+  scan_scope?: 'expected_ids' | 'all_addresses';
+  unexpected_ids?: number[];
   profile?: {
     robot_id: string;
     role: RobotRole;
@@ -269,9 +324,17 @@ export const robotApi = {
   status: () => request<RobotStatus>('/status'),
   diagnostics: () => request<RobotDiagnostics>('/diagnostics'),
   devices: () => request<RobotDevices>('/devices', undefined, { timeoutMs: 30_000 }),
+  configureDevice: (input: { id: string; port: string; name: string; role: RobotRole }) =>
+    request<RobotDevices>('/devices/configure', input),
+  removeDevice: (id: string) => request<RobotDevices>('/devices/remove', { id }),
+  restoreDevice: (id: string) => request<RobotDevices>('/devices/restore', { id }),
   datasets: () => request<{ datasets: RobotDataset[] }>('/datasets'),
-  probe: (port: string, robot_id?: string, role: RobotRole = 'follower') =>
-    request<RobotProbe>('/probe', { port, ...(robot_id ? { robot_id, role } : {}) }, { timeoutMs: 90_000 }),
+  probe: (port: string, robot_id?: string, role: RobotRole = 'follower', discover = false) =>
+    request<RobotProbe>(
+      '/probe',
+      { port, ...(robot_id ? { robot_id, role } : {}), ...(discover ? { discover: true } : {}) },
+      { timeoutMs: 90_000 },
+    ),
   assignMotor: (port: string, joint: RobotJoint) =>
     request<MotorAssignment>(
       '/setup/motor',
@@ -298,6 +361,15 @@ export const robotApi = {
     request<RobotStatus>('/setup/assembled/accept', { joint, motor_id }),
   finishAssembled: () => request<RobotStatus>('/setup/assembled/finish', { confirm: 'SAVE MOTOR IDS' }),
   cancelAssembled: () => request<RobotStatus>('/setup/assembled/cancel', {}),
+  exportCalibration: (robot_id: string, role: RobotRole) =>
+    request<CalibrationDocument>(`/calibration/export?${new URLSearchParams({ robot_id, role })}`),
+  importCalibration: (input: {
+    robot_id: string;
+    role: RobotRole;
+    document: unknown;
+    port?: string;
+    replace_existing: boolean;
+  }) => request<RobotStatus>('/calibration/import', { ...input, confirm: 'IMPORT CALIBRATION' }),
   startCalibration: (port: string, robot_id: string, role: RobotRole) =>
     request<RobotStatus>(
       '/calibration/start',
@@ -346,8 +418,15 @@ export const robotApi = {
       },
       { timeoutMs: 10_000, keepalive },
     ),
-  startRecording: (input: { dataset_id: string; task: string; fps: number; camera_index: number | null }) =>
-    request<RobotStatus>('/recording/start', input, { timeoutMs: 90_000 }),
+  startRecording: (input: {
+    dataset_id: string;
+    task: string;
+    fps: number | null;
+    camera_index: number | null;
+    collection?: { episode_time_s: number; reset_time_s: number; num_episodes: number; countdown_s: number };
+  }) => request<RobotStatus>('/recording/start', input, { timeoutMs: 90_000 }),
+  collectionAction: (action: 'start' | 'pause' | 'resume' | 'next' | 'rerecord') =>
+    request<RobotStatus>(`/recording/collection/${action}`, {}, { timeoutMs: 90_000 }),
   startEpisode: () => request<RobotStatus>('/recording/episode/start', {}),
   saveEpisode: () => request<RobotStatus>('/recording/episode/save', {}, { timeoutMs: 90_000 }),
   discardEpisode: () => request<RobotStatus>('/recording/episode/discard', {}),

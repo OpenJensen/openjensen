@@ -9,6 +9,7 @@ async function fixture(
   options: {
     planningMode?: 'joint' | 'task';
     physical?: boolean;
+    deviceCatalog?: boolean;
     deferManualHeartbeat?: boolean;
     holdAdmissionImages?: boolean;
     emptyPorts?: boolean;
@@ -226,6 +227,23 @@ async function fixture(
     if (path === '/robot-lab/devices')
       return route.fulfill({
         json: {
+          ...(options.deviceCatalog
+            ? {
+                saved_devices: [
+                  {
+                    id: 'arm-a',
+                    name: 'Desk arm',
+                    robot_id: 'fixture-arm',
+                    port: '/dev/fixture',
+                    role: 'leader',
+                    profile_role: 'leader',
+                    connected: !options.emptyPorts,
+                    serial_number: 'fixture',
+                    description: 'USB arm',
+                  },
+                ],
+              }
+            : {}),
           ports: options.emptyPorts
             ? []
             : [
@@ -1051,4 +1069,16 @@ test('gripper position setup and coordinate review preserve the physical approva
   await expect(waypoint).toContainText('Verify the measured result');
   expect(requests.filter((r) => r.path.endsWith('/approve'))).toEqual([]);
   await waypoint.screenshot({ path: testInfo.outputPath('gripper-position-review.png') });
+});
+
+test('AI physical control selects a configured device by name regardless of its default role', async ({ page }) => {
+  const { requests } = await fixture(page, { physical: true, deviceCatalog: true });
+  await page.goto('/ai-teleoperation/');
+  await openModuleTask(page);
+  await page.getByRole('combobox', { name: 'Follower device', exact: true }).selectOption('arm-a');
+  await expect(page.getByRole('combobox', { name: 'Robot USB port', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('combobox', { name: 'Saved arm', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Physical SO101 preflight' })).toContainText('/dev/fixture');
+  await expect(page.getByRole('button', { name: 'Connect arm and hold current pose', exact: true })).toBeDisabled();
+  expect(requests).toEqual([]);
 });

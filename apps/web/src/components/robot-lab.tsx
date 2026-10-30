@@ -1,8 +1,8 @@
 'use client';
 
-import { steps, HardwareNotice } from './robot-lab-shared';
+import { HardwareNotice } from './robot-lab-shared';
 import { useRobotLab } from './robot-lab-state';
-import { RobotLabArmRole } from './robot-lab-arm-role';
+import { RobotLabDevices, RobotLabDeviceDetail } from './robot-lab-devices';
 import { RobotLabConnect } from './robot-lab-connect';
 import { RobotLabMotorIds } from './robot-lab-motor-ids';
 import { RobotLabCalibrate } from './robot-lab-calibrate';
@@ -24,7 +24,6 @@ export function RobotLab() {
     online,
     pending,
     previousSessionError,
-    readiness,
     reconnecting,
     recording,
     refresh,
@@ -34,7 +33,6 @@ export function RobotLab() {
     status,
     step,
     stop,
-    usbStatus,
   } = lab;
   return (
     <div className="robot-lab">
@@ -44,17 +42,19 @@ export function RobotLab() {
           <div>
             <strong>
               {status.isPending
-                ? 'Connecting…'
+                ? 'Looking for devices…'
                 : online
-                  ? `${state?.label ?? 'Robot companion'} connected`
-                  : 'Robot companion unavailable'}
+                  ? `${lab.catalog.filter((d) => d.connected).length} USB devices connected`
+                  : 'Device connection service unavailable'}
             </strong>
             <small>
               {online
                 ? active
-                  ? `${session?.mode === 'verification' ? 'Mapping check' : session?.mode === 'setup' ? 'Assembled motor setup' : session?.mode === 'calibration' ? 'Calibration' : session?.mode === 'handguide' ? 'Hand guiding' : session?.mode === 'leader' ? 'Leader teleoperation' : session?.mode === 'agent' ? 'AI teleoperation' : 'Manual control'} · ${session?.robot_id ?? robotId} · ${session?.mode === 'setup' ? 'Motor setup active' : session?.torque_enabled ? 'Torque command: on' : 'Torque command: off'}`
-                  : usbStatus
-                : (state?.message ?? status.error?.message ?? 'Check that the local companion is running.')}
+                  ? `${session?.mode} · ${session?.robot_id ?? robotId} · Torque ${session?.torque_enabled ? 'on' : 'off'}`
+                  : 'Open a device to configure its motors and calibration.'
+                : (state?.message ??
+                  status.error?.message ??
+                  'Start the robot connection service on the computer with the USB cables.')}
             </small>
           </div>
         </div>
@@ -79,8 +79,37 @@ export function RobotLab() {
           )}
         </div>
       </div>
-      {readiness}
-      {step !== 2 && (session?.error || error) && <HardwareNotice message={(session?.error || error)!} />}
+      <nav className="robot-lab-main-tabs" aria-label="Robot Lab tabs">
+        {[
+          { title: 'Devices', step: 0 },
+          { title: 'Teleoperation', step: 3 },
+          { title: 'Record', step: 4 },
+        ].map((item) => (
+          <button
+            key={item.title}
+            aria-current={(step < 3 ? 0 : step) === item.step ? 'page' : undefined}
+            className={(step < 3 ? 0 : step) === item.step ? 'selected' : ''}
+            disabled={
+              busy ||
+              (active &&
+                (item.step === 0 ||
+                  session?.mode === 'calibration' ||
+                  session?.mode === 'setup' ||
+                  session?.mode === 'verification'))
+            }
+            onClick={() => {
+              if (item.step === 0) lab.setSelectedDeviceId(null);
+              lab.openStep(item.step);
+            }}
+          >
+            {item.title}
+          </button>
+        ))}
+      </nav>
+      {step !== 2 && error && <HardwareNotice label="Latest operation error" message={error} />}
+      {step !== 2 && session?.error && session.error !== error && !previousSessionError && (
+        <HardwareNotice label="Hardware session error" message={session.error} />
+      )}
       {previousSessionError && (
         <HardwareNotice
           label="Previous session error"
@@ -102,24 +131,34 @@ export function RobotLab() {
       )}
       {recording?.error && <HardwareNotice message={recording.error} />}
       <RobotLabDiagnostics diagnostics={state?.diagnostics} />
-      <div className="robot-lab-grid">
-        <section className="robot-lab-main" aria-label={steps[step].title}>
-          {step <= 2 && <RobotLabArmRole lab={lab} />}
-          {step === 0 && <RobotLabConnect lab={lab} />}
-          {step === 1 && <RobotLabMotorIds lab={lab} />}
-          {step === 2 && <RobotLabCalibrate lab={lab} />}
-          {step === 3 && <RobotLabTeleoperate lab={lab} />}
-          {step === 4 && <RobotLabRecord lab={lab} />}
-          {busy && (
-            <p className="robot-lab-subtle" role="status" style={{ marginTop: 16 }}>
-              {pending === 'Arm stopped.'
-                ? 'Stopping the arm… Keep supporting it while torque is released and motor cleanup finishes.'
-                : 'Working… Keep this page open.'}
-            </p>
-          )}
-        </section>
-        <RobotLabCamera lab={lab} />
-      </div>
+      {step < 3 && !lab.selectedDeviceId ? (
+        <RobotLabDevices lab={lab} />
+      ) : (
+        <div className="robot-lab-grid">
+          <section
+            className="robot-lab-main"
+            aria-label={step < 3 ? 'Device configuration' : step === 3 ? 'Teleoperation' : 'Record'}
+          >
+            {step < 3 && (
+              <RobotLabDeviceDetail lab={lab}>
+                {step === 0 && <RobotLabConnect lab={lab} />}
+                {step === 1 && <RobotLabMotorIds lab={lab} />}
+                {step === 2 && <RobotLabCalibrate lab={lab} />}
+              </RobotLabDeviceDetail>
+            )}
+            {step === 3 && <RobotLabTeleoperate lab={lab} />}
+            {step === 4 && <RobotLabRecord lab={lab} />}
+            {busy && (
+              <p className="robot-lab-subtle" role="status" style={{ marginTop: 16 }}>
+                {pending === 'Arm stopped.'
+                  ? 'Stopping the arm… Keep supporting it while torque is released and motor cleanup finishes.'
+                  : 'Working… Keep this page open.'}
+              </p>
+            )}
+          </section>
+          <RobotLabCamera lab={lab} />
+        </div>
+      )}
     </div>
   );
 }

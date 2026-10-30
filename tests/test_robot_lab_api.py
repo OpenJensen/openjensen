@@ -441,3 +441,176 @@ def test_diagnostics_proxy_is_read_only_and_redacts_private_token(tmp_path):
         assert TOKEN not in response.text
     assert calls == [("GET", "/v1/diagnostics")]
     asyncio.run(companion.close())
+
+
+def test_calibration_transfer_proxy_preserves_profile_destination_and_export_query(tmp_path):
+    connection(tmp_path)
+    calls = []
+
+    def handler(request):
+        calls.append(
+            (
+                request.method,
+                request.url.path,
+                str(request.url.query),
+                json.loads(request.content) if request.content else None,
+            )
+        )
+        return httpx.Response(200, json={"ok": True})
+
+    companion = bridge(tmp_path, handler)
+    payload = {
+        "robot_id": "renamed-arm",
+        "role": "follower",
+        "document": {"example": {}},
+        "replace_existing": False,
+        "confirm": "IMPORT CALIBRATION",
+    }
+    with browser(tmp_path, companion) as client:
+        assert (
+            client.get(
+                "/api/v1/robot-lab/calibration/export?robot_id=source&role=follower"
+            ).status_code
+            == 200
+        )
+        assert client.post("/api/v1/robot-lab/calibration/import", json=payload).status_code == 200
+        assert (
+            client.post(
+                "/api/v1/robot-lab/calibration/import", json={**payload, "confirm": "yes"}
+            ).status_code
+            == 422
+        )
+    assert calls[0][0:2] == ("GET", "/v1/calibration/export")
+    assert "robot_id=source" in calls[0][2]
+    assert calls[1][0:2] == ("POST", "/v1/calibration/import")
+    assert calls[1][3] == payload
+    assert len(calls) == 2
+    asyncio.run(companion.close())
+
+
+def test_device_configuration_is_a_validated_finite_proxy_operation(tmp_path):
+    connection(tmp_path)
+    commands = []
+
+    def handler(request):
+        commands.append((request.method, request.url.path, json.loads(request.content)))
+        return httpx.Response(200, json={"saved_devices": [{"id": "arm-a", "name": "Desk arm"}]})
+
+    companion = bridge(tmp_path, handler)
+    with browser(tmp_path, companion) as client:
+        payload = {"id": "arm-a", "port": "/dev/ttyACM0", "name": "Desk arm", "role": "leader"}
+        response = client.post("/api/v1/robot-lab/devices/configure", json=payload)
+        assert response.status_code == 200
+        assert response.json()["saved_devices"][0]["name"] == "Desk arm"
+        assert commands == [("POST", "/v1/devices/configure", payload)]
+        for changes in ({"role": "unknown"}, {"name": "x" * 65}, {"unexpected": True}):
+            assert (
+                client.post(
+                    "/api/v1/robot-lab/devices/configure", json=payload | changes
+                ).status_code
+                == 422
+            )
+        assert len(commands) == 1
+    asyncio.run(companion.close())
+
+
+def test_device_removal_and_restore_validate_identity_and_proxy_only_registry_operations(tmp_path):
+    connection(tmp_path)
+    commands = []
+
+    def handler(request):
+        commands.append((request.method, request.url.path, json.loads(request.content)))
+        return httpx.Response(200, json={"saved_devices": [], "removed_devices": []})
+
+    companion = bridge(tmp_path, handler)
+    with browser(tmp_path, companion) as client:
+        for action in ("remove", "restore"):
+            route = "/api/v1/robot-lab/devices/" + action
+            assert client.post(route, json={"id": "arm-a"}).status_code == 200
+            for payload in (
+                {},
+                {"id": ""},
+                {"id": "x" * 101},
+                {"id": "arm-a", "delete_calibration": True},
+            ):
+                assert client.post(route, json=payload).status_code == 422
+    assert commands == [
+        ("POST", "/v1/devices/" + action, {"id": "arm-a"}) for action in ("remove", "restore")
+    ]
+    asyncio.run(companion.close())
+
+
+@pytest.mark.parametrize("action", ["start", "pause", "resume", "next", "rerecord"])
+def test_guided_recording_actions_are_finite_proxy_routes(tmp_path, action):
+    connection(tmp_path)
+    calls = []
+
+    def handler(request):
+        calls.append((request.url.path, json.loads(request.content)))
+        return httpx.Response(200, json={"ok": True})
+
+    companion = bridge(tmp_path, handler)
+    with browser(tmp_path, companion) as client:
+        route = "/api/v1/robot-lab/recording/collection/" + action
+        assert client.post(route, json={}).status_code == 200
+        assert client.post(route, json={"move_arm": True}).status_code == 422
+        assert (
+            client.post("/api/v1/robot-lab/recording/collection/arbitrary", json={}).status_code
+            == 404
+        )
+    assert calls == [("/v1/recording/collection/" + action, {})]
+    asyncio.run(companion.close())
+
+
+@pytest.mark.parametrize("fps", [None, 1, 40])
+def test_recording_auto_rate_and_guided_configuration_reach_companion(tmp_path, fps):
+    connection(tmp_path)
+    payload = {
+        "dataset_id": "pick-up-pen",
+        "task": "Pick up the pen.",
+        "fps": fps,
+        "camera_index": 0,
+        "collection": {
+            "episode_time_s": 30,
+            "reset_time_s": 10,
+            "countdown_s": 3,
+            "num_episodes": 10,
+        },
+    }
+    calls = []
+
+    def handler(request):
+        calls.append(json.loads(request.content))
+        return httpx.Response(200, json={"ok": True})
+
+    companion = bridge(tmp_path, handler)
+    with browser(tmp_path, companion) as client:
+        assert client.post("/api/v1/robot-lab/recording/start", json=payload).status_code == 200
+    assert calls == [payload]
+    asyncio.run(companion.close())
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"fps": True},
+        {"fps": 41},
+        {"fps": 0},
+        {"collection": {"episode_time_s": 301}},
+        {"collection": {"reset_time_s": -1}},
+        {"collection": {"num_episodes": 0}},
+        {"collection": {"countdown_s": True}},
+    ],
+)
+def test_invalid_guided_recording_settings_never_contact_hardware(tmp_path, changes):
+    connection(tmp_path)
+    companion = bridge(tmp_path, lambda _: pytest.fail("Invalid settings reached hardware"))
+    with browser(tmp_path, companion) as client:
+        assert (
+            client.post(
+                "/api/v1/robot-lab/recording/start",
+                json={"dataset_id": "test", "task": "Pick up the pen", **changes},
+            ).status_code
+            == 422
+        )
+    asyncio.run(companion.close())

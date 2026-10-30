@@ -259,6 +259,126 @@ class SafetyTests(unittest.TestCase):
     def test_probe_is_read_only_and_closes(self):
         result = self.lab.probe({"port": "/dev/cu.fake"})
         self.assertTrue(result["ready"])
+        self.assertEqual(result["scan_scope"], "expected_ids")
+        self.assertEqual(result["unexpected_ids"], [])
+        self.assertEqual(self.buses[-1].writes, [])
+        self.assertFalse(self.buses[-1].opened)
+
+    def test_discovery_finds_partial_commit_addresses_without_writes(self):
+        factory = self.lab.bus_factory
+        calls = []
+
+        def interrupted_bus(*args):
+            bus = factory(*args)
+            bus.motors = dict.fromkeys([1, 2, 3, 103, 104, 105], 777)
+            original_ping = bus.ping
+
+            def ping(motor_id):
+                calls.append(motor_id)
+                return original_ping(motor_id)
+
+            bus.ping = ping
+            return bus
+
+        self.lab.bus_factory = interrupted_bus
+        normal = self.lab.probe({"port": "/dev/cu.fake"})
+        self.assertEqual([motor["id"] for motor in normal["motors"]], [1, 2, 3])
+        calls.clear()
+        result = self.lab.probe({"port": "/dev/cu.fake", "discover": True})
+        self.assertEqual(result["scan_scope"], "all_addresses")
+        self.assertEqual(result["unexpected_ids"], [103, 104, 105])
+        self.assertEqual([motor["id"] for motor in result["motors"]], [1, 2, 3, 103, 104, 105])
+        self.assertTrue(all(motor["stable"] for motor in result["motors"]))
+        self.assertFalse(result["ready"])
+        self.assertEqual(set(calls), set(range(254)))
+        self.assertEqual(len(calls), 254 + 6 * 2)
+        self.assertEqual(calls.count(4), 1)
+        self.assertEqual(calls.count(103), 3)
+        self.assertEqual(self.buses[-1].writes, [])
+        self.assertFalse(self.buses[-1].opened)
+
+    def test_discovery_includes_valid_zero_address(self):
+        factory = self.lab.bus_factory
+
+        def zero_bus(*args):
+            bus = factory(*args)
+            bus.motors[0] = bus.motors.pop(6)
+            return bus
+
+        self.lab.bus_factory = zero_bus
+        result = self.lab.probe({"port": "/dev/cu.fake", "discover": True})
+        self.assertEqual(result["unexpected_ids"], [0])
+        self.assertEqual([motor["id"] for motor in result["motors"]], list(range(6)))
+        self.assertFalse(result["ready"])
+
+    def test_discovery_deadline_closes_bus_without_writes(self):
+        with patch("hardware.time.monotonic", side_effect=[0, 0, 21]):
+            with self.assertRaisesRegex(HardwareError, "budget; scan is incomplete"):
+                self.lab.probe({"port": "/dev/cu.fake", "discover": True})
+        self.assertEqual(self.buses[-1].writes, [])
+        self.assertFalse(self.buses[-1].opened)
+
+    def test_stop_cancels_discovery_before_next_read_without_writes(self):
+        factory = self.lab.bus_factory
+        calls = []
+
+        def stopped_bus(*args):
+            bus = factory(*args)
+
+            def ping(motor_id):
+                calls.append(motor_id)
+                self.lab.stop()
+                return None
+
+            bus.ping = ping
+            return bus
+
+        self.lab.bus_factory = stopped_bus
+        with self.assertRaisesRegex(HardwareError, "cancelled by Stop"):
+            self.lab.probe({"port": "/dev/cu.fake", "discover": True})
+        self.assertEqual(calls, [0])
+        self.assertEqual(self.buses[-1].writes, [])
+        self.assertFalse(self.buses[-1].opened)
+
+    def test_discovery_checks_extra_addresses_even_when_expected_ids_respond(self):
+        factory = self.lab.bus_factory
+
+        def extra_bus(*args):
+            bus = factory(*args)
+            bus.motors[103] = 777
+            return bus
+
+        self.lab.bus_factory = extra_bus
+        result = self.lab.probe({"port": "/dev/cu.fake", "discover": True})
+        self.assertEqual(result["unexpected_ids"], [103])
+        self.assertFalse(result["ready"])
+        self.assertEqual(self.buses[-1].writes, [])
+
+    def test_discovery_flag_is_validated_before_serial_open(self):
+        for invalid in (None, "true", 1, [], {}):
+            with self.subTest(invalid=invalid):
+                with self.assertRaisesRegex(RequestError, "true or false"):
+                    self.lab.probe({"port": "/dev/cu.fake", "discover": invalid})
+        self.assertEqual(self.buses, [])
+
+    def test_discovery_failure_closes_without_torque_or_identity_writes(self):
+        factory = self.lab.bus_factory
+
+        def corrupt_bus(*args):
+            bus = factory(*args)
+            original_ping = bus.ping
+
+            def ping(motor_id):
+                if motor_id == 103:
+                    raise HardwareError("Corrupt motor replies")
+                return original_ping(motor_id)
+
+            bus.ping = ping
+            return bus
+
+        self.lab.bus_factory = corrupt_bus
+        with self.assertRaisesRegex(HardwareError, "Corrupt"):
+            self.lab.probe({"port": "/dev/cu.fake", "discover": True})
         self.assertEqual(self.buses[-1].writes, [])
         self.assertFalse(self.buses[-1].opened)
 
@@ -958,6 +1078,31 @@ class SafetyTests(unittest.TestCase):
         self.assertIsNone(self.lab.status()["session"]["watchdog_seconds"])
         self.assertEqual(self.lab.calibration_state["mins"]["shoulder_pan"], 1500)
         self.assertFalse(any(r == "Torque_Enable" and v for r, _, v in self.lab.bus.writes))
+
+    def test_concurrent_checkpoint_writers_keep_independent_atomic_files(self):
+        import os
+        from concurrent.futures import ThreadPoolExecutor
+        from threading import Barrier
+
+        from calibration_draft import CalibrationDraft
+
+        self.begin_calibration_ranges()
+        value = self.lab.calibration_draft.read()
+        writers = [CalibrationDraft(self.root / "data") for _ in range(2)]
+        barrier = Barrier(2)
+        original_fsync = os.fsync
+
+        def overlap(descriptor):
+            original_fsync(descriptor)
+            barrier.wait(timeout=5)
+
+        with patch("calibration_draft.os.fsync", side_effect=overlap):
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                futures = [pool.submit(writer.write, value, force=True) for writer in writers]
+                for future in futures:
+                    future.result(timeout=10)
+        self.assertEqual(self.lab.calibration_draft.read(), value)
+        self.assertEqual(list((self.root / "data").glob("*.pending")), [])
 
     def test_captured_ranges_resume_after_stop_without_repeating_middle(self):
         self.begin_calibration_ranges()

@@ -95,6 +95,10 @@ class CalibrationRevisions:
             return revision
 
     def acknowledge(self, port, robot_id, role, path):
+        folder = Path(path).parent.name
+        role = {"so_leader": "leader", "so_follower": "follower"}.get(folder, role)
+        if folder in {"so_leader", "so_follower"}:
+            robot_id = Path(path).stem
         with self.lock:
             value = self._read()
             key = role + "/" + robot_id
@@ -109,6 +113,10 @@ class CalibrationRevisions:
             durable_json(self.path, value)
 
     def connection(self, robot_id, role, path):
+        folder = Path(path).parent.name
+        role = {"so_leader": "leader", "so_follower": "follower"}.get(folder, role)
+        if folder in {"so_leader", "so_follower"}:
+            robot_id = Path(path).stem
         """Return this calibration's saved port, never another arm's setup port."""
         with self.lock:
             value = self._read()
@@ -127,6 +135,10 @@ class CalibrationRevisions:
             return ports[0] if len(ports) == 1 else None
 
     def fresh(self, port, robot_id, role, path):
+        folder = Path(path).parent.name
+        role = {"so_leader": "leader", "so_follower": "follower"}.get(folder, role)
+        if folder in {"so_leader", "so_follower"}:
+            robot_id = Path(path).stem
         with self.lock:
             record = self._read()["ports"].get(self._key(port))
             if record is None:

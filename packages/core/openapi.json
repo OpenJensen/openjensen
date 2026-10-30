@@ -1807,6 +1807,34 @@
         "title": "CloudRunsFeed",
         "type": "object"
       },
+      "CompanionUpdateStatus": {
+        "properties": {
+          "managed": {
+            "default": false,
+            "title": "Managed",
+            "type": "boolean"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "current",
+              "updated",
+              "needs_update"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "message"
+        ],
+        "title": "CompanionUpdateStatus",
+        "type": "object"
+      },
       "ComputeSettingsResponse": {
         "additionalProperties": false,
         "properties": {
@@ -8878,6 +8906,16 @@
             ],
             "title": "Checked At"
           },
+          "companion_update": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CompanionUpdateStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "installed": {
             "$ref": "#/components/schemas/ApplicationVersion"
           },
@@ -9511,7 +9549,7 @@
   },
   "info": {
     "title": "OPEN JENSEN local VLA application",
-    "version": "0.1.14"
+    "version": "0.1.20"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -15306,6 +15344,25 @@
         ]
       }
     },
+    "/api/v1/robot-lab/calibration/export": {
+      "get": {
+        "operationId": "robot_lab_get_calibration_export",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Get Calibration Export",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
     "/api/v1/robot-lab/calibration/finish": {
       "post": {
         "operationId": "robot_lab_post_calibration_finish",
@@ -15320,6 +15377,86 @@
           }
         },
         "summary": "Robot Lab Post Calibration Finish",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/calibration/import": {
+      "post": {
+        "operationId": "robot_lab_post_calibration_import",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "confirm": {
+                    "const": "IMPORT CALIBRATION",
+                    "title": "Confirm",
+                    "type": "string"
+                  },
+                  "document": {
+                    "additionalProperties": true,
+                    "title": "Document",
+                    "type": "object"
+                  },
+                  "port": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Port"
+                  },
+                  "replace_existing": {
+                    "default": false,
+                    "title": "Replace Existing",
+                    "type": "boolean"
+                  },
+                  "robot_id": {
+                    "maxLength": 80,
+                    "minLength": 1,
+                    "pattern": "^[A-Za-z0-9_-]+$",
+                    "title": "Robot Id",
+                    "type": "string"
+                  },
+                  "role": {
+                    "enum": [
+                      "follower",
+                      "leader"
+                    ],
+                    "title": "Role",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "robot_id",
+                  "role",
+                  "document",
+                  "confirm"
+                ],
+                "title": "CalibrationImportRequest",
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Calibration Import",
         "tags": [
           "Robot Lab"
         ]
@@ -15515,6 +15652,153 @@
         ]
       }
     },
+    "/api/v1/robot-lab/devices/configure": {
+      "post": {
+        "operationId": "robot_lab_post_devices_configure",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "name": {
+                    "maxLength": 64,
+                    "title": "Name",
+                    "type": "string"
+                  },
+                  "port": {
+                    "maxLength": 256,
+                    "title": "Port",
+                    "type": "string"
+                  },
+                  "role": {
+                    "enum": [
+                      "follower",
+                      "leader"
+                    ],
+                    "title": "Role",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "port",
+                  "name",
+                  "role"
+                ],
+                "title": "DeviceConfigurationRequest",
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Devices Configure",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/devices/remove": {
+      "post": {
+        "operationId": "robot_lab_post_devices_remove",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "title": "Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id"
+                ],
+                "title": "DeviceVisibilityRequest",
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Devices Remove",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/devices/restore": {
+      "post": {
+        "operationId": "robot_lab_post_devices_restore",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "title": "Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id"
+                ],
+                "title": "DeviceVisibilityRequest",
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Devices Restore",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
     "/api/v1/robot-lab/diagnostics": {
       "get": {
         "operationId": "robot_lab_get_diagnostics",
@@ -15586,6 +15870,166 @@
           }
         },
         "summary": "Robot Lab Post Probe",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/recording/collection/next": {
+      "post": {
+        "operationId": "robot_lab_post_recording_collection_next",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "title": "RecordingCollectionActionRequest",
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Recording Collection Next",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/recording/collection/pause": {
+      "post": {
+        "operationId": "robot_lab_post_recording_collection_pause",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "title": "RecordingCollectionActionRequest",
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Recording Collection Pause",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/recording/collection/rerecord": {
+      "post": {
+        "operationId": "robot_lab_post_recording_collection_rerecord",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "title": "RecordingCollectionActionRequest",
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Recording Collection Rerecord",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/recording/collection/resume": {
+      "post": {
+        "operationId": "robot_lab_post_recording_collection_resume",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "title": "RecordingCollectionActionRequest",
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Recording Collection Resume",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/recording/collection/start": {
+      "post": {
+        "operationId": "robot_lab_post_recording_collection_start",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "title": "RecordingCollectionActionRequest",
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Recording Collection Start",
         "tags": [
           "Robot Lab"
         ]
@@ -15725,6 +16169,104 @@
     "/api/v1/robot-lab/recording/start": {
       "post": {
         "operationId": "robot_lab_post_recording_start",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "camera_index": {
+                    "anyOf": [
+                      {
+                        "maximum": 63.0,
+                        "minimum": 0.0,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": 0,
+                    "title": "Camera Index"
+                  },
+                  "collection": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "countdown_s": {
+                            "default": 3,
+                            "maximum": 30.0,
+                            "minimum": 0.0,
+                            "title": "Countdown S",
+                            "type": "integer"
+                          },
+                          "episode_time_s": {
+                            "default": 30,
+                            "maximum": 300.0,
+                            "minimum": 1.0,
+                            "title": "Episode Time S",
+                            "type": "integer"
+                          },
+                          "num_episodes": {
+                            "default": 10,
+                            "maximum": 1000.0,
+                            "minimum": 1.0,
+                            "title": "Num Episodes",
+                            "type": "integer"
+                          },
+                          "reset_time_s": {
+                            "default": 10,
+                            "maximum": 300.0,
+                            "minimum": 0.0,
+                            "title": "Reset Time S",
+                            "type": "integer"
+                          }
+                        },
+                        "title": "RecordingCollectionRequest",
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "dataset_id": {
+                    "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+                    "title": "Dataset Id",
+                    "type": "string"
+                  },
+                  "fps": {
+                    "anyOf": [
+                      {
+                        "maximum": 40.0,
+                        "minimum": 1.0,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Fps"
+                  },
+                  "task": {
+                    "maxLength": 1000,
+                    "minLength": 1,
+                    "title": "Task",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "dataset_id",
+                  "task"
+                ],
+                "title": "RecordingStartRequest",
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
         "responses": {
           "200": {
             "content": {
