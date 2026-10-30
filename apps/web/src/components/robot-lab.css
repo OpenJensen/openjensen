@@ -1082,3 +1082,21 @@
   padding-left: 12px;
   margin: 14px 0;
 }
+
+.robot-lab-transfer {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.robot-lab-transfer h3,
+.robot-lab-transfer h4,
+.robot-lab-transfer p {
+  margin: 0;
+}
+.robot-lab-import-review {
+  display: grid;
+  gap: 12px;
+  padding-top: 8px;
+}

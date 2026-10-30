@@ -441,3 +441,48 @@ def test_diagnostics_proxy_is_read_only_and_redacts_private_token(tmp_path):
         assert TOKEN not in response.text
     assert calls == [("GET", "/v1/diagnostics")]
     asyncio.run(companion.close())
+
+
+def test_calibration_transfer_proxy_preserves_profile_destination_and_export_query(tmp_path):
+    connection(tmp_path)
+    calls = []
+
+    def handler(request):
+        calls.append(
+            (
+                request.method,
+                request.url.path,
+                str(request.url.query),
+                json.loads(request.content) if request.content else None,
+            )
+        )
+        return httpx.Response(200, json={"ok": True})
+
+    companion = bridge(tmp_path, handler)
+    payload = {
+        "robot_id": "renamed-arm",
+        "role": "follower",
+        "document": {"example": {}},
+        "replace_existing": False,
+        "confirm": "IMPORT CALIBRATION",
+    }
+    with browser(tmp_path, companion) as client:
+        assert (
+            client.get(
+                "/api/v1/robot-lab/calibration/export?robot_id=source&role=follower"
+            ).status_code
+            == 200
+        )
+        assert client.post("/api/v1/robot-lab/calibration/import", json=payload).status_code == 200
+        assert (
+            client.post(
+                "/api/v1/robot-lab/calibration/import", json={**payload, "confirm": "yes"}
+            ).status_code
+            == 422
+        )
+    assert calls[0][0:2] == ("GET", "/v1/calibration/export")
+    assert "robot_id=source" in calls[0][2]
+    assert calls[1][0:2] == ("POST", "/v1/calibration/import")
+    assert calls[1][3] == payload
+    assert len(calls) == 2
+    asyncio.run(companion.close())

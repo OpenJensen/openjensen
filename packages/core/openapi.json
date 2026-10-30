@@ -9511,7 +9511,7 @@
   },
   "info": {
     "title": "OPEN JENSEN local VLA application",
-    "version": "0.1.14"
+    "version": "0.1.15"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -15306,6 +15306,25 @@
         ]
       }
     },
+    "/api/v1/robot-lab/calibration/export": {
+      "get": {
+        "operationId": "robot_lab_get_calibration_export",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Get Calibration Export",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
     "/api/v1/robot-lab/calibration/finish": {
       "post": {
         "operationId": "robot_lab_post_calibration_finish",
@@ -15320,6 +15339,86 @@
           }
         },
         "summary": "Robot Lab Post Calibration Finish",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/calibration/import": {
+      "post": {
+        "operationId": "robot_lab_post_calibration_import",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "confirm": {
+                    "const": "IMPORT CALIBRATION",
+                    "title": "Confirm",
+                    "type": "string"
+                  },
+                  "document": {
+                    "additionalProperties": true,
+                    "title": "Document",
+                    "type": "object"
+                  },
+                  "port": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Port"
+                  },
+                  "replace_existing": {
+                    "default": false,
+                    "title": "Replace Existing",
+                    "type": "boolean"
+                  },
+                  "robot_id": {
+                    "maxLength": 80,
+                    "minLength": 1,
+                    "pattern": "^[A-Za-z0-9_-]+$",
+                    "title": "Robot Id",
+                    "type": "string"
+                  },
+                  "role": {
+                    "enum": [
+                      "follower",
+                      "leader"
+                    ],
+                    "title": "Role",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "robot_id",
+                  "role",
+                  "document",
+                  "confirm"
+                ],
+                "title": "CalibrationImportRequest",
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Calibration Import",
         "tags": [
           "Robot Lab"
         ]
