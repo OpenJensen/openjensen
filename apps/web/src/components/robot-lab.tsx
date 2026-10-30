@@ -106,7 +106,10 @@ export function RobotLab() {
           </button>
         ))}
       </nav>
-      {step !== 2 && (session?.error || error) && <HardwareNotice message={(session?.error || error)!} />}
+      {step !== 2 && error && <HardwareNotice label="Latest operation error" message={error} />}
+      {step !== 2 && session?.error && session.error !== error && !previousSessionError && (
+        <HardwareNotice label="Hardware session error" message={session.error} />
+      )}
       {previousSessionError && (
         <HardwareNotice
           label="Previous session error"

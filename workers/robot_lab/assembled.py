@@ -164,6 +164,7 @@ class AssembledSetup:
         directory = Path(data_dir) / "assembled"
         directory.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.journal_path = directory / (hashlib.sha256(port.encode()).hexdigest()[:20] + ".json")
+        self.previous_journal = None
         if self.journal_path.is_symlink():
             raise AssembledError("The setup journal must not be a symbolic link")
         self.state = {
@@ -182,8 +183,11 @@ class AssembledSetup:
         if self.journal_path.exists():
             if self.journal_path.stat().st_size > 256 * 1024:
                 raise AssembledError("Setup journal is too large")
-            saved = json.loads(self.journal_path.read_text())
+            body = self.journal_path.read_bytes()
+            saved = json.loads(body)
             if saved.get("port") == port:
+                if saved.get("phase") != "complete":
+                    self.previous_journal = body
                 self.state["previous"] = {
                     key: saved.get(key) for key in ("phase", "ids", "mapping", "pending", "message")
                 }
@@ -197,6 +201,22 @@ class AssembledSetup:
             self.state.update(updates)
             snapshot = self.snapshot()
             if journal:
+                # Keep the original recovery evidence across repeated failed
+                # scans. The live journal below is updated from the new scan.
+                if self.previous_journal is not None:
+                    recovery = self.journal_path.with_suffix(".recovery.json")
+                    if recovery.is_symlink():
+                        raise AssembledError("The recovery journal must not be a symbolic link")
+                    try:
+                        descriptor = os.open(recovery, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+                    except FileExistsError:
+                        pass  # Never replace the first incomplete transaction.
+                    else:
+                        with os.fdopen(descriptor, "wb") as stream:
+                            stream.write(self.previous_journal)
+                            stream.flush()
+                            os.fsync(stream.fileno())
+                    self.previous_journal = None
                 atomic_json(self.journal_path, snapshot)
                 self.journal_path.chmod(0o600)
                 # Persist recovery intent before any next ID write, including
@@ -583,21 +603,29 @@ class AssembledSetup:
             if len(state) == EXPECTED_COUNT and all(kind == "single" for kind in state.values()):
                 ids = self._verify_six(list(state))
             else:
+                self._require_collision(state)
                 # Previous cancellation or a sweep can leave RAM-only IDs. A
                 # measured reboot must target the actual saved-address group.
                 state = self._boot_inventory()
-                suspect = next((sid for sid, kind in state.items() if kind != "single"), min(state))
-                edge = self._measure_edge(suspect)
-                lead_ms, late_lead, early_lead = 6.0, None, None
                 ids = None
+                if len(state) == EXPECTED_COUNT and all(
+                    kind == "single" for kind in state.values()
+                ):
+                    ids = self._verify_six(list(state))
+                else:
+                    self._require_collision(state)
+                    suspect = next(sid for sid, kind in state.items() if kind == "collision")
+                    edge = self._measure_edge(suspect)
+                lead_ms, late_lead, early_lead = 6.0, None, None
                 for number in range(1, MAX_ROUNDS + 1):
+                    if ids is not None:
+                        break
+                    self._require_collision(state)
                     self._publish(
                         round=number,
                         message=f"Separating factory IDs: round {number}/{MAX_ROUNDS}",
                     )
-                    suspect = next(
-                        (sid for sid, kind in state.items() if kind != "single"), min(state)
-                    )
+                    suspect = next(sid for sid, kind in state.items() if kind == "collision")
                     fresh = [sid for sid in range(2, 90) if sid not in state][:84]
                     if not fresh:
                         raise AssembledError("No free temporary IDs remain for the bounded sweep")
@@ -669,6 +697,10 @@ class AssembledSetup:
                     # Only singles can be safely committed individually. Any
                     # remaining duplicate group reverts on reboot; rescan it
                     # before selecting the next source address.
+                    if len(state) != EXPECTED_COUNT or any(
+                        kind != "single" for kind in state.values()
+                    ):
+                        self._require_collision(state)
                     state = self._boot_inventory()
                     if len(state) == EXPECTED_COUNT and all(
                         kind == "single" for kind in state.values()
@@ -706,6 +738,19 @@ class AssembledSetup:
             raise
         finally:
             self.deadline = None
+
+    @staticmethod
+    def _require_collision(state):
+        # Fewer responding addresses do not establish duplicate IDs. Rewriting
+        # the lowest healthy ID in a partial chain only hides another motor.
+        # Even identical factory replies can be ambiguous: isolate the motors
+        # rather than infer a collision from their absence.
+        if not any(kind == "collision" for kind in state.values()):
+            raise AssembledError(
+                "Only a partial or unreliable motor inventory was found; ID "
+                "separation is blocked. Check power and cabling, discover all "
+                "motor addresses, or use isolated motor setup for ambiguous factory IDs."
+            )
 
     def positions(self):
         self._check()

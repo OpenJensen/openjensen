@@ -3617,6 +3617,21 @@ export interface components {
              */
             stale_after_seconds: number;
         };
+        /** CompanionUpdateStatus */
+        CompanionUpdateStatus: {
+            /**
+             * Managed
+             * @default false
+             */
+            managed: boolean;
+            /** Message */
+            message: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "current" | "updated" | "needs_update";
+        };
         /** ComputeSettingsResponse */
         ComputeSettingsResponse: {
             gcp?: components["schemas"]["GcpComputeSettings"];
@@ -6407,6 +6422,7 @@ export interface components {
             channel: "main";
             /** Checked At */
             checked_at?: string | null;
+            companion_update?: components["schemas"]["CompanionUpdateStatus"] | null;
             installed: components["schemas"]["ApplicationVersion"];
             /** Latest Release */
             latest_release?: string | null;

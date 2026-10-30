@@ -236,6 +236,8 @@ export type RobotDevices = {
 };
 export type RobotProbe = {
   checked_at?: number;
+  scan_scope?: 'expected_ids' | 'all_addresses';
+  unexpected_ids?: number[];
   profile?: {
     robot_id: string;
     role: RobotRole;
@@ -303,8 +305,12 @@ export const robotApi = {
   configureDevice: (input: { id: string; port: string; name: string; role: RobotRole }) =>
     request<RobotDevices>('/devices/configure', input),
   datasets: () => request<{ datasets: RobotDataset[] }>('/datasets'),
-  probe: (port: string, robot_id?: string, role: RobotRole = 'follower') =>
-    request<RobotProbe>('/probe', { port, ...(robot_id ? { robot_id, role } : {}) }, { timeoutMs: 90_000 }),
+  probe: (port: string, robot_id?: string, role: RobotRole = 'follower', discover = false) =>
+    request<RobotProbe>(
+      '/probe',
+      { port, ...(robot_id ? { robot_id, role } : {}), ...(discover ? { discover: true } : {}) },
+      { timeoutMs: 90_000 },
+    ),
   assignMotor: (port: string, joint: RobotJoint) =>
     request<MotorAssignment>(
       '/setup/motor',

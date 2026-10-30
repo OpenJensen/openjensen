@@ -110,6 +110,10 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin', 
     errors: [] as string[],
     datasetReads: 0,
     cameraFailure: false,
+    discoverySupported: true,
+    probeIds: [1],
+    discoveryIds: [1],
+    probeError: null as string | null,
     stopError: null as string | null,
     centerError: null as string | null,
     calibrationStartError: null as string | null,
@@ -229,17 +233,26 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin', 
         state.robotDatasetReads++;
         return route.fulfill({ json: { datasets: state.status.datasets } });
       }
-      if (action === '/probe')
+      if (action === '/probe') {
+        if (state.probeError) return route.fulfill({ status: 422, json: { detail: state.probeError } });
         return route.fulfill({
           json: {
             port: body.port,
             baudrate: 1000000,
-            motors: [{ id: 1, model: 777, stable: true, responses: 3 }],
+            motors: (body.discover ? state.discoveryIds : state.probeIds).map((id) => ({
+              id,
+              model: 777,
+              stable: true,
+              responses: 3,
+            })),
+            ...(state.discoverySupported ? { scan_scope: body.discover ? 'all_addresses' : 'expected_ids' } : {}),
+            unexpected_ids: body.discover ? state.discoveryIds.filter((id) => id < 1 || id > 6) : [],
             ready: false,
             expected_ids: [1, 2, 3, 4, 5, 6],
             warning: 'A response at one ID cannot prove that only one physical motor is connected.',
           },
         });
+      }
       if (action === '/setup/motor')
         return route.fulfill({
           json: {
@@ -1928,7 +1941,7 @@ test('readiness separates USB, motor responses, mapping and selected calibration
   await expect(readiness).toContainText('1/6 responding');
   const results = page.getByRole('region', { name: 'Motor scan results' });
   await expect(results.getByRole('row')).toHaveCount(7);
-  await expect(results.getByText('No response', { exact: true })).toHaveCount(5);
+  await expect(results.getByText('No reply at this ID', { exact: true })).toHaveCount(5);
   expect(writes(state, '/probe')[0].body).toEqual({ port, robot_id: 'my-so101', role: 'follower' });
   expect(writes(state, '/mapping/wiggle')).toEqual([]);
   await openTab(page, 'Motor IDs');
@@ -2250,4 +2263,65 @@ test('an unbound saved profile requires an explicit USB selection before binding
     role: 'follower',
   });
   expect(writes(state, '/control/start')).toEqual([]);
+});
+
+test('read-only discovery finds temporary motor IDs without claiming physical joints or enabling setup', async ({
+  page,
+}, testInfo) => {
+  const state = await fixture(page, true);
+  state.probeIds = [1, 2, 3];
+  state.discoveryIds = [1, 2, 3, 103, 104, 105];
+  await page.getByRole('button', { name: 'Scan motor IDs', exact: true }).click();
+  const results = page.getByRole('region', { name: 'Motor scan results' });
+  await expect(results).toContainText('3/6 expected IDs responding');
+  await expect(results.getByText('No reply at this ID', { exact: true })).toHaveCount(3);
+  await results.getByRole('button', { name: 'Find other motor IDs', exact: true }).click();
+  await expect(results).toContainText('Other motor IDs found: 103, 104, 105');
+  await expect(results).toContainText('6 addresses replied');
+  await expect(results).toContainText('3/6 expected IDs responding');
+  await expect(page.getByRole('region', { name: 'Arm readiness', exact: true })).toContainText('3/6 responding');
+  expect(writes(state, '/probe').map((request) => request.body)).toEqual([
+    { port, robot_id: 'my-so101', role: 'follower' },
+    { port, robot_id: 'my-so101', role: 'follower', discover: true },
+  ]);
+  await openTab(page, 'Motor IDs');
+  await expect(results.getByRole('button', { name: 'Find other motor IDs', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Start assembled setup', exact: true })).toBeDisabled();
+  expect(state.writes.every((request) => request.path.endsWith('/probe'))).toBe(true);
+  expect(state.errors).toEqual([]);
+  await page.screenshot({ path: testInfo.outputPath('temporary-motor-addresses.png'), fullPage: true });
+});
+
+test('a current scan failure remains visible alongside the retained motor safety fault', async ({ page }) => {
+  const state = await fixture(page);
+  state.status.session.error =
+    'Motor safety check failed: Motor 4 read Torque_Enable failed: There is no status packet!';
+  state.probeError = 'Serial device is busy; close the other motor application and retry.';
+  await page.getByRole('button', { name: 'Refresh devices', exact: true }).click();
+  await page.getByRole('button', { name: 'Scan motor IDs', exact: true }).click();
+  await expect(page.getByRole('alert', { name: 'Latest operation error' })).toContainText(state.probeError);
+  await expect(page.getByRole('alert', { name: 'Previous session error' })).toContainText('Motor safety check failed');
+  state.probeError = null;
+  await page.getByRole('button', { name: 'Scan motor IDs', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Motor scan results' })).toBeVisible();
+  await expect(page.getByRole('alert', { name: 'Latest operation error' })).toHaveCount(0);
+  await expect(page.getByRole('alert', { name: 'Previous session error' })).toContainText('Motor safety check failed');
+  expect(writes(state, '/control/start')).toEqual([]);
+  expect(state.errors).toEqual([]);
+});
+
+test('an older robot service cannot silently report a full motor discovery', async ({ page }) => {
+  const state = await fixture(page);
+  state.discoverySupported = false;
+  await page.getByRole('button', { name: 'Scan motor IDs', exact: true }).click();
+  const results = page.getByRole('region', { name: 'Motor scan results' });
+  await results.getByRole('button', { name: 'Find other motor IDs', exact: true }).click();
+  await expect(page.getByRole('alert', { name: 'Latest operation error' })).toContainText(
+    'Robot control service needs an update before searching all motor IDs.',
+  );
+  await expect(results).toContainText('1/6 expected IDs responding');
+  await expect(results).not.toContainText('Searched addresses');
+  expect(writes(state, '/probe')).toHaveLength(2);
+  expect(state.writes.every((request) => request.path.endsWith('/probe'))).toBe(true);
+  expect(state.errors).toEqual([]);
 });

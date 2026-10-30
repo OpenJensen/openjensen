@@ -775,12 +775,16 @@ class RobotLab:
     def probe(self, payload):
         with self.lock:
             self._idle()
+            discover = payload.get("discover", False)
+            if type(discover) is not bool:
+                raise RequestError("Motor discovery must be true or false")
             port = self._port(payload.get("port"))
             baud = payload.get("baudrate", 1_000_000)
             if baud not in BAUDRATES:
                 raise RequestError("Unsupported STS3215 baudrate")
             if payload.get("robot_id") is not None:
                 self.calibration_path(payload["robot_id"], payload.get("role", "follower"))
+            generation = self.generation
             bus = self.bus_factory(port, baud)
             try:
                 with bus.lock:
@@ -788,7 +792,11 @@ class RobotLab:
                         "port": port,
                         "baudrate": baud,
                         "checked_at": time.time(),
-                        **probe_bus(bus),
+                        **probe_bus(
+                            bus,
+                            discover=discover,
+                            is_current=lambda: generation == self.generation and not self.stopping,
+                        ),
                     }
                     if payload.get("robot_id") is not None:
                         robot_id, role = payload["robot_id"], payload.get("role", "follower")

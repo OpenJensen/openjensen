@@ -228,7 +228,8 @@ export function useRobotLab() {
     step === 2
       ? error || (!recoveredCheckpoint && calibration?.error) || (calibrationSession && session?.error) || null
       : null;
-  const previousSessionError = step === 2 && !calibrationSession && session?.error !== error ? session?.error : null;
+  const previousSessionError =
+    session?.mode === 'idle' && (step !== 2 || !calibrationSession) && session.error !== error ? session.error : null;
   const recording = state?.recording;
   const assembled =
     state?.assembled?.port === port
@@ -839,7 +840,9 @@ export function useRobotLab() {
   const mismatched = robotJoints.find((joint) => motionChecks[joint.name]?.correct === false);
   const nextUnchecked = setupOrder.find((joint) => !motionChecks[joint]?.correct);
   const scan = probe?.port === port && portConnected ? probe : null;
-  const responding = scan?.motors.filter((motor) => motor.stable && motor.model === 777).length ?? 0;
+  const responding =
+    scan?.motors.filter((motor) => scan.expected_ids.includes(motor.id) && motor.stable && motor.model === 777)
+      .length ?? 0;
   const profileCheck =
     selectedProfile &&
     selectedProfile.valid !== false &&
@@ -929,6 +932,20 @@ export function useRobotLab() {
       false,
     );
   }
+  function discoverMotorIds() {
+    remember();
+    void perform(
+      'Motor address search completed.',
+      async () => {
+        const result = await robotApi.probe(port, robotId, role, true);
+        if (result.scan_scope !== 'all_addresses')
+          throw new Error('Robot control service needs an update before searching all motor IDs.');
+        return result;
+      },
+      (result) => setProbe(result),
+      false,
+    );
+  }
   function verifyNext() {
     if (nextUnchecked) setMotorIndex(setupOrder.indexOf(nextUnchecked));
     openStep(1);
@@ -964,7 +981,7 @@ export function useRobotLab() {
       ? { text: 'Check the connected arm without moving it.', label: 'Scan arm', action: checkArm }
       : !scan.ready
         ? {
-            text: `${responding}/6 motors respond reliably. Review the missing IDs.`,
+            text: `${responding}/6 expected IDs respond reliably. Review the motor addresses.`,
             label: 'Review motors',
             target: 0,
             action: () => openStep(0),
@@ -1098,6 +1115,7 @@ export function useRobotLab() {
     capturedRanges,
     centering,
     checkArm,
+    discoverMotorIds,
     checkedCount,
     checkingConnection,
     client,

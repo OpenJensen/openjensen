@@ -191,6 +191,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             except OSError, ValueError:
                 # Preserve the saved registry for repair while keeping Core available.
                 pass
+            await app.state.application_updates.reconcile_companion(app.state.robot_lab.config_path)
             yield
         finally:
             try:

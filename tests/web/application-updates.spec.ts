@@ -15,6 +15,26 @@ const initial = {
   operation: null,
 };
 
+test('current app still reports a robot control service requiring an update', async ({ page }) => {
+  await page.route('**/api/v1/updates**', (route) =>
+    route.fulfill({
+      json: {
+        ...initial,
+        state: 'current',
+        message: 'Up to date with upstream main.',
+        companion_update: {
+          state: 'needs_update',
+          managed: false,
+          message: 'The robot control service needs an update. Update it on the robot computer.',
+        },
+      },
+    }),
+  );
+  await page.goto('/dashboard/');
+  await page.getByRole('button', { name: 'Version and updates' }).click();
+  await expect(page.getByRole('dialog').getByRole('alert')).toContainText('robot control service needs an update');
+});
+
 test('update discovery is read only and confirmation identifies the server and exact commit', async ({ page }) => {
   const writes: unknown[] = [];
   await page.route('**/api/v1/updates**', (route) => {

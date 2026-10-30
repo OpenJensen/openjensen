@@ -218,6 +218,15 @@ export function ApplicationUpdates() {
                 ? 'Checking upstream main…'
                 : value?.message}
         </p>
+        {value?.companion_update && (
+          <p
+            className={value.companion_update.state === 'needs_update' ? 'error-notice' : undefined}
+            role={value.companion_update.state === 'needs_update' ? 'alert' : 'status'}
+          >
+            <strong>Robot control service: </strong>
+            {value.companion_update.message}
+          </p>
+        )}
         {!value?.automatic_update && <p>{value?.setup_message}</p>}
         {available && !busy && (
           <p>Update this server for everyone using it? The workspace will be backed up and the server will restart.</p>

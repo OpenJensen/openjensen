@@ -49,6 +49,12 @@ class ApplicationVersion(BaseModel):
     host: str
 
 
+class CompanionUpdateStatus(BaseModel):
+    state: Literal["current", "updated", "needs_update"]
+    message: str
+    managed: bool = False
+
+
 class UpdateStatus(BaseModel):
     installed: ApplicationVersion
     channel: Literal["main"] = "main"
@@ -60,6 +66,7 @@ class UpdateStatus(BaseModel):
     automatic_update: bool
     setup_message: str | None = None
     operation: UpdateOperation | None = None
+    companion_update: CompanionUpdateStatus | None = None
 
 
 def installed_commit(root: Path = ROOT) -> str | None:
@@ -104,9 +111,37 @@ class ApplicationUpdates:
         self.reserving = False
         self.checked = 0.0
         self.value = {"state": "unchecked", "message": "Updates have not been checked."}
+        self.companion_update = None
 
     async def close(self):
         await self.client.aclose()
+
+    async def reconcile_companion(self, pairing_path):
+        """New-release startup also repairs companions when the old updater predates it."""
+        from vla_platform import robot_companion_updates
+
+        if not pairing_path.exists():
+            return
+        try:
+            self.configuration()
+            allowed = any(
+                (ROOT / name).is_file()
+                for name in (".openjensen-build.json", ".openjensen-release.json")
+            )
+        except UpdateError:
+            allowed = False
+        try:
+            value = await asyncio.to_thread(
+                robot_companion_updates.reconcile,
+                ROOT / "workers/robot_lab",
+                pairing_path,
+                allow_update=allowed,
+            )
+        except Exception:
+            # Core must remain available to explain an unsupported or failed
+            # robot-service upgrade. The helper owns source rollback.
+            value = robot_companion_updates.result("needs_update", robot_companion_updates.HELP)
+        self.companion_update = CompanionUpdateStatus.model_validate(value) if value else None
 
     def configuration(self):
         if self.config_path is None:
@@ -194,6 +229,7 @@ class ApplicationUpdates:
             automatic_update=supported,
             setup_message=setup,
             operation=self.operation(),
+            companion_update=self.companion_update,
             **self.value,
         )
 

@@ -1807,6 +1807,34 @@
         "title": "CloudRunsFeed",
         "type": "object"
       },
+      "CompanionUpdateStatus": {
+        "properties": {
+          "managed": {
+            "default": false,
+            "title": "Managed",
+            "type": "boolean"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "current",
+              "updated",
+              "needs_update"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "message"
+        ],
+        "title": "CompanionUpdateStatus",
+        "type": "object"
+      },
       "ComputeSettingsResponse": {
         "additionalProperties": false,
         "properties": {
@@ -8878,6 +8906,16 @@
             ],
             "title": "Checked At"
           },
+          "companion_update": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CompanionUpdateStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "installed": {
             "$ref": "#/components/schemas/ApplicationVersion"
           },
@@ -9511,7 +9549,7 @@
   },
   "info": {
     "title": "OPEN JENSEN local VLA application",
-    "version": "0.1.16"
+    "version": "0.1.17"
   },
   "openapi": "3.1.0",
   "paths": {
