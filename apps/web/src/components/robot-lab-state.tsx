@@ -461,7 +461,7 @@ export function useRobotLab() {
         client.setQueryData(statusKey, result);
       }
       done?.(result);
-      setNotice(announce ? label : null);
+      setNotice(announce && !(isStatus(result) && result.session?.error) ? label : null);
       void client.invalidateQueries({ queryKey: ['robot-lab', 'datasets'] });
       void client.invalidateQueries({ queryKey: statusKey });
     } catch (failure) {
@@ -704,7 +704,7 @@ export function useRobotLab() {
     setReconnecting(false);
     setMotionReady(false);
     setVerificationReady(false);
-    void perform('Stop requested.', () => robotApi.stop());
+    void perform('Arm stopped.', () => robotApi.stop());
   }
   async function refresh() {
     setCheckingConnection(true);

@@ -222,6 +222,39 @@ class SafetyTests(unittest.TestCase):
         with self.assertRaisesRegex(HardwareError, "Invalid encoder reading"):
             self.lab._tick()
 
+    def test_operator_stop_acknowledges_page_lifecycle_stop_without_reopening_hardware(self):
+        for reason in (
+            "Robot Lab page was hidden; motor torque disabled",
+            "Robot Lab page was closed; motor torque disabled",
+        ):
+            with self.subTest(reason=reason):
+                self.start()
+                bus = self.buses[-1]
+                self.lab.stop(reason)
+                self.assertEqual(self.lab.error, reason)
+                count = len(self.buses)
+                writes = list(bus.writes)
+                result = self.lab.stop()
+                self.assertEqual(result["session"]["mode"], "idle")
+                self.assertFalse(result["session"]["torque_enabled"])
+                self.assertIsNone(result["session"]["error"])
+                self.assertEqual(len(self.buses), count)
+                self.assertEqual(bus.writes, writes)
+                self.assertEqual(result["diagnostics"]["last_stop"]["reason"], reason)
+                self.assertTrue(result["diagnostics"]["last_stop"]["torque_disable_acknowledged"])
+
+    def test_operator_stop_preserves_unacknowledged_motor_cleanup_failure(self):
+        self.start()
+        with patch.object(
+            self.lab.bus, "disable", side_effect=HardwareError("Motor 2 did not reply")
+        ):
+            self.lab.stop("Robot Lab page was closed; motor torque disabled")
+        failure = self.lab.error
+        self.assertIn("motor acknowledgement failed", failure)
+        result = self.lab.stop()
+        self.assertEqual(result["session"]["error"], failure)
+        self.assertFalse(result["diagnostics"]["last_stop"]["torque_disable_acknowledged"])
+
     def test_probe_is_read_only_and_closes(self):
         result = self.lab.probe({"port": "/dev/cu.fake"})
         self.assertTrue(result["ready"])
