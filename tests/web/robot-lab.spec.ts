@@ -500,6 +500,22 @@ test('arm role is visible throughout setup and keeps separate USB ports and name
   expect(state.errors).toEqual([]);
 });
 
+test('operator Stop clears the old page-closed warning and confirms completion', async ({ page }, testInfo) => {
+  const state = await fixture(page, true, 'Linux');
+  const reason = 'Robot Lab page was closed; motor torque disabled';
+  state.status.session.error = reason;
+  await page.getByRole('button', { name: 'Refresh devices', exact: true }).click();
+  await expect(page.locator('.robot-lab').getByRole('alert')).toContainText(reason);
+  await page.getByRole('button', { name: 'Stop arm and disable torque', exact: true }).click();
+  await expect(page.getByText('Arm stopped.', { exact: true })).toBeVisible();
+  await expect(page.locator('.robot-lab').getByRole('alert')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Stop arm and disable torque', exact: true })).toHaveCount(0);
+  expect(writes(state, '/stop')).toHaveLength(1);
+  expect(writes(state, '/control/start')).toHaveLength(0);
+  expect(state.errors).toEqual([]);
+  await page.screenshot({ path: testInfo.outputPath('stop-confirmed.png'), fullPage: true });
+});
+
 test('range and current faults give recovery steps without stale success or readiness', async ({ page }, testInfo) => {
   const state = await fixture(page, true);
   await startManual(page);
@@ -799,7 +815,7 @@ test('hand guiding is an explicit torque-off session and leader mode needs a sec
   state.stopError = 'Stop attempted but motor acknowledgement failed. Keep supporting the arm.';
   await page.getByRole('button', { name: 'Stop arm and disable torque', exact: true }).click();
   await expect(page.locator('.robot-lab').getByRole('alert')).toContainText(state.stopError);
-  await expect(page.getByText('Arm stopped. Torque is disabled.', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Arm stopped.', { exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Start hand guiding', exact: true })).toBeVisible();
 });
 

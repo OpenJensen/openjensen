@@ -1556,6 +1556,13 @@ class RobotLab:
                 + "Stop attempted but motor acknowledgement failed. Cut motor power if needed. "
                 + "; ".join(errors)
             )
+        elif reason is None and self.error in (
+            "Robot Lab page was hidden; motor torque disabled",
+            "Robot Lab page was closed; motor torque disabled",
+        ):
+            # An operator Stop acknowledges an earlier page-lifecycle stop.
+            # Keep real hardware/cleanup faults visible and in diagnostics.
+            self.error = None
         if self.calibration_state["phase"] in ("center", "ranges"):
             self.calibration_state.update(
                 recoverable=self.calibration_draft.path.exists(),

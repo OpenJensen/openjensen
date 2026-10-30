@@ -66,7 +66,7 @@ export function RobotLab() {
           >
             {checkingConnection ? 'Refreshing…' : 'Refresh devices'}
           </button>
-          {(active || session?.torque_enabled || session?.error || pending === 'Stop requested.') && (
+          {(active || session?.torque_enabled || session?.error || pending === 'Arm stopped.') && (
             <button
               className="danger-button robot-lab-stop"
               onClick={stop}
@@ -74,7 +74,7 @@ export function RobotLab() {
               aria-label="Stop arm and disable torque"
             >
               <span />
-              {pending === 'Stop requested.' ? 'Stopping…' : 'Stop arm'}
+              {pending === 'Arm stopped.' ? 'Stopping…' : 'Stop arm'}
             </button>
           )}
         </div>
@@ -112,7 +112,7 @@ export function RobotLab() {
           {step === 4 && <RobotLabRecord lab={lab} />}
           {busy && (
             <p className="robot-lab-subtle" role="status" style={{ marginTop: 16 }}>
-              {pending === 'Stop requested.'
+              {pending === 'Arm stopped.'
                 ? 'Stopping the arm… Keep supporting it while torque is released and motor cleanup finishes.'
                 : 'Working… Keep this page open.'}
             </p>
