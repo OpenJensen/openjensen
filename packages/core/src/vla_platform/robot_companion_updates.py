@@ -43,7 +43,7 @@ def private_bytes(path, limit=65536, *, private=True):
         if (
             not stat.S_ISREG(info.st_mode)
             or info.st_uid != os.getuid()
-            or info.st_mode & (0o077 if private else 0o022)
+            or (info.st_mode & 0o077 if private else not owned_without_other_writers(info))
             or info.st_size > limit
         ):
             raise ValueError("Local service metadata is not a private owned file")
@@ -147,6 +147,28 @@ def service_info():
     }
 
 
+def owned_without_other_writers(info):
+    if info.st_uid != os.getuid() or info.st_mode & 0o002:
+        return False
+    if not info.st_mode & 0o020:
+        return True
+    # Ubuntu commonly creates user files with umask 002. Group-write access
+    # remains private only when this is the user's primary group and no other
+    # account belongs to it, including accounts with implicit primary membership.
+    import grp
+    import pwd
+
+    try:
+        uid = os.getuid()
+        if info.st_gid != os.getgid() or pwd.getpwuid(uid).pw_gid != info.st_gid:
+            return False
+        members = [pwd.getpwnam(name) for name in grp.getgrgid(info.st_gid).gr_mem]
+        members.extend(account for account in pwd.getpwall() if account.pw_gid == info.st_gid)
+        return all(account.pw_uid == uid for account in members)
+    except KeyError, OSError:
+        return False
+
+
 def attest(pairing):
     if sys.platform != "linux" or pairing.get("url") != "http://127.0.0.1:18101":
         raise ValueError("Only the verified local Linux service can update automatically")
@@ -197,8 +219,7 @@ def attest(pairing):
         not source.is_absolute()
         or source.is_symlink()
         or not source.is_dir()
-        or source.stat().st_uid != os.getuid()
-        or source.stat().st_mode & 0o022
+        or not owned_without_other_writers(source.stat())
     ):
         raise ValueError("The installed robot sources are not safely replaceable")
     for path in (Path(python), Path(data), token_file, receipt_path):

@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from types import SimpleNamespace
 
 import pytest
 from vla_platform import robot_companion_updates as updates
@@ -188,6 +189,62 @@ def test_other_pairing_token_never_updates_same_named_local_service(service):
 
 def test_existing_mismatched_receipt_blocks_automatic_adoption(service):
     private(service["receipt_path"], json.dumps({**service["receipt"], "source": "/unrelated"}))
+    value = updates.reconcile(service["desired"], service["pairing_path"], allow_update=True)
+    assert value["state"] == "needs_update"
+    assert controls(service) == []
+
+
+@pytest.mark.parametrize(
+    "case,eligible",
+    [
+        ("private", True),
+        ("secondary_member", False),
+        ("primary_member", False),
+        ("foreign_group", False),
+        ("world_writable", False),
+        ("unknown_group", False),
+    ],
+)
+def test_group_writable_sources_require_proven_private_primary_group(
+    service, monkeypatch, case, eligible
+):
+    import grp
+    import pwd
+
+    uid, gid = updates.os.getuid(), service["source"].stat().st_gid
+    current = SimpleNamespace(pw_uid=uid, pw_gid=gid)
+    other = SimpleNamespace(pw_uid=uid + 1, pw_gid=gid)
+    service["source"].chmod(0o777 if case == "world_writable" else 0o775)
+    service["unit"].chmod(0o664)
+    monkeypatch.setattr(updates.os, "getgid", lambda: gid)
+    monkeypatch.setattr(
+        pwd,
+        "getpwuid",
+        lambda value: (
+            SimpleNamespace(pw_uid=uid, pw_gid=gid + 1) if case == "foreign_group" else current
+        ),
+    )
+    monkeypatch.setattr(
+        pwd, "getpwall", lambda: [current, other] if case == "primary_member" else [current]
+    )
+    monkeypatch.setattr(pwd, "getpwnam", lambda name: other if name == "other" else current)
+
+    def group(value):
+        if case == "unknown_group":
+            raise KeyError(value)
+        return SimpleNamespace(
+            gr_mem=["operator", "other"] if case == "secondary_member" else ["operator"]
+        )
+
+    monkeypatch.setattr(grp, "getgrgid", group)
+    value = updates.reconcile(service["desired"], service["pairing_path"], allow_update=True)
+    assert value["state"] == ("updated" if eligible else "needs_update")
+    assert controls(service) == (["stop", "start"] if eligible else [])
+    assert service["unit"].stat().st_mode & 0o777 == 0o664
+
+
+def test_private_pairing_credential_cannot_be_group_readable(service):
+    service["token"].chmod(0o660)
     value = updates.reconcile(service["desired"], service["pairing_path"], allow_update=True)
     assert value["state"] == "needs_update"
     assert controls(service) == []
