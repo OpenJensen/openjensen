@@ -28,6 +28,7 @@ from assembled_session import AssembledSession, CalibrationRevisions, empty_asse
 from calibration_draft import CalibrationDraft, file_hash
 from camera import MAX_CAMERA_INDEX, CameraPool
 from dataset import DatasetWriter, atomic_json, dataset_file, list_datasets, manifest, safe_slug
+from device_registry import DeviceRegistry
 from diagnostics import Diagnostics
 from dispatch import MainThreadDispatcher
 from hardware import (
@@ -207,6 +208,7 @@ class RobotLab:
         self.assembled_factory = assembled_factory
         self.movement_detector = movement_detector
         self.observe_timeout = observe_timeout
+        self.device_registry = DeviceRegistry(self.data_dir)
         self.calibration_revisions = CalibrationRevisions(self.data_dir)
         self.assembled_session = None
         self.assembled_state = empty_assembled_state()
@@ -401,6 +403,10 @@ class RobotLab:
         safe_slug(robot_id)
         if role not in ("follower", "leader"):
             raise RequestError("Role must be follower or leader")
+        device = next((d for d in self.device_registry.read() if d["robot_id"] == robot_id), None)
+        if device and device.get("profile_role"):
+            role = device["profile_role"]
+            robot_id = safe_slug(device.get("calibration_id", robot_id))
         return (
             self.calibration_root
             / ("robots/so_follower" if role == "follower" else "teleoperators/so_leader")
@@ -597,6 +603,14 @@ class RobotLab:
                 except ValueError:
                     continue
                 calibrations.append(self.profile_info(path.stem, role))
+        for device in self.device_registry.read():
+            for role in ("leader", "follower"):
+                if not any(
+                    p["robot_id"] == device["robot_id"] and p["role"] == role for p in calibrations
+                ):
+                    info = self.profile_info(device["robot_id"], role)
+                    if info["valid"]:
+                        calibrations.append(info)
         writer = self.writer
         with self.lifecycle_lock:
             assembled = json.loads(json.dumps(self.assembled_state))
@@ -635,6 +649,7 @@ class RobotLab:
                 "calibration": hardware,
                 "calibration_persistence": hardware,
                 "calibration_transfer": True,
+                "device_registry": True,
                 "control": hardware,
                 "lerobot_position_control": hardware,
                 "rest_position": hardware,
@@ -723,7 +738,39 @@ class RobotLab:
             cameras = self.camera.discover()
         except Exception as caught:
             cameras, error = [], str(caught)
-        return {"ports": self.port_provider(), "cameras": cameras, "camera_error": error}
+        with self.lock:
+            ports = self.port_provider()
+            catalog = self.device_registry.discover(ports, self.status()["calibrations"])
+            for device in catalog:
+                try:
+                    saved_mapping(self.data_dir, device["port"])
+                    device["motor_ids"] = True
+                except ValueError, OSError:
+                    device["motor_ids"] = False
+                profile = self.profile_info(
+                    device["robot_id"], device["profile_role"] or "follower"
+                )
+                device["calibration"] = (
+                    "saved"
+                    if profile["valid"] and profile["setup_fresh"]
+                    else "needs_attention"
+                    if profile["valid"]
+                    else "missing"
+                )
+            return {
+                "ports": ports,
+                "saved_devices": catalog,
+                "cameras": cameras,
+                "camera_error": error,
+            }
+
+    def configure_device(self, payload):
+        with self.lock:
+            self._idle()
+            if self.writer is not None:
+                raise RequestError("Finish recording before changing devices")
+            self.device_registry.save(payload, self.devices()["saved_devices"])
+            return self.devices()
 
     def probe(self, payload):
         with self.lock:
@@ -2154,6 +2201,8 @@ class Handler(BaseHTTPRequestHandler):
                 result = lab.assembled_action(path.rsplit("/", 1)[-1], payload)
             elif path == "/v1/setup/assembled/cancel":
                 result = lab.stop()
+            elif path == "/v1/devices/configure":
+                result = lab.configure_device(payload)
             elif path == "/v1/calibration/import":
                 result = lab.calibration_import(payload)
             elif path == "/v1/calibration/start":

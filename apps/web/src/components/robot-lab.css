@@ -1100,3 +1100,185 @@
   gap: 12px;
   padding-top: 8px;
 }
+
+.robot-lab-main-tabs,
+.robot-lab-device-sections {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+  margin: 0 0 24px;
+}
+.robot-lab-main-tabs button,
+.robot-lab-device-sections button {
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  padding: 14px 22px;
+  cursor: pointer;
+  font-weight: 600;
+}
+.robot-lab-main-tabs button.selected,
+.robot-lab-device-sections button.selected {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  background: var(--subtle);
+}
+.robot-lab-device-library {
+  padding: 24px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.robot-lab-library-heading,
+.robot-lab-device-tile-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.robot-lab-library-heading h2 {
+  margin: 0 0 8px;
+}
+.robot-lab-library-heading p,
+.robot-lab-device-detail-heading p {
+  color: var(--muted);
+  margin: 0 0 20px;
+  font-size: 13px;
+}
+.robot-lab-device-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: 16px;
+}
+.robot-lab-device-tile {
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px;
+  cursor: pointer;
+  min-width: 0;
+}
+.robot-lab-device-tile:hover {
+  border-color: var(--accent);
+}
+.robot-lab-device-tile strong {
+  font-size: 18px;
+  overflow-wrap: anywhere;
+}
+.robot-lab-device-tile-top {
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+.robot-lab-device-icon {
+  background: var(--subtle);
+  padding: 10px;
+  border-radius: 8px;
+  color: var(--accent);
+}
+.robot-lab-device-address {
+  font-family: monospace;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+}
+.robot-lab-device-role {
+  font-size: 12px;
+  color: var(--muted);
+}
+.robot-lab-device-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 11px;
+  margin: 10px 0;
+}
+.robot-lab-device-badges span {
+  background: var(--subtle);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 5px 7px;
+}
+.robot-lab-device-open {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--accent);
+  font-size: 13px;
+  margin-top: auto;
+}
+.robot-lab-device-empty {
+  text-align: center;
+  color: var(--muted);
+  padding: 54px 20px;
+}
+.robot-lab-back {
+  margin-bottom: 18px;
+}
+.robot-lab-device-detail-heading h2 {
+  margin: 0 0 8px;
+  overflow-wrap: anywhere;
+}
+.robot-lab-device-settings {
+  display: grid;
+  gap: 18px;
+  margin: 20px 0 24px;
+}
+.robot-lab-role-buttons {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+.robot-lab-role-buttons [aria-pressed='true'] {
+  background: var(--accent);
+  color: var(--surface);
+}
+.robot-lab-role-onboarding {
+  padding: 24px;
+  background: var(--subtle);
+  border-radius: 8px;
+}
+.robot-lab-role-onboarding p {
+  line-height: 1.7;
+  color: var(--muted);
+}
+.robot-lab-settings-label {
+  font-size: 13px;
+}
+@media (max-width: 600px) {
+  .robot-lab-library-heading {
+    align-items: flex-start;
+  }
+  .robot-lab-library-heading > span {
+    white-space: nowrap;
+    font-size: 12px;
+  }
+  .robot-lab-main-tabs button {
+    padding: 12px 15px;
+  }
+  .robot-lab-device-library {
+    padding: 16px;
+  }
+  .robot-lab-device-sections button {
+    padding: 12px 14px;
+  }
+}
+.robot-lab-device-readiness {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 20px;
+  font-size: 12px;
+}
+.robot-lab-device-readiness > span {
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--subtle);
+}

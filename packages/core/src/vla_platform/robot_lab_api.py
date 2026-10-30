@@ -11,6 +11,14 @@ from vla_platform.robot_lab_bridge import RobotLabError, safe_id, strict_json
 router = APIRouter(prefix="/api/v1", tags=["Robot Lab"])
 
 
+class DeviceConfigurationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    id: str = Field(min_length=1, max_length=100)
+    port: str = Field(max_length=256)
+    name: str = Field(max_length=64)
+    role: Literal["follower", "leader"]
+
+
 class CalibrationImportRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     robot_id: str = Field(min_length=1, max_length=80, pattern=r"^[A-Za-z0-9_-]+$")
@@ -72,6 +80,11 @@ async def proxy(path: str, request: Request):
                     raise ValueError
             except ValueError, UnicodeDecodeError, RecursionError:
                 raise HTTPException(422, "Supply a JSON object for this operation") from None
+        if path == "devices/configure":
+            try:
+                DeviceConfigurationRequest.model_validate(payload)
+            except ValidationError:
+                raise HTTPException(422, "Choose a device, name and default role") from None
         if path == "calibration/import":
             try:
                 CalibrationImportRequest.model_validate(payload)
@@ -107,6 +120,7 @@ async def proxy(path: str, request: Request):
 PROTOCOL = {
     "GET": {"devices", "datasets", "camera.jpg", "diagnostics", "calibration/export"},
     "POST": {
+        "devices/configure",
         "probe",
         "setup/motor",
         "mapping/wiggle",
@@ -169,7 +183,9 @@ for method, protocol_paths in PROTOCOL.items():
                     "content": {
                         "application/json": {
                             "schema": (
-                                CalibrationImportRequest
+                                DeviceConfigurationRequest
+                                if protocol_path == "devices/configure"
+                                else CalibrationImportRequest
                                 if protocol_path == "calibration/import"
                                 else RecordingFinishRequest
                             ).model_json_schema(),
@@ -177,7 +193,7 @@ for method, protocol_paths in PROTOCOL.items():
                     },
                 }
             }
-            if protocol_path in {"recording/finish", "calibration/import"}
+            if protocol_path in {"recording/finish", "calibration/import", "devices/configure"}
             else None,
         )
 

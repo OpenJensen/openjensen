@@ -37,6 +37,7 @@ function initialStatus(calibrated = false): any {
       joint_sliders: true,
       calibration_persistence: true,
       calibration_transfer: true,
+      device_registry: true,
       partial_control: true,
       move_to_middle: true,
       mapping_verification: true,
@@ -78,9 +79,33 @@ function initialStatus(calibrated = false): any {
     datasets: [],
   };
 }
-async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin') {
+async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin', enterDevice = true) {
   const state = {
     status: initialStatus(calibrated),
+    catalog: [
+      {
+        id: 'arm-a',
+        port: hostPlatform === 'Linux' ? '/dev/ttyACM0' : port,
+        name: 'my-so101',
+        robot_id: 'my-so101',
+        role: 'follower',
+        profile_role: 'follower',
+        serial_number: 'test-1',
+        connected: true,
+        description: 'SO-101 controller',
+      },
+      {
+        id: 'arm-b',
+        port: '/dev/cu.usbmodem-leader',
+        name: 'my-so101-leader',
+        robot_id: 'my-so101-leader',
+        role: 'leader',
+        profile_role: 'leader',
+        serial_number: 'test-2',
+        connected: true,
+        description: 'Leader controller',
+      },
+    ] as any[],
     writes: [] as { path: string; body: any }[],
     errors: [] as string[],
     datasetReads: 0,
@@ -117,9 +142,31 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin') 
       const action = path.slice('/api/v1/robot-lab'.length);
       if (action === '/status')
         return state.statusFailures ? route.abort('failed') : route.fulfill({ json: state.status });
+      if (action === '/devices/configure') {
+        const device = state.catalog.find((d) => d.id === body.id);
+        Object.assign(device, { name: body.name, role: body.role, port: body.port });
+        return route.fulfill({
+          json: {
+            saved_devices: state.catalog,
+            ports: state.catalog.filter((d) => d.connected).map((d) => ({ device: d.port })),
+            cameras: [{ index: 0, name: 'Robot camera', width: 640, height: 480 }],
+            camera_error: null,
+          },
+        });
+      }
       if (action === '/devices')
         return route.fulfill({
           json: {
+            saved_devices: state.catalog.map((d) => ({
+              ...d,
+              connected: d.connected && state.portsConnected,
+              calibration: (state.status.calibrations ?? []).some(
+                (p: any) => p.robot_id === d.robot_id && p.valid !== false,
+              )
+                ? 'saved'
+                : 'missing',
+              motor_ids: state.status.assembled?.port === d.port && state.status.assembled.phase === 'complete',
+            })),
             ports: state.portsConnected
               ? [
                   {
@@ -441,15 +488,35 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin') 
   });
   await page.goto('/robot-lab/');
   await expect(page.getByRole('heading', { level: 1, name: 'Initial setup', exact: true })).toBeVisible();
-  await expect(page.getByLabel('Follower USB port')).toHaveValue(hostPlatform === 'Linux' ? '/dev/ttyACM0' : port);
+  await expect(page.getByTestId('device-arm-a')).toBeVisible();
+  if (enterDevice) await page.getByTestId('device-arm-a').click();
   return state;
 }
-const tab = (page: Page, title: string) =>
-  page.getByRole('navigation', { name: 'Robot setup steps' }).getByRole('button', { name: new RegExp(title) });
+const tab = (page: Page, title: string) => {
+  if (['Teleoperate', 'Record', 'Devices'].includes(title))
+    return page
+      .getByRole('navigation', { name: 'Robot Lab tabs' })
+      .getByRole('button', { name: new RegExp(title === 'Teleoperate' ? 'Teleoperation' : title) });
+  return page.getByRole('navigation', { name: 'Device sections' }).getByRole('button', {
+    name: title === 'Connect' ? 'Overview' : title === 'Calibrate' ? 'Calibration' : title,
+    exact: true,
+  });
+};
+async function openTab(page: Page, title: string) {
+  if (
+    !['Teleoperate', 'Record', 'Devices'].includes(title) &&
+    !(await page.getByRole('navigation', { name: 'Device sections' }).isVisible())
+  ) {
+    await tab(page, 'Devices').click();
+    await page.getByTestId('device-arm-a').click();
+  }
+  await tab(page, title).click();
+}
+
 const writes = (state: Awaited<ReturnType<typeof fixture>>, path: string) =>
   state.writes.filter((item) => item.path.endsWith(path));
 async function startManual(page: Page) {
-  await tab(page, 'Teleoperate').click();
+  await openTab(page, 'Teleoperate');
   await page.getByRole('checkbox', { name: /Arm secured; workspace clear/ }).check();
   await page.getByRole('button', { name: 'Enable & move to recorded middle', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Increase Shoulder pan', exact: true })).toBeEnabled();
@@ -457,9 +524,9 @@ async function startManual(page: Page) {
 
 test('Robot Lab navigation and device discovery issue no motor commands', async ({ page }, testInfo) => {
   const state = await fixture(page);
-  await expect(page.getByText('This Mac connected', { exact: true })).toBeVisible();
+  await expect(page.getByText('2 USB devices connected', { exact: true })).toBeVisible();
   await expect(page.getByText('Some hardware tools need installation.', { exact: true })).toHaveCount(0);
-  for (const title of ['Motor IDs', 'Calibrate', 'Teleoperate', 'Record', 'Connect']) await tab(page, title).click();
+  for (const title of ['Motor IDs', 'Calibrate', 'Teleoperate', 'Record', 'Connect']) await openTab(page, title);
   await expect(page.getByRole('button', { name: 'Enable & move to recorded middle', exact: true })).not.toBeVisible();
   expect(state.writes).toEqual([]);
   await page.getByRole('button', { name: 'Start preview', exact: true }).click();
@@ -483,7 +550,7 @@ test('Robot Lab navigation and device discovery issue no motor commands', async 
 
 test('motor IDs require a fresh isolation acknowledgement for every motor', async ({ page }) => {
   const state = await fixture(page);
-  await tab(page, 'Motor IDs').click();
+  await openTab(page, 'Motor IDs');
   await page.getByText('Advanced: configure one physically isolated motor', { exact: true }).click();
   const assign = page.getByRole('button', { name: 'Assign ID 6', exact: true });
   await expect(assign).toBeDisabled();
@@ -499,51 +566,38 @@ test('motor IDs require a fresh isolation acknowledgement for every motor', asyn
   expect(writes(state, '/control/start')).toEqual([]);
 });
 
-test('arm role is visible throughout setup and keeps separate USB ports and names', async ({ page }, testInfo) => {
-  const state = await fixture(page);
-  const devicePicker = page.getByRole('combobox', { name: 'Devices', exact: true });
-  await expect(devicePicker).toHaveValue('follower');
-  await page.getByLabel('Follower name', { exact: true }).fill('task-arm');
-  await devicePicker.selectOption('leader');
-  await expect(devicePicker).toHaveValue('leader');
-  await expect(page.getByRole('heading', { name: 'Devices', exact: true })).toBeVisible();
-  await expect(page.getByLabel('Leader USB port')).toHaveValue('');
-  await expect(page.getByRole('button', { name: 'Scan motor IDs', exact: true })).toBeDisabled();
-  await page.getByLabel('Leader USB port').selectOption('/dev/cu.usbmodem-leader');
-  await page.getByLabel('Leader name', { exact: true }).fill('guide-arm');
-  for (const title of ['Motor IDs', 'Calibrate', 'Connect']) {
-    await tab(page, title).click();
-    await expect(devicePicker).toHaveValue('leader');
-  }
-  await devicePicker.selectOption('follower');
-  await expect(page.getByLabel('Follower USB port')).toHaveValue(port);
-  await expect(page.getByLabel('Follower name', { exact: true })).toHaveValue('task-arm');
-  await devicePicker.selectOption('leader');
-  await expect(page.getByLabel('Leader USB port')).toHaveValue('/dev/cu.usbmodem-leader');
-  await expect(page.getByLabel('Leader name', { exact: true })).toHaveValue('guide-arm');
-  expect(state.writes).toEqual([]);
-  await page.getByRole('heading', { name: 'Devices' }).click();
-  await page.screenshot({ path: testInfo.outputPath('leader-setup.png'), fullPage: true });
-  await page.getByRole('button', { name: 'Scan motor IDs', exact: true }).click();
-  await expect.poll(() => writes(state, '/probe').length).toBe(1);
-  expect(writes(state, '/probe')[0].body).toEqual({
-    port: '/dev/cu.usbmodem-leader',
-    robot_id: 'guide-arm',
-    role: 'leader',
-  });
+test('device library has three main tabs and saves names independently of roles', async ({ page }, testInfo) => {
+  const state = await fixture(page, false, 'Darwin', false);
+  const tabs = page.getByRole('navigation', { name: 'Robot Lab tabs' });
+  await expect(tabs.getByRole('button')).toHaveCount(3);
+  await expect(page.getByRole('combobox', { name: 'Devices', exact: true })).toHaveCount(0);
+  await expect(page.getByTestId('device-arm-a')).toContainText('Motor IDs');
+  await page.getByTestId('device-arm-a').click();
+  await page.getByLabel('Device name', { exact: true }).fill('Desk arm');
+  await page.getByRole('button', { name: 'Save name', exact: true }).click();
+  await page
+    .getByRole('group', { name: 'Default device role' })
+    .getByRole('button', { name: 'Leader', exact: true })
+    .click();
+  await openTab(page, 'Calibrate');
+  await expect(page.getByRole('heading', { name: 'Leader calibration', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'All devices', exact: false }).click();
+  await expect(page.getByTestId('device-arm-a')).toContainText('Desk arm');
+  await expect(page.getByTestId('device-arm-a')).toContainText(port);
+  await expect(page.getByTestId('device-arm-b')).toContainText('my-so101-leader');
   await page.reload();
-  await expect(page.getByLabel('Leader USB port')).toHaveValue('/dev/cu.usbmodem-leader');
-  await devicePicker.selectOption('follower');
-  await expect(page.getByLabel('Follower USB port')).toHaveValue(port);
-  await expect(page.getByLabel('Follower name', { exact: true })).toHaveValue('task-arm');
-  expect(state.errors).toEqual([]);
+  await expect(page.getByTestId('device-arm-a')).toContainText('Desk arm');
+  expect(writes(state, '/control/start')).toEqual([]);
+  expect(writes(state, '/calibration/start')).toEqual([]);
+  expect(writes(state, '/probe')).toEqual([]);
+  await page.screenshot({ path: testInfo.outputPath('device-library.png'), fullPage: true });
 });
 
 test('calibration export downloads a portable file and imports into a different profile', async ({
   page,
 }, testInfo) => {
   const state = await fixture(page, true);
-  await tab(page, 'Calibrate').click();
+  await openTab(page, 'Calibrate');
   const transfer = page.getByRole('region', { name: 'Transfer calibration', exact: true });
   const downloadPromise = page.waitForEvent('download');
   await transfer.getByRole('button', { name: 'Export calibration', exact: true }).click();
@@ -553,8 +607,13 @@ test('calibration export downloads a portable file and imports into a different 
   expect(document.calibration).toEqual(transferCalibration);
   expect(document.role).toBe('follower');
   expect(state.writes).toEqual([]);
-  await page.getByLabel('Follower name', { exact: true }).fill('transferred-arm');
-  await page.getByRole('button', { name: 'Save name', exact: true }).click();
+  await page.getByRole('button', { name: 'All devices', exact: false }).click();
+  await page.getByTestId('device-arm-b').click();
+  await page
+    .getByRole('group', { name: 'Default device role' })
+    .getByRole('button', { name: 'Follower', exact: true })
+    .click();
+  await openTab(page, 'Calibrate');
   const chooser = page.waitForEvent('filechooser');
   await transfer.getByRole('button', { name: 'Import calibration', exact: true }).click();
   await (
@@ -566,16 +625,16 @@ test('calibration export downloads a portable file and imports into a different 
   });
   const review = transfer.getByRole('region', { name: 'Review calibration import', exact: true });
   await expect(review).toContainText('my-so101 · follower');
-  await expect(review).toContainText('transferred-arm · follower');
+  await expect(review).toContainText('my-so101-leader · follower');
   expect(writes(state, '/calibration/import')).toHaveLength(0);
   await page.screenshot({ path: testInfo.outputPath('calibration-import-review.png'), fullPage: true });
   await review.getByRole('button', { name: 'Save imported calibration', exact: true }).click();
   await expect(page.getByText('Calibration imported. Connected motor settings match.', { exact: true })).toBeVisible();
   expect(writes(state, '/calibration/import')[0].body).toEqual({
-    robot_id: 'transferred-arm',
+    robot_id: 'my-so101-leader',
     role: 'follower',
     document,
-    port,
+    port: '/dev/cu.usbmodem-leader',
     replace_existing: false,
     confirm: 'IMPORT CALIBRATION',
   });
@@ -586,7 +645,7 @@ test('calibration export downloads a portable file and imports into a different 
 
 test('calibration import previews raw LeRobot files and requires explicit replacement', async ({ page }) => {
   const state = await fixture(page, true);
-  await tab(page, 'Calibrate').click();
+  await openTab(page, 'Calibrate');
   await page.getByLabel('Calibration JSON file', { exact: true }).setInputFiles({
     name: 'lerobot.json',
     mimeType: 'application/json',
@@ -608,7 +667,7 @@ test('calibration import previews raw LeRobot files and requires explicit replac
 
 test('calibration import rejects invalid files and wrong arm roles before saving', async ({ page }) => {
   const state = await fixture(page, true);
-  await tab(page, 'Calibrate').click();
+  await openTab(page, 'Calibrate');
   const input = page.getByLabel('Calibration JSON file', { exact: true });
   await input.setInputFiles({ name: 'broken.json', mimeType: 'application/json', buffer: Buffer.from('{') });
   await expect(
@@ -650,7 +709,7 @@ test('calibration profiles can be imported offline without claiming motor verifi
   const state = await fixture(page);
   state.portsConnected = false;
   await page.getByRole('button', { name: 'Refresh devices', exact: true }).click();
-  await tab(page, 'Calibrate').click();
+  await openTab(page, 'Calibrate');
   await page.getByLabel('Calibration JSON file', { exact: true }).setInputFiles({
     name: 'offline.json',
     mimeType: 'application/json',
@@ -668,7 +727,7 @@ test('calibration transfer explains an older companion instead of calling unsupp
   const state = await fixture(page, true);
   state.status.capabilities.calibration_transfer = false;
   await page.getByRole('button', { name: 'Refresh devices', exact: true }).click();
-  await tab(page, 'Calibrate').click();
+  await openTab(page, 'Calibrate');
   await expect(
     page.getByText('Update the robot companion to transfer calibration files.', { exact: true }),
   ).toBeVisible();
@@ -704,10 +763,10 @@ test('range and current faults give recovery steps without stale success or read
   await expect(page.getByText('Gripper is outside its calibrated range.', { exact: true })).toBeVisible();
   await expect(page.getByText(/The reading is 1 tick below/)).toBeVisible();
   await expect(page.getByText('Control session started. Stop releases the motors.', { exact: true })).toHaveCount(0);
-  await expect(tab(page, 'Teleoperate')).toContainText('Needs attention');
+  await expect(page.getByRole('alert').filter({ hasText: 'Gripper is outside' })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('range-error.png'), fullPage: true });
   state.status.session.error = 'Motor 5 write Torque_Enable=0 failed: [RxPacketError] OverEle error!';
-  await tab(page, 'Calibrate').click();
+  await openTab(page, 'Calibrate');
   await expect(page.getByRole('alert', { name: 'Previous session error' })).toContainText(
     'Previous hardware session stopped',
   );
@@ -722,71 +781,50 @@ test('range and current faults give recovery steps without stale success or read
   expect(state.errors).toEqual([]);
 });
 
-test('device names save independently of motor communication and remain selected after reload', async ({ page }) => {
-  const state = await fixture(page);
-  const corruption =
-    'Motor safety check failed: Corrupt motor replies: disconnect the other motors and check cabling/power';
-  state.status.session.error = corruption;
+test('first entry asks for role and offline configured devices remain visible', async ({ page }) => {
+  const state = await fixture(page, false, 'Darwin', false);
+  state.catalog[0].role = null;
+  state.catalog[0].name = '';
   await page.getByRole('button', { name: 'Refresh devices', exact: true }).click();
-  await expect(page.getByText('A motor reply was corrupted.', { exact: true })).toBeVisible();
-  const devicePicker = page.getByRole('combobox', { name: 'Devices', exact: true });
-  await devicePicker.selectOption('leader');
-  const name = page.getByLabel('Leader name', { exact: true });
-  const save = page.getByRole('button', { name: 'Save name', exact: true });
-  await name.fill('my leader arm');
-  await expect(name).toHaveAttribute('aria-invalid', 'true');
-  await expect(save).toBeDisabled();
-  await expect(page.getByText('Use 1–64 letters, numbers, hyphens or underscores.', { exact: true })).toBeVisible();
-  await name.fill('my-so101-leader');
-  await expect(name).toHaveAttribute('aria-invalid', 'false');
-  await save.click();
-  await expect(
-    page.getByRole('status').filter({ hasText: 'Leader name saved in this browser: my-so101-leader.' }),
-  ).toBeVisible();
-  expect(state.writes).toEqual([]);
-  await page.reload();
-  await expect(devicePicker).toHaveValue('leader');
-  await expect(name).toHaveValue('my-so101-leader');
-  await expect(page.getByText('A motor reply was corrupted.', { exact: true })).toBeVisible();
-  await devicePicker.selectOption('follower');
-  await expect(page.getByLabel('Follower name', { exact: true })).toHaveValue('my-so101');
-  expect(state.status.calibrations).toEqual([]);
-  expect(state.writes).toEqual([]);
-  expect(state.errors).toEqual([]);
+  await expect(page.getByTestId('device-arm-a')).toContainText(port);
+  await page.getByTestId('device-arm-a').click();
+  await expect(page.getByRole('heading', { name: 'How will you usually use this arm?' })).toBeVisible();
+  await expect(page.getByRole('navigation', { name: 'Device sections' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Follower', exact: true }).click();
+  await expect(page.getByRole('navigation', { name: 'Device sections' })).toBeVisible();
+  await page.getByRole('button', { name: 'All devices', exact: false }).click();
+  state.portsConnected = false;
+  await page.getByRole('button', { name: 'Refresh devices', exact: true }).click();
+  await expect(page.getByTestId('device-arm-a')).toContainText('Disconnected');
+  await page.getByTestId('device-arm-a').click();
+  await expect(page.getByRole('button', { name: 'Scan motor IDs', exact: true })).toBeDisabled();
+  expect(writes(state, '/probe')).toEqual([]);
+  expect(writes(state, '/control/start')).toEqual([]);
 });
 
-test('leader calibration retains its role after reload and returns to the follower for control', async ({ page }) => {
-  const state = await fixture(page, true);
-  const devicePicker = page.getByRole('combobox', { name: 'Devices', exact: true });
-  await devicePicker.selectOption('leader');
-  await page.getByLabel('Leader USB port').selectOption('/dev/cu.usbmodem-leader');
-  await tab(page, 'Calibrate').click();
-  await expect(page.getByRole('heading', { name: 'Leader calibration', exact: true })).toBeVisible();
+test('leader device calibration recovers after reload without enabling motion', async ({ page }) => {
+  const state = await fixture(page, true, 'Darwin', false);
+  await page.getByTestId('device-arm-b').click();
+  await openTab(page, 'Calibrate');
   await page.getByRole('button', { name: 'Begin calibration', exact: true }).click();
-  await expect(devicePicker).toBeDisabled();
   await expect(tab(page, 'Teleoperate')).toBeDisabled();
-  expect(writes(state, '/calibration/start')[0].body).toEqual({
+  expect(writes(state, '/calibration/start')[0].body).toMatchObject({
     port: '/dev/cu.usbmodem-leader',
     robot_id: 'my-so101-leader',
     role: 'leader',
-    confirm: 'START CALIBRATION',
   });
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Leader calibration', exact: true })).toBeVisible();
-  await expect(page.getByLabel('Leader USB port')).toHaveValue('/dev/cu.usbmodem-leader');
   await page.getByRole('button', { name: 'Cancel calibration', exact: true }).click();
-  await tab(page, 'Teleoperate').click();
-  await expect(page.getByLabel('Follower USB port')).toHaveValue(port);
-  await expect(page.getByLabel('Follower name', { exact: true })).toHaveValue('my-so101');
-  await expect(page.getByRole('button', { name: /Leader → follower/ })).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.getByLabel('Leader USB port')).toHaveValue('/dev/cu.usbmodem-leader');
+  await openTab(page, 'Teleoperate');
+  await expect(page.getByLabel('Follower device', { exact: true })).toHaveValue('arm-a');
+  await expect(page.getByLabel('Leader device', { exact: true })).toHaveValue('arm-b');
   expect(writes(state, '/control/start')).toEqual([]);
-  expect(state.errors).toEqual([]);
 });
 
 test('calibration center and range save are explicit and use the official companion contract', async ({ page }) => {
   const state = await fixture(page);
-  await tab(page, 'Calibrate').click();
+  await openTab(page, 'Calibrate');
   await page.getByRole('button', { name: 'Begin calibration', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Record middle position', exact: true })).toBeEnabled();
   await expect(page.getByRole('group', { name: 'Measured encoder values', exact: true })).toContainText('2048');
@@ -809,7 +847,7 @@ test('failed center capture stays at the interrupted stage and requires an expli
   page,
 }, testInfo) => {
   const state = await fixture(page);
-  await tab(page, 'Calibrate').click();
+  await openTab(page, 'Calibrate');
   await page.getByRole('button', { name: 'Begin calibration', exact: true }).click();
   state.centerError = 'Motor 1 write Homing_Offset acknowledgement missing; read-back failed.';
   await page.getByRole('button', { name: 'Record middle position', exact: true }).click();
@@ -889,7 +927,7 @@ test('episode recording saves and finalizes before importing into the selected p
   const state = await fixture(page, true);
   await selectProject(page, 'beta');
   await startManual(page);
-  await tab(page, 'Record').click();
+  await openTab(page, 'Record');
   await page.getByLabel('Dataset name', { exact: true }).fill('block-demo');
   await page.getByLabel('Task instruction', { exact: true }).fill('Place the block in the tray.');
   await page.getByRole('button', { name: 'Create recording dataset', exact: true }).click();
@@ -921,7 +959,7 @@ test('unsaved recording can be explicitly closed after Stop while retained files
 }) => {
   const state = await fixture(page, true);
   await startManual(page);
-  await tab(page, 'Record').click();
+  await openTab(page, 'Record');
   await page.getByLabel('Dataset name', { exact: true }).fill('empty-demo');
   await page.getByLabel('Task instruction', { exact: true }).fill('Place the block in the tray.');
   await page.getByRole('button', { name: 'Create recording dataset', exact: true }).click();
@@ -940,7 +978,7 @@ test('unsaved recording can be explicitly closed after Stop while retained files
   await expect(retained.getByText('10 unsaved frames', { exact: true })).toBeVisible();
   expect(writes(state, '/import')).toEqual([]);
   await startManual(page);
-  await tab(page, 'Record').click();
+  await openTab(page, 'Record');
   await page.getByLabel('Dataset name', { exact: true }).fill('next-demo');
   await page.getByLabel('Recording frame rate', { exact: true }).selectOption('5');
   await page.getByRole('button', { name: 'Create recording dataset', exact: true }).click();
@@ -957,12 +995,12 @@ test('offline companion cannot start hardware actions and does not retry mutatio
   const state = await fixture(page, true);
   state.status = { connected: false, ok: false, label: 'This Mac', message: 'Companion is offline.' };
   await page.getByRole('button', { name: 'Refresh devices', exact: true }).click();
-  await expect(page.getByText('Robot companion unavailable', { exact: true })).toBeVisible();
-  await tab(page, 'Motor IDs').click();
+  await expect(page.getByText('Device connection service unavailable', { exact: true })).toBeVisible();
+  await openTab(page, 'Motor IDs');
   await page.getByText('Advanced: configure one physically isolated motor', { exact: true }).click();
   await page.getByRole('checkbox', { name: /Only the gripper motor is connected/ }).check();
   await expect(page.getByRole('button', { name: 'Assign ID 6', exact: true })).toBeDisabled();
-  await tab(page, 'Teleoperate').click();
+  await openTab(page, 'Teleoperate');
   await page.getByRole('checkbox', { name: /Arm secured; workspace clear/ }).check();
   await expect(page.getByRole('button', { name: 'Enable & move to recorded middle', exact: true })).toBeDisabled();
   expect(state.writes).toEqual([]);
@@ -972,7 +1010,7 @@ test('hand guiding is an explicit torque-off session and leader mode needs a sec
   page,
 }) => {
   const state = await fixture(page, true);
-  await tab(page, 'Teleoperate').click();
+  await openTab(page, 'Teleoperate');
   await page.getByRole('button', { name: 'Leader → follower', exact: false }).click();
   await page.getByRole('checkbox', { name: /Arm secured; workspace clear/ }).check();
   await expect(page.getByRole('button', { name: 'Start leader teleoperation', exact: true })).toBeDisabled();
@@ -1013,9 +1051,9 @@ test('leader selection renders the leader handle and trigger and switching roles
     mapping: Object.fromEntries(joints.map((name, index) => [name, index + 1])),
   };
   await page.getByRole('button', { name: 'Refresh devices', exact: true }).click();
-  const picker = page.getByRole('combobox', { name: 'Devices', exact: true });
-  await picker.selectOption('leader');
-  await tab(page, 'Motor IDs').click();
+  const picker = page.getByRole('group', { name: 'Default device role' });
+  await picker.getByRole('button', { name: 'Leader', exact: true }).click();
+  await openTab(page, 'Calibrate');
   const guide = page.getByRole('region', { name: 'SO-101 joint illustration', exact: true });
   await expect(guide).toHaveAttribute('data-arm-role', 'leader');
   await expect(page.getByText('IDs saved', { exact: true })).toHaveCount(0);
@@ -1032,17 +1070,17 @@ test('leader selection renders the leader handle and trigger and switching roles
   const angle = guide.getByRole('slider', { name: 'Illustrated joint angle', exact: true });
   await angle.fill('20');
   await expect(guide).toHaveAttribute('data-angle', '20.00');
-  await picker.selectOption('follower');
+  await picker.getByRole('button', { name: 'Follower', exact: true }).click();
   await expect(guide).toHaveAttribute('data-arm-role', 'follower');
   await expect(guide.locator('canvas')).toHaveAttribute('data-renderer', 'webgl');
   await expect(guide.getByRole('heading', { name: 'Gripper', exact: true })).toBeVisible();
   await expect(guide).toHaveAttribute('data-angle', '0.00');
   expect(meshes).toContain('moving_jaw_so101_v1.stl');
   expect(meshes).toContain('wrist_roll_follower_so101_v1.stl');
-  await picker.selectOption('leader');
+  await picker.getByRole('button', { name: 'Leader', exact: true }).click();
   await expect(guide.locator('canvas')).toHaveAttribute('data-renderer', 'webgl');
   await expect(guide.getByRole('heading', { name: 'Trigger', exact: true })).toBeVisible();
-  expect(state.writes).toEqual([]);
+  expect(state.writes.filter((w) => !w.path.endsWith('/devices/configure'))).toEqual([]);
   expect(state.errors).toEqual([]);
 });
 
@@ -1050,7 +1088,7 @@ test('all six illustrated joints work by pointer and keyboard without idle hardw
   page,
 }, testInfo) => {
   const state = await fixture(page);
-  await tab(page, 'Motor IDs').click();
+  await openTab(page, 'Motor IDs');
   const guide = page.getByRole('region', { name: 'SO-101 joint illustration', exact: true });
   await expect(guide.getByRole('slider', { name: 'Illustrated joint angle', exact: true })).toBeVisible();
   await expect(guide).toHaveAttribute('data-motion', 'reduced');
@@ -1077,7 +1115,7 @@ test('all six illustrated joints work by pointer and keyboard without idle hardw
   await guide.getByRole('slider', { name: 'Illustrated joint angle', exact: true }).focus();
   await page.keyboard.press('End');
   await expect(guide).not.toHaveAttribute('data-angle', before!);
-  await tab(page, 'Calibrate').click();
+  await openTab(page, 'Calibrate');
   await expect(page.getByRole('region', { name: 'SO-101 joint illustration', exact: true })).toHaveAttribute(
     'data-selected-joint',
     'gripper',
@@ -1098,8 +1136,8 @@ test('offline joint illustration still selects and never invents measurements or
   const state = await fixture(page);
   state.status = { ok: false, connected: false, message: 'Companion offline.' };
   await page.getByRole('button', { name: 'Refresh devices', exact: true }).click();
-  await expect(page.getByText('Robot companion unavailable', { exact: true })).toBeVisible();
-  await tab(page, 'Motor IDs').click();
+  await expect(page.getByText('Device connection service unavailable', { exact: true })).toBeVisible();
+  await openTab(page, 'Motor IDs');
   const guide = page.getByRole('region', { name: 'SO-101 joint illustration', exact: true });
   await guide.getByRole('button', { name: 'Joint 6: Gripper', exact: true }).click();
   await expect(guide.getByRole('heading', { name: 'Gripper', exact: true })).toBeVisible();
@@ -1114,7 +1152,7 @@ test('motion preview is explicit, pauses, resets and ends without commanding har
   await page.clock.install({ time: new Date('2026-10-23T12:00:00Z') });
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   const state = await fixture(page);
-  await tab(page, 'Motor IDs').click();
+  await openTab(page, 'Motor IDs');
   const guide = page.getByRole('region', { name: 'SO-101 joint illustration', exact: true });
   await expect(guide).toHaveAttribute('data-motion', 'static');
   await expect(guide.locator('canvas')).not.toHaveAttribute('data-renderer', 'loading');
@@ -1145,7 +1183,7 @@ test('assembled setup prepares explicitly then picks start only encoder observat
 }, testInfo) => {
   test.setTimeout(120_000);
   const state = await fixture(page, true);
-  await tab(page, 'Motor IDs').click();
+  await openTab(page, 'Motor IDs');
   const start = page.getByRole('button', { name: 'Start assembled setup', exact: true });
   await expect(start).toBeDisabled();
   const guide = page.getByRole('region', { name: 'SO-101 joint illustration', exact: true });
@@ -1153,10 +1191,14 @@ test('assembled setup prepares explicitly then picks start only encoder observat
   expect(state.writes).toEqual([]);
   const consent = page.getByRole('checkbox', { name: /Six STS3215 motors; arm supported/ });
   await consent.check();
-  await page.getByLabel('Follower USB port').selectOption('/dev/cu.usbmodem-leader');
+  await page.getByRole('button', { name: 'All devices', exact: false }).click();
+  await page.getByTestId('device-arm-b').click();
+  await openTab(page, 'Motor IDs');
   await expect(consent).not.toBeChecked();
   await expect(start).toBeDisabled();
-  await page.getByLabel('Follower USB port').selectOption(port);
+  await page.getByRole('button', { name: 'All devices', exact: false }).click();
+  await page.getByTestId('device-arm-a').click();
+  await openTab(page, 'Motor IDs');
   await consent.check();
   await start.click();
   expect(writes(state, '/setup/assembled/start')[0].body).toEqual({
@@ -1204,7 +1246,7 @@ test('assembled setup prepares explicitly then picks start only encoder observat
   await expect(saved.getByRole('row').filter({ hasText: 'Gripper' })).toContainText('6');
   await expect(page.getByRole('button', { name: 'Start assembled setup', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Stop arm and disable torque', exact: true })).toHaveCount(0);
-  await tab(page, 'Teleoperate').click();
+  await openTab(page, 'Teleoperate');
   await expect(page.getByRole('button', { name: 'Enable & move to recorded middle', exact: true })).toBeDisabled();
   state.status.assembled = {
     ...state.status.assembled,
@@ -1215,7 +1257,7 @@ test('assembled setup prepares explicitly then picks start only encoder observat
     log: ['Separating factory IDs: round 8/12', 'Setup stopped with responding ID 3.'],
   };
   await page.getByRole('button', { name: 'Refresh devices', exact: true }).click();
-  await tab(page, 'Motor IDs').click();
+  await openTab(page, 'Motor IDs');
   await expect(page.getByText(state.status.assembled.message, { exact: true })).toBeVisible();
   await page.getByText('Setup details', { exact: true }).click();
   await expect(page.getByText('Setup stopped with responding ID 3.', { exact: true })).toBeVisible();
@@ -1226,7 +1268,7 @@ test('assembled setup prepares explicitly then picks start only encoder observat
 test('wiggle identification requires explicit motion then observed-joint confirmation', async ({ page }, testInfo) => {
   test.setTimeout(60_000);
   const state = await fixture(page);
-  await tab(page, 'Motor IDs').click();
+  await openTab(page, 'Motor IDs');
   await page.getByRole('button', { name: 'Wiggle a motor', exact: true }).click();
   expect(state.writes).toEqual([]);
   await expect(page.getByRole('button', { name: 'Wiggle selected motor', exact: true })).toHaveCount(0);
@@ -1266,7 +1308,7 @@ test('motor identification distinguishes preparation, listening and a stopped se
   const state = await fixture(page);
   state.status.assembled = { ...state.status.assembled, port, phase: 'stopped', ids: [2], progress: 1 };
   await page.getByRole('button', { name: 'Refresh devices', exact: true }).click();
-  await tab(page, 'Motor IDs').click();
+  await openTab(page, 'Motor IDs');
   const status = page.getByRole('status', { name: 'Motor identification status', exact: true });
   await expect(status).toContainText('Movement detection off');
   await expect(status).toContainText('1/6 addresses found');
@@ -1294,7 +1336,7 @@ test('motor identification distinguishes preparation, listening and a stopped se
 
 test('hiding Robot Lab stops setup and visibly explains the cancellation', async ({ page }) => {
   const state = await fixture(page);
-  await tab(page, 'Motor IDs').click();
+  await openTab(page, 'Motor IDs');
   await page.getByRole('checkbox', { name: /Six STS3215 motors; arm supported/ }).check();
   await page.getByRole('button', { name: 'Start assembled setup', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Start movement detection', exact: true })).toBeEnabled();
@@ -1355,7 +1397,7 @@ async function savedMapping(page: Page) {
     calibration_required: true,
   };
   await page.getByRole('button', { name: 'Refresh devices', exact: true }).click();
-  await tab(page, 'Motor IDs').click();
+  await openTab(page, 'Motor IDs');
   await expect(page.getByRole('heading', { name: 'Saved IDs', exact: true })).toBeVisible();
   return state;
 }
@@ -1443,30 +1485,32 @@ test('USB disconnect disables remembered motor controls and reconnect requires f
   await expect(wiggle).toBeEnabled();
   state.portsConnected = false;
   await page.getByRole('button', { name: 'Refresh devices', exact: true }).click();
-  await expect(page.getByText('Follower USB disconnected', { exact: true })).toBeVisible();
+  await expect(page.getByText('0 USB devices connected', { exact: true })).toBeVisible();
   await expect(wiggle).toBeDisabled();
   await expect(acknowledge).not.toBeChecked();
   await expect(acknowledge).toBeDisabled();
   await expect(page.getByRole('heading', { name: 'Saved IDs', exact: true })).toBeVisible();
-  await expect(page.getByLabel('Follower USB port')).toHaveValue(port);
-  await expect(page.getByLabel('Follower USB port').locator('option:checked')).toContainText('Disconnected');
-  await tab(page, 'Calibrate').click();
+  await expect(page.getByRole('heading', { name: 'my-so101', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'my-so101', exact: true }).locator('..')).toContainText(
+    'Disconnected',
+  );
+  await openTab(page, 'Calibrate');
   await expect(page.getByRole('button', { name: 'Begin calibration', exact: true })).toBeDisabled();
   state.status.calibrations = [{ robot_id: 'my-so101', role: 'follower', path: 'saved.json' }];
   state.status.assembled.calibration_required = false;
   await page.getByRole('button', { name: 'Refresh devices', exact: true }).click();
   // A saved calibration is not enough to teleoperate without the robot USB.
-  await expect(tab(page, 'Teleoperate')).toContainText('Needs connection');
-  await tab(page, 'Teleoperate').click();
+  await expect(tab(page, 'Teleoperate')).toBeEnabled();
+  await openTab(page, 'Teleoperate');
   await page.getByRole('checkbox', { name: /Arm secured; workspace clear/ }).check();
   await expect(page.getByRole('button', { name: 'Enable & move to recorded middle', exact: true })).toBeDisabled();
-  await tab(page, 'Connect').click();
+  await openTab(page, 'Connect');
   await expect(page.getByRole('button', { name: 'Scan motor IDs', exact: true })).toBeDisabled();
-  await tab(page, 'Motor IDs').click();
+  await openTab(page, 'Motor IDs');
   state.portsConnected = true;
   // Idle inventory polling notices USB return without refreshing or starting a session.
-  await expect(page.getByText('Follower USB connected · Idle', { exact: true })).toBeVisible({ timeout: 8_000 });
-  await expect(tab(page, 'Teleoperate')).toContainText('Ready');
+  await expect(page.getByText('2 USB devices connected', { exact: true })).toBeVisible({ timeout: 8000 });
+  await expect(tab(page, 'Teleoperate')).toBeEnabled();
   await expect(acknowledge).toBeEnabled();
   await expect(acknowledge).not.toBeChecked();
   await expect(wiggle).toBeDisabled();
@@ -1479,7 +1523,7 @@ test('USB disconnect disables remembered motor controls and reconnect requires f
 test('moving to recorded middle blocks jogging and recording but keeps Stop available', async ({ page }) => {
   const state = await fixture(page, true);
   state.middleInProgress = true;
-  await tab(page, 'Teleoperate').click();
+  await openTab(page, 'Teleoperate');
   await page.getByRole('checkbox', { name: /Arm secured; workspace clear/ }).check();
   await page.getByRole('button', { name: 'Enable & move to recorded middle', exact: true }).click();
   await expect(page.getByText('Moving to recorded middle · 25%')).toBeVisible();
@@ -1495,7 +1539,7 @@ test('moving to recorded middle blocks jogging and recording but keeps Stop avai
 
 test('selected motor control excludes disconnected motors and blocks dataset recording', async ({ page }, testInfo) => {
   const state = await fixture(page, true);
-  await tab(page, 'Teleoperate').click();
+  await openTab(page, 'Teleoperate');
   await page.getByRole('button', { name: 'Select connected motors', exact: true }).click();
   // Fixture probe reports only ID 1. Selection is explicit and never starts motion.
   const selection = page.getByRole('group', { name: 'Motors in this session' });
@@ -1510,7 +1554,7 @@ test('selected motor control excludes disconnected motors and blocks dataset rec
   await expect(page.getByRole('button', { name: 'Increase Gripper', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Create a dataset' })).toBeDisabled();
   await page.screenshot({ path: testInfo.outputPath('selected-motor-control.png'), fullPage: true });
-  await tab(page, 'Record').click();
+  await openTab(page, 'Record');
   await expect(page.getByText('Dataset recording requires all six joints.')).toBeVisible();
   await page.getByRole('button', { name: 'Stop arm and disable torque' }).click();
   await expect.poll(() => writes(state, '/stop').length).toBe(1);
@@ -1523,7 +1567,7 @@ for (const recording of [false, true]) {
     const state = await fixture(page, true);
     await startManual(page);
     if (recording) {
-      await tab(page, 'Record').click();
+      await openTab(page, 'Record');
       await page.getByLabel('Dataset name', { exact: true }).fill('stable-controls');
       await page.getByLabel('Task instruction', { exact: true }).fill('Move the elbow.');
       await page.getByRole('button', { name: 'Create recording dataset', exact: true }).click();
@@ -1588,7 +1632,7 @@ test('Stop remains available during a joint request and a late reply cannot rest
 
 test('calibration survives page reload, hidden tab and a temporary web disconnection', async ({ page }, testInfo) => {
   const state = await fixture(page);
-  await tab(page, 'Calibrate').click();
+  await openTab(page, 'Calibrate');
   await page.getByRole('button', { name: 'Begin calibration', exact: true }).click();
   await page.getByRole('button', { name: 'Record middle position', exact: true }).click();
   state.status.calibration.mins = values(777);
@@ -1644,7 +1688,7 @@ test('calibration recovery is informational and resumes without repeating middle
     maxes: values(3000),
     offsets: values(10),
   };
-  await tab(page, 'Calibrate').click();
+  await openTab(page, 'Calibrate');
   await expect(page.getByText('Calibration paused', { exact: true })).toBeVisible();
   await expect(page.getByRole('alert', { name: 'Calibration error' })).toHaveCount(0);
   await expect(page.locator('.notice-info').filter({ hasText: 'Calibration paused' })).toBeVisible();
@@ -1674,7 +1718,7 @@ for (const action of ['start', 'resume'] as const) {
         offsets: values(10),
       };
     }
-    await tab(page, 'Calibrate').click();
+    await openTab(page, 'Calibrate');
     await page
       .getByRole('button', {
         name: action === 'start' ? 'Begin calibration' : 'Resume captured calibration',
@@ -1703,7 +1747,7 @@ for (const action of ['start', 'resume'] as const) {
 test('an unconfirmed calibration start remains an error and never retries motor writes', async ({ page }) => {
   const state = await fixture(page);
   state.calibrationStartTransportFailure = true;
-  await tab(page, 'Calibrate').click();
+  await openTab(page, 'Calibrate');
   const begin = page.getByRole('button', { name: 'Begin calibration', exact: true });
   await begin.click();
   await expect(page.getByRole('alert', { name: 'Calibration error' })).toBeVisible();
@@ -1716,7 +1760,7 @@ test('an unconfirmed calibration start remains an error and never retries motor 
 test('calibration from a different arm cannot confirm a lost start reply', async ({ page }) => {
   const state = await fixture(page);
   state.dropCalibrationStartReply = true;
-  await tab(page, 'Calibrate').click();
+  await openTab(page, 'Calibrate');
   await page.getByRole('button', { name: 'Begin calibration', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Record middle position', exact: true })).toBeVisible({
     timeout: 10_000,
@@ -1743,7 +1787,7 @@ test('one failed heartbeat is retried and does not abandon powered-session owner
 
 test('lost calibration replies reconcile the completed stage without replaying motor writes', async ({ page }) => {
   const state = await fixture(page);
-  await tab(page, 'Calibrate').click();
+  await openTab(page, 'Calibrate');
   await page.getByRole('button', { name: 'Begin calibration', exact: true }).click();
   state.dropCalibrationReply = true;
   await page.getByRole('button', { name: 'Record middle position', exact: true }).click();
@@ -1764,7 +1808,7 @@ for (const recording of [false, true]) {
     const state = await fixture(page, true);
     await startManual(page);
     if (recording) {
-      await tab(page, 'Record').click();
+      await openTab(page, 'Record');
       await page.getByLabel('Dataset name', { exact: true }).fill('slider-controls');
       await page.getByLabel('Task instruction', { exact: true }).fill('Move the arm.');
       await page.getByRole('button', { name: 'Create recording dataset', exact: true }).click();
@@ -1814,7 +1858,7 @@ for (const recording of [false, true]) {
 test('joint sliders respect centering and excluded joints and reject stale replies after Stop', async ({ page }) => {
   const state = await fixture(page, true);
   state.middleInProgress = true;
-  await tab(page, 'Teleoperate').click();
+  await openTab(page, 'Teleoperate');
   await page.getByRole('checkbox', { name: /Arm secured; workspace clear/ }).check();
   await page.getByRole('button', { name: 'Enable & move to recorded middle', exact: true }).click();
   await expect(page.getByRole('slider', { name: 'Elbow target slider' })).toBeDisabled();
@@ -1847,7 +1891,7 @@ test('middle tolerance defaults to two and five is explicit, fixed during motion
 }, testInfo) => {
   const state = await fixture(page, true);
   state.middleInProgress = true;
-  await tab(page, 'Teleoperate').click();
+  await openTab(page, 'Teleoperate');
   const tolerance = page.getByLabel('Middle tolerance', { exact: true });
   await expect(tolerance).toHaveValue('2');
   await tolerance.selectOption('5');
@@ -1862,7 +1906,7 @@ test('middle tolerance defaults to two and five is explicit, fixed during motion
   await expect(page.getByRole('button', { name: 'Increase Shoulder lift', exact: true })).toBeEnabled();
   await page.getByRole('button', { name: 'Stop arm and disable torque' }).click();
   await page.reload();
-  await tab(page, 'Teleoperate').click();
+  await openTab(page, 'Teleoperate');
   await expect(tolerance).toHaveValue('5');
   await expect(tolerance).toBeEnabled();
   expect(writes(state, '/control/start')).toHaveLength(1);
@@ -1887,12 +1931,13 @@ test('readiness separates USB, motor responses, mapping and selected calibration
   await expect(results.getByText('No response', { exact: true })).toHaveCount(5);
   expect(writes(state, '/probe')[0].body).toEqual({ port, robot_id: 'my-so101', role: 'follower' });
   expect(writes(state, '/mapping/wiggle')).toEqual([]);
-  await readiness.getByRole('button', { name: /Motor IDs/ }).click();
+  await openTab(page, 'Motor IDs');
   await expect(page.getByRole('button', { name: 'Start assembled setup', exact: true })).toBeDisabled();
-  await readiness.getByRole('button', { name: /Calibrate/ }).click();
+  await openTab(page, 'Calibrate');
   await expect(page.getByLabel('Selected arm calibration')).toContainText('Saved · not checked');
-  await page.getByLabel('Follower name').fill('different-arm');
-  await expect(page.getByLabel('Selected arm calibration')).toContainText('Not saved');
+  await page.getByLabel('Device name', { exact: true }).fill('different-arm');
+  await page.getByRole('button', { name: 'Save name', exact: true }).click();
+  await expect(page.getByLabel('Selected arm calibration')).toContainText('Saved · not checked');
   expect(writes(state, '/calibration/start')).toEqual([]);
   expect(writes(state, '/control/start')).toEqual([]);
   await page.screenshot({ path: testInfo.outputPath('readiness-selected-arm.png'), fullPage: true });
@@ -1915,7 +1960,7 @@ test('saved physical confirmations survive reload and guide the next unchecked j
     confirm: 'CONFIRM PHYSICAL JOINT',
   });
   await page.reload();
-  await tab(page, 'Motor IDs').click();
+  await openTab(page, 'Motor IDs');
   await expect(page.getByText('1/6 motion checks', { exact: true })).toBeVisible();
   await expect(page.getByRole('checkbox', { name: /Arm supported; joints clear/ })).not.toBeChecked();
   expect(writes(state, '/mapping/wiggle')).toHaveLength(1);
@@ -1929,11 +1974,12 @@ test('readiness never turns an invalid or stale profile green and shows hardware
   state.status.calibrations[0] = { ...state.status.calibrations[0], valid: false, error: 'Missing joint ranges' };
   await page.getByRole('button', { name: 'Refresh devices', exact: true }).click();
   await expect(readiness).toContainText('Invalid profile');
-  await tab(page, 'Teleoperate').click();
+  await openTab(page, 'Teleoperate');
   await page.getByRole('checkbox', { name: /Arm secured; workspace clear/ }).check();
   await expect(page.getByRole('button', { name: 'Enable & move to recorded middle', exact: true })).toBeDisabled();
   state.status.calibrations[0] = { ...state.status.calibrations[0], valid: true, setup_port: port, setup_fresh: false };
   await page.getByRole('button', { name: 'Refresh devices', exact: true }).click();
+  await openTab(page, 'Calibrate');
   await expect(readiness).toContainText('Recalibration needed');
   state.status.calibrations[0].setup_fresh = true;
   await page.getByRole('button', { name: 'Refresh devices', exact: true }).click();
@@ -1955,13 +2001,14 @@ test('readiness never turns an invalid or stale profile green and shows hardware
   state.status.calibrations = [];
   await page.getByRole('button', { name: 'Refresh devices', exact: true }).click();
   await expect(readiness).toContainText('Not saved');
+  await openTab(page, 'Teleoperate');
   await expect(page.getByRole('button', { name: 'Enable & move to recorded middle', exact: true })).toBeDisabled();
   expect(writes(state, '/control/start')).toEqual([]);
 });
 
 test('calibration ranges indicate which joints still need movement before saving', async ({ page }) => {
   const state = await fixture(page);
-  await tab(page, 'Calibrate').click();
+  await openTab(page, 'Calibrate');
   await page.getByRole('button', { name: 'Begin calibration', exact: true }).click();
   await page.getByRole('button', { name: 'Record middle position', exact: true }).click();
   state.status.calibration.mins = values(2047);
@@ -2020,9 +2067,11 @@ test('large joint steps are hidden when the connected companion does not support
 
 test('Linux companion discovers USB and camera without motor commands', async ({ page }) => {
   const state = await fixture(page, false, 'Linux');
-  await expect(page.getByText('Linux robot computer connected', { exact: true })).toBeVisible();
-  await expect(page.getByLabel('Follower USB port')).toHaveValue('/dev/ttyACM0');
-  await tab(page, 'Record').click();
+  await expect(page.getByText('2 USB devices connected', { exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'my-so101', exact: true }).locator('..')).toContainText(
+    '/dev/ttyACM0',
+  );
+  await openTab(page, 'Record');
   await expect(page.getByRole('heading', { name: 'Datasets on the robot computer', exact: true })).toBeVisible();
   state.cameraFailure = true;
   await page.getByRole('button', { name: 'Start preview', exact: true }).click();
@@ -2128,7 +2177,7 @@ test('robot log storage failure is visible', async ({ page }) => {
 test('hiding Robot Lab records a distinct browser stop cause on capable companions', async ({ page }) => {
   const state = await fixture(page);
   state.status.capabilities.persistent_diagnostics = true;
-  await tab(page, 'Motor IDs').click();
+  await openTab(page, 'Motor IDs');
   await page.getByRole('checkbox', { name: /Six STS3215 motors; arm supported/ }).check();
   await page.getByRole('button', { name: 'Start assembled setup', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Start movement detection', exact: true })).toBeEnabled();
@@ -2138,4 +2187,67 @@ test('hiding Robot Lab records a distinct browser stop cause on capable companio
   });
   await expect.poll(() => writes(state, '/stop').length).toBe(1);
   expect(writes(state, '/stop')[0].body).toEqual({ cause: 'page_hidden' });
+});
+
+test('session slots select actual devices independently of default roles and lock during control', async ({
+  page,
+}, testInfo) => {
+  const state = await fixture(page, true);
+  state.status.calibrations = [
+    { robot_id: 'my-so101', role: 'follower', valid: true, path: 'a.json' },
+    { robot_id: 'my-so101', role: 'leader', valid: true, path: 'a.json' },
+    { robot_id: 'my-so101-leader', role: 'follower', valid: true, path: 'b.json' },
+    { robot_id: 'my-so101-leader', role: 'leader', valid: true, path: 'b.json' },
+  ];
+  await page.getByRole('button', { name: 'Refresh devices', exact: true }).click();
+  await openTab(page, 'Teleoperate');
+  await page.getByRole('button', { name: /Leader → follower/ }).click();
+  await page.getByLabel('Follower device', { exact: true }).selectOption('arm-b');
+  await page.getByLabel('Leader device', { exact: true }).selectOption('arm-a');
+  expect(writes(state, '/control/start')).toHaveLength(0);
+  await expect(page.getByLabel('Leader device', { exact: true }).locator('option[value="arm-b"]')).toHaveCount(0);
+  await page.getByRole('checkbox', { name: /Arm secured; workspace clear/ }).check();
+  await page.getByRole('button', { name: 'Start leader teleoperation', exact: true }).click();
+  expect(writes(state, '/control/start')[0].body).toMatchObject({
+    port: '/dev/cu.usbmodem-leader',
+    robot_id: 'my-so101-leader',
+    leader_port: port,
+    leader_id: 'my-so101',
+  });
+  await expect(page.getByLabel('Follower device', { exact: true })).toBeDisabled();
+  await openTab(page, 'Record');
+  await expect(page.getByLabel('Follower device', { exact: true })).toHaveValue('arm-b');
+  await expect(page.getByLabel('Leader device', { exact: true })).toHaveValue('arm-a');
+  await expect(page.getByLabel('Leader device', { exact: true })).toBeDisabled();
+  await page.screenshot({ path: testInfo.outputPath('recording-device-selection.png'), fullPage: true });
+});
+
+test('an unbound saved profile requires an explicit USB selection before binding', async ({ page }) => {
+  const state = await fixture(page, true, 'Darwin', false);
+  state.catalog.push({
+    id: 'unbound-profile',
+    port: '',
+    name: 'Stored arm',
+    robot_id: 'stored-arm',
+    role: 'follower',
+    profile_role: 'follower',
+    serial_number: null,
+    connected: false,
+    description: 'Saved profile',
+  });
+  await page.getByRole('button', { name: 'Refresh devices', exact: true }).click();
+  await page.getByTestId('device-unbound-profile').click();
+  const connection = page.getByLabel('Device USB connection', { exact: true });
+  await expect(connection).toHaveValue('');
+  await expect(page.getByRole('button', { name: 'Scan motor IDs', exact: true })).toBeDisabled();
+  expect(state.writes).toEqual([]);
+  await connection.selectOption(port);
+  await page.getByRole('button', { name: 'Save device', exact: true }).click();
+  expect(writes(state, '/devices/configure')[0].body).toMatchObject({
+    id: 'unbound-profile',
+    port,
+    name: 'Stored arm',
+    role: 'follower',
+  });
+  expect(writes(state, '/control/start')).toEqual([]);
 });

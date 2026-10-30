@@ -71,7 +71,12 @@ export function useAiPhysicalConnection(enabled: boolean, onSession: (session: A
     profile.valid !== false &&
     (profile.setup_port !== port || profile.setup_fresh !== false) &&
     !!profile.sha256;
-  const portReady = !!port && !devices.isError && !!devices.data?.ports.some((item) => item.device === port);
+  const portReady =
+    !!port &&
+    !devices.isError &&
+    !!devices.data?.ports.some((item) => item.device === port) &&
+    (!devices.data?.saved_devices ||
+      !!devices.data.saved_devices.find((d) => d.robot_id === robotId && d.port === port && d.connected && d.role));
   const cameraReady =
     preview &&
     !cameraError &&
@@ -349,6 +354,13 @@ export function useAiPhysicalConnection(enabled: boolean, onSession: (session: A
           workspace_clear: true,
         } as PhysicalArming)
       : null,
+    chooseDevice: (value: string) => {
+      const device = devices.data?.saved_devices?.find((d) => d.id === value);
+      setRobotId(device?.robot_id ?? '');
+      setPort(device?.connected ? device.port : '');
+      setOperatorPresent(false);
+      setWorkspaceClear(false);
+    },
     choosePort: (value: string) => {
       setPort(value);
       setOperatorPresent(false);
@@ -411,45 +423,72 @@ export function AiPhysicalConnection({ physical }: { physical: ReturnType<typeof
           No follower USB adapter was detected. Connect the follower USB adapter and refresh readiness.
         </p>
       )}
-      <div className="workbench-field-grid">
-        <label className="workbench-field">
-          Saved arm
-          <select
-            value={physical.robotId}
-            disabled={owned || connecting}
-            onChange={(event) => physical.chooseRobot(event.target.value)}
-          >
-            <option value="">Select a saved arm</option>
-            {state?.calibrations
-              ?.filter((profile) => profile.role === 'follower')
-              .map((profile) => (
-                <option key={profile.robot_id} value={profile.robot_id} disabled={profile.valid === false}>
-                  {profile.robot_id}
-                  {profile.valid === false ? ' · invalid' : profile.setup_fresh === false ? ' · stale' : ''}
+      {devices.data?.saved_devices ? (
+        <div className="workbench-field-grid">
+          <label className="workbench-field">
+            Follower device
+            <select
+              aria-label="Follower device"
+              value={devices.data.saved_devices.find((d) => d.robot_id === physical.robotId)?.id ?? ''}
+              disabled={owned || connecting}
+              onChange={(e) => physical.chooseDevice(e.target.value)}
+            >
+              <option value="">Choose a configured device</option>
+              {devices.data.saved_devices.map((d) => (
+                <option key={d.id} value={d.id} disabled={!d.role || !d.connected}>
+                  {d.name || d.port || d.robot_id}
+                  {!d.connected ? ' · Disconnected' : ''}
                 </option>
               ))}
-          </select>
-        </label>
-        <label className="workbench-field">
-          Robot USB port
-          <select
-            value={physical.port}
-            disabled={owned || connecting}
-            onChange={(event) => physical.choosePort(event.target.value)}
-          >
-            <option value="">Select a device</option>
-            {devices.data?.ports.map((port) => (
-              <option key={port.device} value={port.device}>
-                {port.device} · {port.description}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
+            </select>
+            <small>{physical.port || 'Choose an arm configured in Initial setup → Devices.'}</small>
+          </label>
+        </div>
+      ) : (
+        <>
+          {
+            <div className="workbench-field-grid">
+              <label className="workbench-field">
+                Saved arm
+                <select
+                  value={physical.robotId}
+                  disabled={owned || connecting}
+                  onChange={(event) => physical.chooseRobot(event.target.value)}
+                >
+                  <option value="">Select a saved arm</option>
+                  {state?.calibrations
+                    ?.filter((profile) => profile.role === 'follower')
+                    .map((profile) => (
+                      <option key={profile.robot_id} value={profile.robot_id} disabled={profile.valid === false}>
+                        {profile.robot_id}
+                        {profile.valid === false ? ' · invalid' : profile.setup_fresh === false ? ' · stale' : ''}
+                      </option>
+                    ))}
+                </select>
+              </label>
+              <label className="workbench-field">
+                Robot USB port
+                <select
+                  value={physical.port}
+                  disabled={owned || connecting}
+                  onChange={(event) => physical.choosePort(event.target.value)}
+                >
+                  <option value="">Select a device</option>
+                  {devices.data?.ports.map((port) => (
+                    <option key={port.device} value={port.device}>
+                      {port.device} · {port.description}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          }
+        </>
+      )}
       {physical.robotId && (
         <p>
-          Saved arm names remember their last verified USB connection. If the port changed, select the current
-          connection; the arm’s calibration is checked again before torque is enabled.
+          Configured devices remember their USB connection. If the port changed, select the current connection; the
+          arm’s calibration is checked again before torque is enabled.
         </p>
       )}
       <section className="agent-workspace-camera" aria-label="Workspace camera">
