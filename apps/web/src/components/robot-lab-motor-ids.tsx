@@ -4,6 +4,7 @@ import { Icon } from '@/components/icon';
 import { robotApi, robotJoints } from '@/lib/robot-api';
 import { setupOrder, Heading, Notice, HardwareNotice } from './robot-lab-shared';
 import type { RobotLabState } from './robot-lab-state';
+import { RobotLabMotorScan } from './robot-lab-motor-scan';
 
 export function RobotLabMotorIds({ lab }: { lab: RobotLabState }) {
   const {
@@ -16,6 +17,7 @@ export function RobotLabMotorIds({ lab }: { lab: RobotLabState }) {
     canAct,
     canUseArm,
     checkedCount,
+    discoverMotorIds,
     confirmJoint,
     followerPort,
     identifyMethod,
@@ -63,6 +65,7 @@ export function RobotLabMotorIds({ lab }: { lab: RobotLabState }) {
     <>
       <Heading title="Motor IDs" />
       <div className="robot-lab-form">
+        <RobotLabMotorScan lab={lab} />
         {assembled && mappingComplete && !reidentify && (
           <section className="robot-lab-form" aria-label="Saved motor mapping">
             <div className="robot-lab-mapping-heading">
@@ -223,8 +226,13 @@ export function RobotLabMotorIds({ lab }: { lab: RobotLabState }) {
                           ? `Move only the ${selectedMotor.label.toLowerCase()}, then hold its new position.`
                           : 'Click a joint on the model to start listening for its movement.'
                         : 'Select an address, request a wiggle, then select the joint that moved.'
-                    : `${assembled?.ids.length ? `${assembled.ids.length}/6 addresses found. ` : ''}Start assembled setup below. Hand detection and wiggle require six separate motor addresses.`}
+                    : `${assembled?.ids.length ? `${assembled.ids.length}/6 addresses found. ` : ''}Find other motor IDs before changing setup. Hand detection and wiggle require six separate motor addresses.`}
             </p>
+            {!active && !scan && (
+              <button className="secondary-button" disabled={!canUseArm} onClick={discoverMotorIds}>
+                Find other motor IDs
+              </button>
+            )}
           </div>
         )}
         {(!mappingComplete || reidentify) && jointGuide}
