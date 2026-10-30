@@ -9549,7 +9549,7 @@
   },
   "info": {
     "title": "OPEN JENSEN local VLA application",
-    "version": "0.1.17"
+    "version": "0.1.18"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -15710,6 +15710,90 @@
           }
         },
         "summary": "Robot Lab Post Devices Configure",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/devices/remove": {
+      "post": {
+        "operationId": "robot_lab_post_devices_remove",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "title": "Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id"
+                ],
+                "title": "DeviceVisibilityRequest",
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Devices Remove",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/devices/restore": {
+      "post": {
+        "operationId": "robot_lab_post_devices_restore",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "title": "Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id"
+                ],
+                "title": "DeviceVisibilityRequest",
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Devices Restore",
         "tags": [
           "Robot Lab"
         ]

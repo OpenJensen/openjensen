@@ -38,6 +38,7 @@ function initialStatus(calibrated = false): any {
       calibration_persistence: true,
       calibration_transfer: true,
       device_registry: true,
+      device_removal: true,
       partial_control: true,
       move_to_middle: true,
       mapping_verification: true,
@@ -106,6 +107,8 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin', 
         description: 'Leader controller',
       },
     ] as any[],
+    removedDevices: [] as any[],
+    removeDeviceError: null as string | null,
     writes: [] as { path: string; body: any }[],
     errors: [] as string[],
     datasetReads: 0,
@@ -146,6 +149,28 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin', 
       const action = path.slice('/api/v1/robot-lab'.length);
       if (action === '/status')
         return state.statusFailures ? route.abort('failed') : route.fulfill({ json: state.status });
+      if (action === '/devices/remove' || action === '/devices/restore') {
+        if (state.removeDeviceError) return route.fulfill({ status: 409, json: { detail: state.removeDeviceError } });
+        if (action === '/devices/remove') {
+          const device = state.catalog.find((d) => d.id === body.id);
+          state.removedDevices.push({ ...device });
+          state.catalog = state.catalog.filter((d) => d.id !== body.id);
+          if (device.connected) state.catalog.push({ ...device, name: '', role: null, profile_role: null });
+        } else {
+          const device = state.removedDevices.find((d) => d.id === body.id);
+          state.catalog = [...state.catalog.filter((d) => d.id !== body.id), device];
+          state.removedDevices = state.removedDevices.filter((d) => d.id !== body.id);
+        }
+        return route.fulfill({
+          json: {
+            saved_devices: state.catalog,
+            removed_devices: state.removedDevices,
+            ports: state.catalog.filter((d) => d.connected).map((d) => ({ device: d.port })),
+            cameras: [],
+            camera_error: null,
+          },
+        });
+      }
       if (action === '/devices/configure') {
         const device = state.catalog.find((d) => d.id === body.id);
         Object.assign(device, { name: body.name, role: body.role, port: body.port });
@@ -161,6 +186,7 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin', 
       if (action === '/devices')
         return route.fulfill({
           json: {
+            removed_devices: state.removedDevices,
             saved_devices: state.catalog.map((d) => ({
               ...d,
               connected: d.connected && state.portsConnected,
@@ -2324,4 +2350,55 @@ test('an older robot service cannot silently report a full motor discovery', asy
   expect(writes(state, '/probe')).toHaveLength(2);
   expect(state.writes.every((request) => request.path.endsWith('/probe'))).toBe(true);
   expect(state.errors).toEqual([]);
+});
+
+test('saved devices can be removed and restored without deleting calibration', async ({ page }, testInfo) => {
+  const state = await fixture(page, true, 'Linux');
+  await page.evaluate(() =>
+    localStorage.setItem(
+      'openjensen.robot-lab.preferences',
+      JSON.stringify({ port: '/dev/ttyACM0', robotId: 'my-so101', leaderId: 'my-so101-leader' }),
+    ),
+  );
+  await page.getByRole('button', { name: 'Remove device', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Remove saved device' })).toContainText(
+    'Calibration files and recordings are kept',
+  );
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  expect(writes(state, '/devices/remove')).toHaveLength(0);
+  await page.getByRole('button', { name: 'Remove device', exact: true }).click();
+  await page.getByRole('button', { name: 'Remove saved device', exact: true }).click();
+  await expect(page.getByTestId('device-arm-a')).toContainText('/dev/ttyACM0');
+  await expect(page.getByTestId('device-arm-a')).toContainText('Choose a role to set up');
+  await expect(page.getByTestId('device-arm-a')).not.toContainText('my-so101');
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('openjensen.robot-lab.preferences')!))).toEqual({
+    port: '',
+    robotId: '',
+    leaderId: 'my-so101-leader',
+  });
+  await page.getByText('Removed devices (1)', { exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Restore my-so101', exact: true })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('removed-devices.png'), fullPage: true });
+  await page.getByRole('button', { name: 'Restore my-so101', exact: true }).click();
+  await expect(page.getByTestId('device-arm-a')).toContainText('my-so101');
+  expect(state.status.calibrations).toHaveLength(1);
+  expect(state.writes.map((w) => w.path)).toEqual([
+    '/api/v1/robot-lab/devices/remove',
+    '/api/v1/robot-lab/devices/restore',
+  ]);
+  expect(state.errors).toEqual([]);
+});
+
+test('device removal failures keep the device and older services do not offer removal', async ({ page }) => {
+  const state = await fixture(page, false, 'Linux');
+  state.removeDeviceError = 'Finish recording before changing devices';
+  await page.getByRole('button', { name: 'Remove device', exact: true }).click();
+  await page.getByRole('button', { name: 'Remove saved device', exact: true }).click();
+  await expect(page.getByText('Finish recording before changing devices', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('Device name', { exact: true })).toHaveValue('my-so101');
+  expect(state.catalog).toHaveLength(2);
+  state.status.capabilities.device_removal = false;
+  await page.reload();
+  await page.getByTestId('device-arm-a').click();
+  await expect(page.getByRole('button', { name: 'Remove device', exact: true })).toHaveCount(0);
 });

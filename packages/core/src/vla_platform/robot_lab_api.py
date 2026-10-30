@@ -19,6 +19,11 @@ class DeviceConfigurationRequest(BaseModel):
     role: Literal["follower", "leader"]
 
 
+class DeviceVisibilityRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    id: str = Field(min_length=1, max_length=100)
+
+
 class CalibrationImportRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     robot_id: str = Field(min_length=1, max_length=80, pattern=r"^[A-Za-z0-9_-]+$")
@@ -85,6 +90,11 @@ async def proxy(path: str, request: Request):
                 DeviceConfigurationRequest.model_validate(payload)
             except ValidationError:
                 raise HTTPException(422, "Choose a device, name and default role") from None
+        if path in {"devices/remove", "devices/restore"}:
+            try:
+                DeviceVisibilityRequest.model_validate(payload)
+            except ValidationError:
+                raise HTTPException(422, "Choose a saved device") from None
         if path == "calibration/import":
             try:
                 CalibrationImportRequest.model_validate(payload)
@@ -121,6 +131,8 @@ PROTOCOL = {
     "GET": {"devices", "datasets", "camera.jpg", "diagnostics", "calibration/export"},
     "POST": {
         "devices/configure",
+        "devices/remove",
+        "devices/restore",
         "probe",
         "setup/motor",
         "mapping/wiggle",
@@ -185,6 +197,8 @@ for method, protocol_paths in PROTOCOL.items():
                             "schema": (
                                 DeviceConfigurationRequest
                                 if protocol_path == "devices/configure"
+                                else DeviceVisibilityRequest
+                                if protocol_path in {"devices/remove", "devices/restore"}
                                 else CalibrationImportRequest
                                 if protocol_path == "calibration/import"
                                 else RecordingFinishRequest
@@ -193,7 +207,14 @@ for method, protocol_paths in PROTOCOL.items():
                     },
                 }
             }
-            if protocol_path in {"recording/finish", "calibration/import", "devices/configure"}
+            if protocol_path
+            in {
+                "recording/finish",
+                "calibration/import",
+                "devices/configure",
+                "devices/remove",
+                "devices/restore",
+            }
             else None,
         )
 

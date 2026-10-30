@@ -11,11 +11,11 @@ class DeviceRegistry:
     def __init__(self, data_dir):
         self.path = Path(data_dir) / "devices.json"
 
-    def read(self):
+    def document(self):
         if self.path.is_symlink():
             raise ValueError("Device registry must be a regular file")
         if not self.path.exists():
-            return []
+            return {"version": 1, "devices": [], "removed_devices": []}
         if self.path.stat().st_size > 1024 * 1024:
             raise ValueError("Device registry is too large")
         value = json.loads(self.path.read_text())
@@ -23,9 +23,11 @@ class DeviceRegistry:
             not isinstance(value, dict)
             or value.get("version") != 1
             or not isinstance(value.get("devices"), list)
+            or not isinstance(value.get("removed_devices", []), list)
         ):
             raise ValueError("Invalid device registry")
-        for device in value["devices"]:
+        value.setdefault("removed_devices", [])
+        for device in value["devices"] + value["removed_devices"]:
             if (
                 not isinstance(device, dict)
                 or not all(
@@ -35,7 +37,51 @@ class DeviceRegistry:
                 or device.get("profile_role") not in ("leader", "follower")
             ):
                 raise ValueError("Invalid saved device configuration")
-        return value["devices"]
+        return value
+
+    def read(self):
+        return self.document()["devices"]
+
+    def removed(self):
+        return self.document()["removed_devices"]
+
+    def remove(self, payload):
+        if set(payload) != {"id"} or not isinstance(payload["id"], str):
+            raise ValueError("Choose a saved device to remove")
+        value = self.document()
+        device = next((d for d in value["devices"] if d["id"] == payload["id"]), None)
+        if device is None:
+            raise ValueError("Refresh devices and choose a saved device")
+        value["devices"].remove(device)
+        value["removed_devices"] = [d for d in value["removed_devices"] if d["id"] != device["id"]]
+        value["removed_devices"].append(device)
+        atomic_json(self.path, value)
+
+    def restore(self, payload):
+        if set(payload) != {"id"} or not isinstance(payload["id"], str):
+            raise ValueError("Choose a removed device to restore")
+        value = self.document()
+        device = next((d for d in value["removed_devices"] if d["id"] == payload["id"]), None)
+        if device is None:
+            raise ValueError("Refresh devices and choose a removed device")
+        if any(
+            d["id"] == device["id"]
+            or d["robot_id"] == device["robot_id"]
+            or (
+                device["port"]
+                and d["port"] == device["port"]
+                and (
+                    not device.get("serial_number")
+                    or not d.get("serial_number")
+                    or d["serial_number"] == device["serial_number"]
+                )
+            )
+            for d in value["devices"]
+        ):
+            raise ValueError("Remove the current configuration for this device before restoring it")
+        value["removed_devices"].remove(device)
+        value["devices"].append(device)
+        atomic_json(self.path, value)
 
     @staticmethod
     def key(port, ports):
@@ -45,7 +91,8 @@ class DeviceRegistry:
         return hashlib.sha256(identity.encode()).hexdigest()[:24]
 
     def discover(self, ports, profiles):
-        saved = self.read()
+        value = self.document()
+        saved = value["devices"]
         changed = False
         # Recover existing calibration identities without renaming or moving their files.
         for profile in profiles:
@@ -55,7 +102,7 @@ class DeviceRegistry:
                     d.get("calibration_id") == profile["robot_id"]
                     and d["profile_role"] == profile["role"]
                 )
-                for d in saved
+                for d in saved + value["removed_devices"]
             ):
                 continue
             port = profile.get("setup_port") or ""
@@ -142,7 +189,7 @@ class DeviceRegistry:
             if d["id"] not in used
         )
         if changed:
-            atomic_json(self.path, {"version": 1, "devices": saved})
+            atomic_json(self.path, value)
         return entries
 
     def save(self, payload, entries):
@@ -162,7 +209,8 @@ class DeviceRegistry:
             and not any(d["connected"] and d["port"] == port for d in entries)
         ):
             raise ValueError("Choose a connected USB port")
-        saved = self.read()
+        value = self.document()
+        saved = value["devices"]
         if any(
             d["id"] != device["id"]
             and port
@@ -188,5 +236,6 @@ class DeviceRegistry:
                 record["id"] = connected["id"]
         saved = [d for d in saved if d["id"] not in (device["id"], record["id"])]
         saved.append(record)
-        atomic_json(self.path, {"version": 1, "devices": saved})
+        value["devices"] = saved
+        atomic_json(self.path, value)
         return record
