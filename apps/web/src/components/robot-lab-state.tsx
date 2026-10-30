@@ -970,7 +970,9 @@ export function useRobotLab() {
       'Arm scan completed.',
       async () => {
         const result = await robotApi.probe(port, robotId, role);
-        return result.ready ? result : robotApi.probe(port, robotId, role, true);
+        return result.ready || result.scan_scope !== 'expected_ids'
+          ? result
+          : robotApi.probe(port, robotId, role, true);
       },
       (result) => setProbe(result),
       false,

@@ -1964,7 +1964,7 @@ test('readiness separates USB, motor responses, mapping and selected calibration
   await page.getByRole('button', { name: 'Refresh devices', exact: true }).click();
   expect(state.writes).toEqual([]);
   await readiness.getByRole('button', { name: 'Scan arm', exact: true }).click();
-  await expect(readiness).toContainText('1/6 responding');
+  await expect(readiness).toContainText('1/6 expected IDs');
   const results = page.getByRole('region', { name: 'Motor scan results' });
   await expect(results.getByRole('row')).toHaveCount(7);
   await expect(results.getByText('No reply at this ID', { exact: true })).toHaveCount(5);
