@@ -1807,6 +1807,34 @@
         "title": "CloudRunsFeed",
         "type": "object"
       },
+      "CompanionUpdateStatus": {
+        "properties": {
+          "managed": {
+            "default": false,
+            "title": "Managed",
+            "type": "boolean"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "current",
+              "updated",
+              "needs_update"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "message"
+        ],
+        "title": "CompanionUpdateStatus",
+        "type": "object"
+      },
       "ComputeSettingsResponse": {
         "additionalProperties": false,
         "properties": {
@@ -8877,6 +8905,16 @@
               }
             ],
             "title": "Checked At"
+          },
+          "companion_update": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CompanionUpdateStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "installed": {
             "$ref": "#/components/schemas/ApplicationVersion"
