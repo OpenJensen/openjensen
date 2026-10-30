@@ -1268,3 +1268,17 @@
     padding: 12px 14px;
   }
 }
+.robot-lab-device-readiness {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 20px;
+  font-size: 12px;
+}
+.robot-lab-device-readiness > span {
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--subtle);
+}
