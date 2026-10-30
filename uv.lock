@@ -464,7 +464,7 @@ wheels = [
 
 [[package]]
 name = "openjensen-workspace"
-version = "0.1.18"
+version = "0.1.19"
 source = { virtual = "." }
 dependencies = [
     { name = "vla-platform" },
@@ -929,7 +929,7 @@ wheels = [
 
 [[package]]
 name = "vla-platform"
-version = "0.1.18"
+version = "0.1.19"
 source = { editable = "packages/core" }
 dependencies = [
     { name = "aiosqlite" },
