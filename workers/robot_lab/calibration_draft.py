@@ -3,6 +3,8 @@
 import hashlib
 import json
 import os
+import tempfile
+import threading
 import time
 from pathlib import Path
 
@@ -60,30 +62,39 @@ class CalibrationDraft:
     def __init__(self, data_dir):
         self.path = Path(data_dir) / "calibration-draft.json"
         self.last_write = 0.0
+        self.lock = threading.RLock()
 
     def read(self):
-        if not self.path.exists():
-            return None
-        if self.path.is_symlink() or self.path.stat().st_size > 65536:
-            raise ValueError("Invalid calibration checkpoint file")
-        return validate_draft(json.loads(self.path.read_text()))
+        with self.lock:
+            if not self.path.exists():
+                return None
+            if self.path.is_symlink() or self.path.stat().st_size > 65536:
+                raise ValueError("Invalid calibration checkpoint file")
+            return validate_draft(json.loads(self.path.read_text()))
 
     def write(self, value, *, force=False):
-        now = time.monotonic()
-        if not force and now - self.last_write < 1:
-            return
-        validate_draft(value)
-        pending = self.path.with_suffix(".pending")
-        descriptor = os.open(pending, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
-        with os.fdopen(descriptor, "w") as stream:
-            json.dump(value, stream, allow_nan=False)
-            stream.flush()
-            os.fsync(stream.fileno())
-        pending.replace(self.path)
-        self.last_write = now
+        with self.lock:
+            now = time.monotonic()
+            if not force and now - self.last_write < 1:
+                return
+            validate_draft(value)
+            descriptor, name = tempfile.mkstemp(
+                prefix="calibration-draft-", suffix=".pending", dir=self.path.parent
+            )
+            pending = Path(name)
+            try:
+                with os.fdopen(descriptor, "w") as stream:
+                    json.dump(value, stream, allow_nan=False)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                pending.replace(self.path)
+            finally:
+                pending.unlink(missing_ok=True)
+            self.last_write = now
 
     def archive(self, reason):
-        if self.path.exists():
-            folder = self.path.parent / "calibration-history"
-            folder.mkdir(mode=0o700, exist_ok=True)
-            self.path.replace(folder / f"{time.time_ns()}-{reason}.json")
+        with self.lock:
+            if self.path.exists():
+                folder = self.path.parent / "calibration-history"
+                folder.mkdir(mode=0o700, exist_ok=True)
+                self.path.replace(folder / f"{time.time_ns()}-{reason}.json")

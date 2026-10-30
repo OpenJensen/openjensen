@@ -12,7 +12,11 @@ export function RobotLabMotorScan({ lab }: { lab: RobotLabState }) {
   return (
     <section className="robot-lab-form" aria-label="Motor scan results">
       <div className="robot-lab-mapping-heading">
-        <h3>{responding}/6 expected IDs responding</h3>
+        <h3>
+          {fullScan
+            ? `${scan.motors.filter((motor) => motor.stable && motor.model === 777).length} motor addresses responding`
+            : `${responding}/6 expected IDs responding`}
+        </h3>
         <span>
           No motion ·{' '}
           {scan.checked_at
@@ -20,6 +24,12 @@ export function RobotLabMotorScan({ lab }: { lab: RobotLabState }) {
             : 'Just scanned'}
         </span>
       </div>
+      {fullScan && (
+        <p className="robot-lab-subtle">
+          {responding}/6 expected IDs (1–6) respond. Other addresses below also count as connected motors; reconnecting
+          USB does not reset their IDs.
+        </p>
+      )}
       <div className="robot-lab-table-wrap">
         <table className="robot-lab-table">
           <thead>
