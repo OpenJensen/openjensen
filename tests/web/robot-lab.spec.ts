@@ -2354,6 +2354,12 @@ test('an older robot service cannot silently report a full motor discovery', asy
 
 test('saved devices can be removed and restored without deleting calibration', async ({ page }, testInfo) => {
   const state = await fixture(page, true, 'Linux');
+  await page.evaluate(() =>
+    localStorage.setItem(
+      'openjensen.robot-lab.preferences',
+      JSON.stringify({ port: '/dev/ttyACM0', robotId: 'my-so101', leaderId: 'my-so101-leader' }),
+    ),
+  );
   await page.getByRole('button', { name: 'Remove device', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Remove saved device' })).toContainText(
     'Calibration files and recordings are kept',
@@ -2365,6 +2371,11 @@ test('saved devices can be removed and restored without deleting calibration', a
   await expect(page.getByTestId('device-arm-a')).toContainText('/dev/ttyACM0');
   await expect(page.getByTestId('device-arm-a')).toContainText('Choose a role to set up');
   await expect(page.getByTestId('device-arm-a')).not.toContainText('my-so101');
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('openjensen.robot-lab.preferences')!))).toEqual({
+    port: '',
+    robotId: '',
+    leaderId: 'my-so101-leader',
+  });
   await page.getByText('Removed devices (1)', { exact: true }).click();
   await expect(page.getByRole('button', { name: 'Restore my-so101', exact: true })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('removed-devices.png'), fullPage: true });

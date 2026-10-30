@@ -232,6 +232,15 @@ export function useRobotLab() {
           setLeaderPort('');
           setLeaderId('');
         }
+        try {
+          const key = 'openjensen.robot-lab.preferences';
+          const saved = JSON.parse(localStorage.getItem(key) ?? '{}');
+          if (saved.robotId === removed.robot_id) Object.assign(saved, { port: '', robotId: '' });
+          if (saved.leaderId === removed.robot_id) Object.assign(saved, { leaderPort: '', leaderId: '' });
+          localStorage.setItem(key, JSON.stringify(saved));
+        } catch {
+          // Browser preference storage is optional; the registry removal succeeded.
+        }
         setProbe(null);
         setMotionReady(false);
       },
