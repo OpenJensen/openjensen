@@ -2400,6 +2400,91 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/robot-lab/recording/collection/next": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Robot Lab Post Recording Collection Next */
+        post: operations["robot_lab_post_recording_collection_next"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/robot-lab/recording/collection/pause": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Robot Lab Post Recording Collection Pause */
+        post: operations["robot_lab_post_recording_collection_pause"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/robot-lab/recording/collection/rerecord": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Robot Lab Post Recording Collection Rerecord */
+        post: operations["robot_lab_post_recording_collection_rerecord"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/robot-lab/recording/collection/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Robot Lab Post Recording Collection Resume */
+        post: operations["robot_lab_post_recording_collection_resume"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/robot-lab/recording/collection/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Robot Lab Post Recording Collection Start */
+        post: operations["robot_lab_post_recording_collection_start"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/robot-lab/recording/episode/discard": {
         parameters: {
             query?: never;
@@ -11217,6 +11302,126 @@ export interface operations {
             };
         };
     };
+    robot_lab_post_recording_collection_next: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    robot_lab_post_recording_collection_pause: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    robot_lab_post_recording_collection_rerecord: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    robot_lab_post_recording_collection_resume: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    robot_lab_post_recording_collection_start: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
     robot_lab_post_recording_episode_discard: {
         parameters: {
             query?: never;
@@ -11316,7 +11521,45 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /**
+                     * Camera Index
+                     * @default 0
+                     */
+                    camera_index?: number | null;
+                    collection?: {
+                        /**
+                         * Countdown S
+                         * @default 3
+                         */
+                        countdown_s?: number;
+                        /**
+                         * Episode Time S
+                         * @default 30
+                         */
+                        episode_time_s?: number;
+                        /**
+                         * Num Episodes
+                         * @default 10
+                         */
+                        num_episodes?: number;
+                        /**
+                         * Reset Time S
+                         * @default 10
+                         */
+                        reset_time_s?: number;
+                    } | null;
+                    /** Dataset Id */
+                    dataset_id: string;
+                    /** Fps */
+                    fps?: number | null;
+                    /** Task */
+                    task: string;
+                };
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

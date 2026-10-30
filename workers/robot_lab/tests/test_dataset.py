@@ -281,6 +281,19 @@ class DatasetTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             dataset_file(self.root, writer.id, "meta/link")
 
+    def test_short_scheduling_jitter_is_retained_with_measured_timing(self):
+        writer = DatasetWriter(self.root, "jitter", "Reach", 10)
+        writer.start_episode()
+        for now in (0, 0.1, 0.31, 0.4, 0.5):
+            writer.add_frame(dict.fromkeys(JOINTS, 0.0), {}, captured_at=now)
+        writer.save_episode()
+        summary = json.loads((writer.root / "openjensen.json").read_text())
+        self.assertEqual(summary["fps"], 10)
+        self.assertEqual(summary["capture_timing"][0]["samples"], 5)
+        self.assertAlmostEqual(summary["capture_timing"][0]["elapsed_s"], 0.5)
+        self.assertAlmostEqual(summary["capture_timing"][0]["largest_gap_s"], 0.21)
+        writer.close()
+
     def test_capture_stalls_and_disk_exhaustion_stop_collection(self):
         writer = DatasetWriter(self.root, "stalled", "Reach", 10)
         writer.start_episode()

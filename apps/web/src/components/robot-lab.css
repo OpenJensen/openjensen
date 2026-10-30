@@ -1296,3 +1296,21 @@
   border-radius: 5px;
   background: var(--subtle);
 }
+
+.robot-lab-collection {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--subtle);
+}
+
+.robot-lab-collection progress {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.robot-lab-collection-countdown {
+  font-size: 2.25rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}

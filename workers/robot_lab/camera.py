@@ -143,6 +143,12 @@ class CameraPool:
             self.last_used[index] = time.monotonic()
             return frame
 
+    def read_latest_timed(self, index=0, max_age=0.5):
+        """Return one atomic host capture timestamp and its matching frame."""
+        with self.frame_lock:
+            frame = self.read_latest(index, max_age)
+            return frame, self.frame_times[index]
+
     def jpeg(self, index=0):
         import cv2
 

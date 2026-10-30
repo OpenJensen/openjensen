@@ -4,7 +4,15 @@ from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, ValidationError, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictBool,
+    StrictInt,
+    ValidationError,
+    model_validator,
+)
 
 from vla_platform.robot_lab_bridge import RobotLabError, safe_id, strict_json
 
@@ -32,6 +40,27 @@ class CalibrationImportRequest(BaseModel):
     port: str | None = None
     replace_existing: StrictBool = False
     confirm: Literal["IMPORT CALIBRATION"]
+
+
+class RecordingCollectionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    episode_time_s: StrictInt = Field(default=30, ge=1, le=300)
+    reset_time_s: StrictInt = Field(default=10, ge=0, le=300)
+    num_episodes: StrictInt = Field(default=10, ge=1, le=1000)
+    countdown_s: StrictInt = Field(default=3, ge=0, le=30)
+
+
+class RecordingStartRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    dataset_id: str = Field(pattern=r"^[a-z0-9][a-z0-9_-]{0,63}$")
+    task: str = Field(min_length=1, max_length=1000)
+    fps: StrictInt | None = Field(default=None, ge=1, le=40)
+    camera_index: StrictInt | None = Field(default=0, ge=0, le=63)
+    collection: RecordingCollectionRequest | None = None
+
+
+class RecordingCollectionActionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
 
 
 class RecordingFinishRequest(BaseModel):
@@ -102,6 +131,16 @@ async def proxy(path: str, request: Request):
                 raise HTTPException(
                     422, "Choose a calibration file, destination profile and arm role"
                 ) from None
+        if path == "recording/start" or path.startswith("recording/collection/"):
+            try:
+                schema = (
+                    RecordingStartRequest
+                    if path == "recording/start"
+                    else RecordingCollectionActionRequest
+                )
+                schema.model_validate(payload)
+            except ValidationError:
+                raise HTTPException(422, "Choose valid recording settings") from None
         if path == "recording/finish":
             try:
                 RecordingFinishRequest.model_validate(payload)
@@ -160,6 +199,11 @@ PROTOCOL = {
         "control/heartbeat",
         "control/stop",
         "recording/start",
+        "recording/collection/start",
+        "recording/collection/pause",
+        "recording/collection/resume",
+        "recording/collection/next",
+        "recording/collection/rerecord",
         "recording/episode/start",
         "recording/episode/save",
         "recording/episode/discard",
@@ -174,6 +218,19 @@ def proxy_endpoint(path):
         return await proxy(path, request)
 
     return endpoint
+
+
+def request_schema(model):
+    schema = model.model_json_schema()
+    if model is RecordingStartRequest:
+        # Inline nested settings: this schema is embedded in a request body,
+        # so Pydantic's root-relative $defs references would not resolve.
+        schema.pop("$defs", None)
+        schema["properties"]["collection"] = {
+            "anyOf": [RecordingCollectionRequest.model_json_schema(), {"type": "null"}],
+            "default": None,
+        }
+    return schema
 
 
 # Register the finite protocol as real routes, so API reference/client generation
@@ -194,15 +251,19 @@ for method, protocol_paths in PROTOCOL.items():
                     "required": False,
                     "content": {
                         "application/json": {
-                            "schema": (
+                            "schema": request_schema(
                                 DeviceConfigurationRequest
                                 if protocol_path == "devices/configure"
                                 else DeviceVisibilityRequest
                                 if protocol_path in {"devices/remove", "devices/restore"}
                                 else CalibrationImportRequest
                                 if protocol_path == "calibration/import"
+                                else RecordingStartRequest
+                                if protocol_path == "recording/start"
+                                else RecordingCollectionActionRequest
+                                if protocol_path.startswith("recording/collection/")
                                 else RecordingFinishRequest
-                            ).model_json_schema(),
+                            ),
                         }
                     },
                 }
@@ -210,6 +271,12 @@ for method, protocol_paths in PROTOCOL.items():
             if protocol_path
             in {
                 "recording/finish",
+                "recording/start",
+                "recording/collection/start",
+                "recording/collection/pause",
+                "recording/collection/resume",
+                "recording/collection/next",
+                "recording/collection/rerecord",
                 "calibration/import",
                 "devices/configure",
                 "devices/remove",

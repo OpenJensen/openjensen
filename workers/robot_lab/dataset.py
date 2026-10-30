@@ -142,6 +142,7 @@ class DatasetWriter:
         self.capture_times = deque(maxlen=max(60, fps * 3))
         self.actual_fps = None
         self.episode_capture_fps = []
+        self.episode_capture_timing = []
         self.pending = self.root / ".pending"
         self.pending.mkdir()
         self.write_metadata()
@@ -161,6 +162,7 @@ class DatasetWriter:
             "abandoned": self.abandoned,
             "pending_frames": self.frames if self.abandoned else 0,
             "measured_fps": self.episode_capture_fps,
+            "capture_timing": self.episode_capture_timing,
             "image_write_error": self.image_writer.error if self.image_writer else None,
         }
 
@@ -241,6 +243,8 @@ class DatasetWriter:
         self.episode_active = True
         self.started_at = time.monotonic()
         self.last_frame_at = None
+        self.first_frame_at = None
+        self.largest_gap = 0.0
         self.capture_times.clear()
         self.actual_fps = None
 
@@ -255,19 +259,26 @@ class DatasetWriter:
                 "are preserved"
             )
         now = time.monotonic() if captured_at is None else captured_at
-        if self.last_frame_at is not None and now - self.last_frame_at > 2.0 / self.fps:
+        if self.last_frame_at is not None and now - self.last_frame_at >= max(0.5, 3.0 / self.fps):
             raise ValueError(
-                "Capture fell below requested FPS; episode paused. Save/discard it and choose "
-                "a lower FPS."
+                "Capture fell below requested FPS after an interruption; "
+                "pending frames are preserved. "
+                "Check camera/USB and "
+                "computer load. For a new dataset, Automatic frame rate measures this setup."
             )
+        if self.first_frame_at is None:
+            self.first_frame_at = now
+        if self.last_frame_at is not None:
+            self.largest_gap = max(self.largest_gap, now - self.last_frame_at)
         self.capture_times.append(now)
         if len(self.capture_times) > 1:
             elapsed = self.capture_times[-1] - self.capture_times[0]
             self.actual_fps = (len(self.capture_times) - 1) / elapsed if elapsed > 0 else None
-            if elapsed >= 2 and self.actual_fps is not None and self.actual_fps < self.fps * 0.9:
+            if elapsed >= 3 and self.actual_fps is not None and self.actual_fps < self.fps * 0.9:
                 raise ValueError(
-                    "Sustained camera/motor capture rate is below requested FPS; episode "
-                    "paused. Choose a lower FPS."
+                    "Sustained capture cannot maintain this dataset frame rate; "
+                    "pending frames are preserved. "
+                    "Create a new dataset with Automatic frame rate to measure current conditions."
                 )
         state = [float(positions[joint]) for joint in JOINTS]
         target = [float(action.get(joint, positions[joint])) for joint in JOINTS]
@@ -382,6 +393,13 @@ class DatasetWriter:
                 entry[f"stats/{feature}/{key}"] = value
         self.episodes.append(entry)
         self.episode_capture_fps.append(self.actual_fps)
+        self.episode_capture_timing.append(
+            {
+                "elapsed_s": self.last_frame_at - self.first_frame_at,
+                "largest_gap_s": self.largest_gap,
+                "samples": self.frames,
+            }
+        )
         self.all_stats.append(stats)
         self.total_frames += self.frames
         try:
@@ -389,6 +407,7 @@ class DatasetWriter:
         except Exception:
             self.episodes.pop()
             self.episode_capture_fps.pop()
+            self.episode_capture_timing.pop()
             self.all_stats.pop()
             self.total_frames -= self.frames
             raise
