@@ -1,5 +1,6 @@
 'use client';
 
+import { RobotLabControlDevices } from './robot-lab-devices';
 import { Icon } from '@/components/icon';
 import { importRobotDataset, robotApi, robotJoints } from '@/lib/robot-api';
 import { Heading, Notice, JointControl, DatasetRow } from './robot-lab-shared';
@@ -44,6 +45,7 @@ export function RobotLabRecord({ lab }: { lab: RobotLabState }) {
   return (
     <>
       <Heading title="Recording" />
+      <RobotLabControlDevices lab={lab} />
       <div className="robot-lab-form">
         {partialControl && <Notice>Dataset recording requires all six joints.</Notice>}
         {!recording?.active ? (

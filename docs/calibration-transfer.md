@@ -2,7 +2,7 @@
 
 Calibration normally survives application restarts and motor power cycles. Saving a calibration writes motor offsets and limits, then saves a matching named profile on the robot computer. If another computer recalibrates that arm, bring its new profile to your other installation.
 
-In **Initial setup → Calibrate**, select the leader or follower and its profile name.
+In **Initial setup → Devices**, open the device tile, then choose **Calibration**. Its saved device identity determines the destination profile.
 
 - **Export calibration** downloads that saved profile as a portable JSON file. Export does not read or change motor settings.
 - **Import calibration** accepts an OpenJensen export or a standard LeRobot calibration JSON file. Review its joint values and destination name, then choose **Save imported calibration**. A profile from another name can be imported for the same physical arm. OpenJensen exports retain the arm role and cannot be silently imported as the other role.

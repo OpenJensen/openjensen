@@ -86,6 +86,7 @@ export type RobotStatus = {
     joint_sliders?: boolean;
     calibration_persistence?: boolean;
     calibration_transfer?: boolean;
+    device_registry?: boolean;
     partial_control?: boolean;
     rest_position?: boolean;
     move_to_middle?: boolean;
@@ -214,7 +215,21 @@ export type RobotStatus = {
   }[];
   datasets?: RobotDataset[];
 };
+export type RobotDevice = {
+  id: string;
+  port: string;
+  serial_number: string | null;
+  name: string;
+  robot_id: string;
+  role: RobotRole | null;
+  profile_role: RobotRole | null;
+  connected: boolean;
+  description: string;
+  motor_ids?: boolean;
+  calibration?: 'saved' | 'needs_attention' | 'missing';
+};
 export type RobotDevices = {
+  saved_devices?: RobotDevice[];
   ports: { device: string; description: string; manufacturer: string | null; serial_number: string | null }[];
   cameras: { index: number; name: string; width: number; height: number }[];
   camera_error: string | null;
@@ -285,6 +300,8 @@ export const robotApi = {
   status: () => request<RobotStatus>('/status'),
   diagnostics: () => request<RobotDiagnostics>('/diagnostics'),
   devices: () => request<RobotDevices>('/devices', undefined, { timeoutMs: 30_000 }),
+  configureDevice: (input: { id: string; port: string; name: string; role: RobotRole }) =>
+    request<RobotDevices>('/devices/configure', input),
   datasets: () => request<{ datasets: RobotDataset[] }>('/datasets'),
   probe: (port: string, robot_id?: string, role: RobotRole = 'follower') =>
     request<RobotProbe>('/probe', { port, ...(robot_id ? { robot_id, role } : {}) }, { timeoutMs: 90_000 }),

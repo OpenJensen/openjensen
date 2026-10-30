@@ -2281,6 +2281,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/robot-lab/devices/configure": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Robot Lab Post Devices Configure */
+        post: operations["robot_lab_post_devices_configure"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/robot-lab/diagnostics": {
         parameters: {
             query?: never;
@@ -10968,6 +10985,42 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    robot_lab_post_devices_configure: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** Id */
+                    id: string;
+                    /** Name */
+                    name: string;
+                    /** Port */
+                    port: string;
+                    /**
+                     * Role
+                     * @enum {string}
+                     */
+                    role: "follower" | "leader";
+                };
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

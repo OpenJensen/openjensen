@@ -37,4 +37,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md), [AGENTS.md](AGENTS.md) and [SECURITY.md]
 
 [Apache License 2.0](LICENSE); retained third-party notices are in [NOTICE](NOTICE).
 
-Calibration files can be transferred between computers and profile names from Initial setup → Calibrate. See [calibration transfer](docs/calibration-transfer.md).
+Calibration files can be transferred between computers and profile names from Initial setup → Devices → a device → Calibration. See [device setup](docs/device-workspace.md). See [calibration transfer](docs/calibration-transfer.md).

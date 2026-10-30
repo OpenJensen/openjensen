@@ -486,3 +486,29 @@ def test_calibration_transfer_proxy_preserves_profile_destination_and_export_que
     assert calls[1][3] == payload
     assert len(calls) == 2
     asyncio.run(companion.close())
+
+
+def test_device_configuration_is_a_validated_finite_proxy_operation(tmp_path):
+    connection(tmp_path)
+    commands = []
+
+    def handler(request):
+        commands.append((request.method, request.url.path, json.loads(request.content)))
+        return httpx.Response(200, json={"saved_devices": [{"id": "arm-a", "name": "Desk arm"}]})
+
+    companion = bridge(tmp_path, handler)
+    with browser(tmp_path, companion) as client:
+        payload = {"id": "arm-a", "port": "/dev/ttyACM0", "name": "Desk arm", "role": "leader"}
+        response = client.post("/api/v1/robot-lab/devices/configure", json=payload)
+        assert response.status_code == 200
+        assert response.json()["saved_devices"][0]["name"] == "Desk arm"
+        assert commands == [("POST", "/v1/devices/configure", payload)]
+        for changes in ({"role": "unknown"}, {"name": "x" * 65}, {"unexpected": True}):
+            assert (
+                client.post(
+                    "/api/v1/robot-lab/devices/configure", json=payload | changes
+                ).status_code
+                == 422
+            )
+        assert len(commands) == 1
+    asyncio.run(companion.close())

@@ -15614,6 +15614,69 @@
         ]
       }
     },
+    "/api/v1/robot-lab/devices/configure": {
+      "post": {
+        "operationId": "robot_lab_post_devices_configure",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "name": {
+                    "maxLength": 64,
+                    "title": "Name",
+                    "type": "string"
+                  },
+                  "port": {
+                    "maxLength": 256,
+                    "title": "Port",
+                    "type": "string"
+                  },
+                  "role": {
+                    "enum": [
+                      "follower",
+                      "leader"
+                    ],
+                    "title": "Role",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "port",
+                  "name",
+                  "role"
+                ],
+                "title": "DeviceConfigurationRequest",
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Devices Configure",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
     "/api/v1/robot-lab/diagnostics": {
       "get": {
         "operationId": "robot_lab_get_diagnostics",
