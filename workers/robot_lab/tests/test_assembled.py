@@ -201,6 +201,64 @@ class AssembledTests(unittest.TestCase):
             all(params == bytes([reg.TORQUE_ENABLE, 0]) for _, _, params in self.transport.writes)
         )
 
+    def test_partial_stable_inventory_never_reboots_or_renames_working_motors(self):
+        self.transport = FakeTransport([1, 2, 3])
+        self.setup.bus_factory = lambda port: self.transport
+        with self.assertRaisesRegex(AssembledError, "partial or unreliable"):
+            self.setup.split()
+        self.assertEqual(self.transport.reboots, 0)
+        self.assertEqual(self.transport.writes, [])
+        self.assertEqual([motor["saved"] for motor in self.transport.motors], [1, 2, 3])
+        self.assertEqual(self.setup.snapshot()["ids"], [1, 2, 3])
+
+    def test_partial_commit_addresses_are_scanned_without_renaming(self):
+        ids = [1, 2, 3, 103, 104, 105]
+        self.transport = FakeTransport(ids)
+        self.setup.bus_factory = lambda port: self.transport
+        self.assertEqual(self.setup.split(), ids)
+        self.assertEqual(self.transport.reboots, 0)
+        self.assertEqual([motor["saved"] for motor in self.transport.motors], ids)
+        self.assertTrue(
+            all(params == bytes([reg.TORQUE_ENABLE, 0]) for _, _, params in self.transport.writes)
+        )
+
+    def test_reboot_recovery_of_six_saved_ids_does_not_start_another_sweep(self):
+        for saved, motor in enumerate(self.transport.motors, 1):
+            motor["saved"] = saved
+        self.assertEqual(self.setup.split(), list(range(1, 7)))
+        self.assertEqual(self.transport.reboots, 1)
+        self.assertFalse(
+            any(
+                instruction == 3 and params[0] == reg.ID
+                for _, instruction, params in self.transport.writes
+            )
+        )
+
+    def test_retry_preserves_original_incomplete_transaction_journal(self):
+        original = {
+            "port": "/dev/cu.fake",
+            "phase": "error",
+            "ids": [1, 2, 3, 103, 104, 105],
+            "mapping": dict(zip(JOINTS, range(1, 7), strict=True)),
+            "pending": {"old": 102, "new": 3, "stage": "relock-uncertain"},
+        }
+        body = json.dumps(original).encode()
+        self.setup.journal_path.write_bytes(body)
+        for _ in range(2):
+            transport = FakeTransport([1, 2, 3])
+            retry = FastSetup(
+                "/dev/cu.fake",
+                self.temp.name,
+                bus_factory=lambda port: transport,
+                timeout_s=600,
+                verified_so101=True,
+            )
+            with self.assertRaisesRegex(AssembledError, "partial or unreliable"):
+                retry.split()
+            retry.close()
+            self.assertEqual(retry.journal_path.with_suffix(".recovery.json").read_bytes(), body)
+            self.assertEqual(transport.writes, [])
+
     def test_fast_wake_poll_restores_normal_timeout(self):
         self.setup.split()
         self.assertIn((0, 8, 0.001), self.transport.exchanges)

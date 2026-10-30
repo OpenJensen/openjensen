@@ -13,6 +13,7 @@ import time
 JOINTS = ("shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll", "gripper")
 IDS = {name: index + 1 for index, name in enumerate(JOINTS)}
 BAUDRATES = (1_000_000, 500_000, 250_000, 128_000, 115_200, 57_600, 38_400, 19_200)
+DISCOVERY_TIMEOUT_SECONDS = 20.0
 REGISTERS = {
     "ID": (5, 1),
     "Return_Delay_Time": (7, 1),
@@ -384,10 +385,25 @@ class ServoBus:
                     raise
 
 
-def probe_bus(bus, ids=range(1, 7), repeats=3):
+def probe_bus(bus, ids=range(1, 7), repeats=3, *, discover=False, is_current=lambda: True):
     motors = []
+    deadline = time.monotonic() + DISCOVERY_TIMEOUT_SECONDS if discover else None
+    if discover:
+        ids = range(254)
+
+    def ping(motor_id):
+        if not is_current():
+            raise HardwareError("Motor scan cancelled by Stop")
+        if deadline is not None and time.monotonic() >= deadline:
+            raise HardwareError("Motor discovery exceeded its 20-second budget; scan is incomplete")
+        return bus.ping(motor_id)
+
     for motor_id in ids:
-        replies = [bus.ping(motor_id) for _ in range(repeats)]
+        replies = [ping(motor_id)]
+        # Discovery is bounded to one timeout per absent address. Confirm each
+        # responding address with the same repeated checks as a normal scan.
+        if not discover or replies[0] is not None:
+            replies.extend(ping(motor_id) for _ in range(repeats - 1))
         found = [reply for reply in replies if reply is not None]
         if found:
             motors.append(
@@ -407,6 +423,8 @@ def probe_bus(bus, ids=range(1, 7), repeats=3):
         "motors": motors,
         "ready": ready,
         "expected_ids": list(IDS.values()),
+        "scan_scope": "all_addresses" if discover else "expected_ids",
+        "unexpected_ids": [entry["id"] for entry in motors if entry["id"] not in IDS.values()],
         "warning": ISOLATION_WARNING,
     }
 
