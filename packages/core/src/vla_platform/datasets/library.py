@@ -814,23 +814,57 @@ class DatasetLibrary:
         for project in await projects.list():
             if project_id and project.id != project_id:
                 continue
-            seen = set()
-            for job in sorted(
+            project_jobs = sorted(
                 await execution.list(project.id), key=lambda j: j.created_at, reverse=True
-            ):
+            )
+            ready_library_ids = {
+                row["id"]
+                for row in rows
+                if row["project_id"] == project.id and row["status"] == "ready"
+            }
+            library_snapshots = {}
+            for job in project_jobs:
+                if (
+                    isinstance(job.result, DatasetProfile)
+                    and job.result.snapshot
+                    and isinstance(job.request, IntakeRequest)
+                    and job.request.library_id in ready_library_ids
+                ):
+                    library_snapshots.setdefault(
+                        job.request.library_id, (job.id, job.result.snapshot.id)
+                    )
+            represented_snapshots = {snapshot_id for _, snapshot_id in library_snapshots.values()}
+            seen = set()
+            for job in project_jobs:
                 if not isinstance(job.result, DatasetProfile):
                     continue
                 if isinstance(job.request, IntakeRequest) and job.request.library_id:
+                    selected_snapshot = library_snapshots.get(job.request.library_id)
                     for row in rows:
-                        if row["id"] == job.request.library_id:
+                        if row["id"] == job.request.library_id and row["project_id"] == project.id:
                             row["can_discard"] = False
-                            if not row.get("job_id") or job.result.snapshot:
+                            if not row.get("job_id") or (
+                                selected_snapshot and selected_snapshot[0] == job.id
+                            ):
                                 row["job_id"] = job.id
                             row["training_copy"] = row.get("training_copy", False) or bool(
                                 job.result.snapshot
                             )
+                    if job.request.library_id in ready_library_ids and (
+                        job.result.snapshot is None
+                        or selected_snapshot
+                        and job.result.snapshot.id == selected_snapshot[1]
+                    ):
+                        continue
+                snapshot_id = job.result.snapshot.id if job.result.snapshot else None
+                if snapshot_id is not None and snapshot_id in represented_snapshots:
                     continue
-                key = (job.result.repo_id, job.result.revision, job.result.metadata_sha256)
+                key = (
+                    job.result.repo_id,
+                    job.result.revision,
+                    job.result.metadata_sha256,
+                    snapshot_id,
+                )
                 if key in seen:
                     continue
                 seen.add(key)
