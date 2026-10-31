@@ -221,7 +221,8 @@ export function TrainingComputeStep({
             })),
             ...localRuntimes.map((item) => ({
               id: item.id,
-              label: item.label,
+              label: item.device === 'mps' ? 'This Mac · Apple GPU' : item.label,
+              description: item.device === 'mps' ? 'Local ACT training · shared memory' : undefined,
               memory: item.gpu_memory_mib ? `${number(item.gpu_memory_mib / 1024)} GB` : undefined,
             })),
           ]}

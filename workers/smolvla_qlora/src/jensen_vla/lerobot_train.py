@@ -239,7 +239,7 @@ def install_training_hooks(
 ):
     """Bind the same versioned worker hooks to an upstream training invocation.
 
-    The application entrypoint still requires CUDA. An explicit CPU fixture may
+    The application entrypoint requires its selected CUDA or Apple GPU. An explicit CPU fixture may
     exercise these hooks through LeRobot's supported CPU configuration without
     pretending that the application GPU route ran.
     """
@@ -567,7 +567,9 @@ def main():
     write_json(
         training / "environment.json",
         {
-            **environment_report(torch, "policy_default"),
+            **environment_report(
+                torch, "policy_default", device=recipe.get("execution_device", "cuda")
+            ),
             "upstream_revision": LEROBOT_REVISION,
             "training_backend": "lerobot",
             "initialization": profile["initialization"],
