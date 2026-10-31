@@ -22,6 +22,11 @@ def main():
         "--runtime", type=Path, required=True, help="Persistent, separately managed ACT environment"
     )
     parser.add_argument("--device", choices=("cpu", "mps"), default="cpu")
+    parser.add_argument(
+        "--smolvla",
+        action="store_true",
+        help="Include the optional native SmolVLA tokenizer/runtime dependencies",
+    )
     args = parser.parse_args()
     data, runtime = args.data_dir.expanduser().resolve(), args.runtime.expanduser().resolve()
     if not data.is_dir():
@@ -50,7 +55,7 @@ def main():
             "install",
             "--python",
             str(python),
-            f"lerobot @ git+https://github.com/huggingface/lerobot.git@{LEROBOT_REVISION}",
+            f"lerobot{'[smolvla]' if args.smolvla else ''} @ git+https://github.com/huggingface/lerobot.git@{LEROBOT_REVISION}",
         ],
         check=True,
     )
