@@ -1014,10 +1014,14 @@ test('recorded local frames play and seek in inspection and training without Hub
   await expect(page.getByRole('button', { name: 'Play episode', exact: true })).toBeVisible();
   await expect(picture).toBeVisible();
   await page.getByRole('link', { name: 'Fine-tune', exact: true }).click();
-  await expect(page.getByLabel('Preview episode')).toBeVisible();
-  await page.getByLabel('Preview episode').selectOption('1');
-  await page.getByRole('slider', { name: 'Episode playback position' }).press('End');
-  await expect(picture).toBeVisible();
+  await page.getByRole('button', { name: 'Start a new fine-tuning', exact: true }).click();
+  const training = page.getByRole('region', { name: 'Dataset', exact: true });
+  await expect(training).toBeVisible();
+  await training.getByLabel('Preview episode').selectOption('1');
+  await training.getByRole('slider', { name: 'Episode playback position' }).press('End');
+  await expect(
+    training.getByRole('img', { name: 'observation.images.front · episode 2 · frame 2', exact: true }),
+  ).toBeVisible();
   expect(unexpected).toEqual([]);
   await page.screenshot({ path: testInfo.outputPath('local-recorded-playback.png'), fullPage: true });
 });
