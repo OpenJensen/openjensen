@@ -30,6 +30,7 @@ HARDWARE_TIMEOUT = 5
 MAX_OUTPUT = 64 * 1024
 CANDIDATE_TTL = 300
 REASONS = {
+    "mps_unavailable": "The pinned ACT runtime or Apple GPU is unavailable.",
     "missing_dependencies": "Install the pinned SmolVLA worker dependencies.",
     "incompatible_dependencies": "The installed worker dependencies do not match SmolVLA's pins.",
     "incompatible_environment": "The SmolVLA worker needs its own Python 3.11 or 3.12 environment.",
@@ -328,6 +329,8 @@ class LocalWorkerDiscoveryService:
             issues=list(self.lifecycle.local_workers.issues),
         )
         ready = {}
+        if host.platform == "Darwin" and host.architecture == "arm64":
+            return self._discover_macos(response, candidate)
         if (host.platform, host.architecture) not in {("Linux", "x86_64"), ("Linux", "AMD64")}:
             candidate.reason = (
                 "Local SmolVLA training requires x86-64 Linux and an NVIDIA CUDA GPU."
@@ -413,6 +416,74 @@ class LocalWorkerDiscoveryService:
                 candidate.setup_supported = root is not None and env.get(
                     "CUDA_VISIBLE_DEVICES"
                 ) not in {"", "-1"}
+        return response, ready
+
+    def _discover_macos(self, response, candidate):
+        from vla_platform.macos_act_runtime import binding_python, installed_python
+
+        candidate.id, candidate.label = "local-act-mps", "Apple GPU · ACT"
+        candidate.training_model_ids = ["act"]
+        root = _worker_root()
+        candidate.setup_supported = bool(root and installed_python().is_file())
+        ready = {}
+        if root is None:
+            candidate.reason = "The bundled native ACT worker sources are unavailable."
+            return response, ready
+        try:
+            python = binding_python(self.lifecycle.settings.data_dir)
+            env = _environment()
+            result = _parse_probe(
+                _run_bounded(
+                    [
+                        str(python),
+                        "-I",
+                        "-B",
+                        str(Path(__file__).with_name("macos_act_probe.py")),
+                        str(root),
+                    ],
+                    timeout=PROBE_TIMEOUT,
+                    env=env,
+                )
+            )
+            if result["status"] != "ready":
+                candidate.reason = REASONS[result["reason"]]
+                return response, ready
+            gpu = result["gpu"]
+            identity = hashlib.sha256((str(root) + "\0" + str(python)).encode()).hexdigest()[:16]
+            runtime = Runtime(
+                id="managed-local-act-mps-" + identity,
+                label="Apple GPU · ACT",
+                provider="local",
+                device="mps",
+                training_only=True,
+                training_python=str(python),
+                training_root=str(root),
+                training_module="jensen_vla.lerobot_application",
+                training_model_ids=["act"],
+                gpu_name=gpu["name"],
+                gpu_memory_mib=gpu["memory_mib"],
+            )
+            existing = self._equivalent(runtime)
+            candidate.id = runtime.id
+            candidate.gpu_name, candidate.gpu_memory_mib = runtime.gpu_name, runtime.gpu_memory_mib
+            candidate.status = "registered" if existing else "ready"
+            candidate.runtime_id = existing.id if existing else None
+            response.status, response.message = (
+                "ready",
+                "Apple GPU checked for native ACT training.",
+            )
+            ready[candidate.id] = _ReadyCandidate(
+                runtime,
+                env.get("CUDA_VISIBLE_DEVICES"),
+                env.get("CUDA_DEVICE_ORDER"),
+                time.monotonic(),
+            )
+        except FileNotFoundError:
+            candidate.reason = "Use the installed ACT runtime to enable local Apple GPU training."
+        except OSError, ValueError, _ProbeError:
+            candidate.reason = (
+                "The private ACT runtime binding or Apple GPU readiness check failed."
+            )
         return response, ready
 
     async def _scan(self):

@@ -6235,7 +6235,8 @@
           "device": {
             "enum": [
               "cpu",
-              "cuda"
+              "cuda",
+              "mps"
             ],
             "title": "Device",
             "type": "string"
@@ -8206,7 +8207,8 @@
             "default": "cpu",
             "enum": [
               "cpu",
-              "cuda"
+              "cuda",
+              "mps"
             ],
             "title": "Device",
             "type": "string"
@@ -9588,7 +9590,7 @@
   },
   "info": {
     "title": "OPEN JENSEN local VLA application",
-    "version": "0.1.28"
+    "version": "0.1.29"
   },
   "openapi": "3.1.0",
   "paths": {

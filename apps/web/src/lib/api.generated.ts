@@ -5528,7 +5528,7 @@ export interface components {
              * Device
              * @enum {string}
              */
-            device: "cpu" | "cuda";
+            device: "cpu" | "cuda" | "mps";
             /** Enabled */
             enabled: boolean;
             /**
@@ -6410,7 +6410,7 @@ export interface components {
              * @default cpu
              * @enum {string}
              */
-            device: "cpu" | "cuda";
+            device: "cpu" | "cuda" | "mps";
             /** Id */
             id: string;
             /** Label */

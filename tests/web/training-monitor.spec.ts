@@ -46,6 +46,7 @@ async function workspace(
   exportMode?: 'local' | 'remote' | 'remote-complete' | 'unconfigured' | 'failed' | 'local-dataset',
   accumulationCatalog: AccumulationCatalog = 'supported',
   nativeSmol = false,
+  nativeMps = false,
 ) {
   const submitted: Record<string, any>[] = [];
   const unexpected: string[] = [];
@@ -269,6 +270,19 @@ async function workspace(
         },
       ]
     : [];
+  if (nativeMps)
+    extraRuntimes.push({
+      id: 'managed-local-act-mps-fixture',
+      label: 'Apple GPU · ACT',
+      provider: 'local',
+      execution: 'native',
+      device: 'mps',
+      enabled: true,
+      training: true,
+      training_only: true,
+      training_model_ids: ['act'],
+      gpu_memory_mib: 16384,
+    });
   if (exportMode === 'remote-complete') {
     job.status = 'succeeded';
     telemetry.status = 'succeeded';
@@ -430,7 +444,7 @@ async function workspace(
             },
           ],
           compute: {
-            local: { enabled: false, label: 'Local' },
+            local: { enabled: nativeMps, label: 'Local' },
             gcp: { enabled: true, default_gpu: 'A100', disk_size_gb: 200, idle_minutes: 10 },
           },
           training_models: [
@@ -3351,4 +3365,29 @@ test('dataset browser caps mixtures at eight and allows removing a selected data
   await dialog.getByRole('button', { name: 'Use selected datasets', exact: true }).click();
   await expect(page.locator('input[name="training-dataset"]:checked')).toHaveCount(8);
   expect(state.submitted).toEqual([]);
+});
+
+test('ACT can explicitly select this Mac and submit its bounded local recipe', async ({ page }) => {
+  const { submitted } = await workspace(page, 'local-snapshot', false, undefined, 'supported', false, true);
+  await page.getByRole('button', { name: 'Start a new fine-tuning', exact: true }).click();
+  const steps = page.getByRole('navigation', { name: 'Training setup' });
+  await steps.getByRole('button', { name: 'Model', exact: true }).click();
+  await chooseOnlyModel(page, 'ACT');
+  await steps.getByRole('button', { name: 'Compute', exact: true }).click();
+  await page.getByRole('combobox', { name: 'GPU', exact: true }).click();
+  await page.getByRole('option', { name: 'This Mac · Apple GPU', exact: false }).click();
+  const review = page.getByRole('region', { name: 'Training recipe review' });
+  await expect(review).toContainText('batch 1');
+  await expect(review).toContainText('Predict 32 · execute 8');
+  await expect(page.getByText('Apple GPU ACT uses batch 1', { exact: false }).first()).toBeVisible();
+  const start = page.getByRole('button', { name: 'Start fine-tuning', exact: true });
+  await expect(start).toBeEnabled();
+  await start.click();
+  await expect.poll(() => submitted.length).toBe(1);
+  expect(submitted[0]).toMatchObject({
+    runtime_id: 'managed-local-act-mps-fixture',
+    training_method: 'full',
+    dataset_job_id: 'dataset',
+    training: { batch_size: 1, gradient_accumulation_steps: 1, prediction_horizon: 32, execution_horizon: 8 },
+  });
 });

@@ -161,6 +161,11 @@ def probe(policy, raw_batch, preprocessor, postprocessor, seed, *, rng_devices=N
     import torch
     from lerobot.scripts.lerobot_train import _preprocess_dataset_batch
 
+    mps_rng = (
+        torch.mps.get_rng_state()
+        if getattr(getattr(policy, "config", None), "device", None) == "mps"
+        else None
+    )
     was_training = policy.training
     policy.eval()
     policy.reset()
@@ -177,7 +182,11 @@ def probe(policy, raw_batch, preprocessor, postprocessor, seed, *, rng_devices=N
     cameras = [key for key in policy.config.image_features if key in raw_batch]
     try:
         with (
-            torch.random.fork_rng(devices=[0] if rng_devices is None else rng_devices),
+            torch.random.fork_rng(
+                devices=([0] if torch.cuda.is_available() else [])
+                if rng_devices is None
+                else rng_devices
+            ),
             torch.inference_mode(),
         ):
             torch.manual_seed(seed)
@@ -189,6 +198,8 @@ def probe(policy, raw_batch, preprocessor, postprocessor, seed, *, rng_devices=N
             raise FloatingPointError("Native checkpoint probe produced non-finite actions")
         return action
     finally:
+        if mps_rng is not None:
+            torch.mps.set_rng_state(mps_rng)
         (
             torch.backends.cuda.matmul.allow_tf32,
             torch.backends.cudnn.allow_tf32,
@@ -228,7 +239,7 @@ def install_training_hooks(
 ):
     """Bind the same versioned worker hooks to an upstream training invocation.
 
-    The application entrypoint still requires CUDA. An explicit CPU fixture may
+    The application entrypoint requires its selected CUDA or Apple GPU. An explicit CPU fixture may
     exercise these hooks through LeRobot's supported CPU configuration without
     pretending that the application GPU route ran.
     """
@@ -396,7 +407,11 @@ def install_training_hooks(
                 **(
                     runtime_environment
                     if runtime_environment is not None
-                    else environment_report(torch, getattr(cfg.policy, "dtype", "policy_default"))
+                    else environment_report(
+                        torch,
+                        getattr(cfg.policy, "dtype", "policy_default"),
+                        device=recipe.get("execution_device", "cuda"),
+                    )
                 ),
                 "upstream_revision": LEROBOT_REVISION,
                 "training_backend": "lerobot",
@@ -509,6 +524,23 @@ def install_training_hooks(
     return state
 
 
+def configure_training_device(torch, policy_type, device):
+    if device == "mps":
+        import platform
+
+        if (
+            policy_type != "act"
+            or platform.system() != "Darwin"
+            or not torch.backends.mps.is_available()
+        ):
+            raise RuntimeError("Native ACT/MPS training requires an available Apple GPU")
+        torch.mps.set_per_process_memory_fraction(0.45)
+        torch.set_num_threads(2)
+        torch.set_num_interop_threads(1)
+    elif device != "cuda" or not torch.cuda.is_available():
+        raise RuntimeError("Native policy training requires the selected CUDA GPU")
+
+
 def main():
     recipe_path, operation = map(Path, sys.argv[1:3])
     resume = Path(sys.argv[3]) if len(sys.argv) > 3 else None
@@ -531,8 +563,7 @@ def main():
     from lerobot.scripts import lerobot_train as trainer
     from lerobot.utils.feature_utils import dataset_to_policy_features
 
-    if not torch.cuda.is_available():
-        raise RuntimeError("Native policy training requires a CUDA GPU")
+    configure_training_device(torch, profile["policy_type"], recipe.get("execution_device", "cuda"))
     training = operation / "training"
     training.mkdir()
     started = time.monotonic()
@@ -540,7 +571,9 @@ def main():
     write_json(
         training / "environment.json",
         {
-            **environment_report(torch, "policy_default"),
+            **environment_report(
+                torch, "policy_default", device=recipe.get("execution_device", "cuda")
+            ),
             "upstream_revision": LEROBOT_REVISION,
             "training_backend": "lerobot",
             "initialization": profile["initialization"],
@@ -604,7 +637,11 @@ def main():
         resume=bool(resume),
     )
     if resume:
-        arguments = [arg for arg in arguments if not arg.startswith(("--policy.",))]
+        arguments = [
+            arg
+            for arg in arguments
+            if not arg.startswith("--policy.") or arg.startswith("--policy.device=")
+        ]
         arguments += [
             "--resume=true",
             "--config_path=" + str(resume / "pretrained_model/train_config.json"),

@@ -33,7 +33,7 @@ export function LocalComputeSettingsPanel() {
   });
   const current = draft ?? saved ?? { enabled: false, label: 'Local machine' };
   const workers = (options.data?.runtimes ?? []).filter(
-    (worker) => (worker.provider ?? 'local') === 'local' && worker.training && worker.device === 'cuda',
+    (worker) => (worker.provider ?? 'local') === 'local' && worker.training && ['cuda', 'mps'].includes(worker.device),
   );
   function updateCompute(result: ComputeSettings) {
     client.setQueryData<PolicyOptions>(['policy-options'], (previous) =>
@@ -143,9 +143,17 @@ export function LocalComputeSettingsPanel() {
             {discovery.candidates.map((candidate) => (
               <div className="local-worker-card" key={candidate.id}>
                 <div className="local-worker-details">
-                  <strong>{candidate.gpu_name ? 'Local NVIDIA GPU' : candidate.label}</strong>
+                  <strong>
+                    {discovery.host.platform === 'Darwin'
+                      ? 'Apple GPU'
+                      : candidate.gpu_name
+                        ? 'Local NVIDIA GPU'
+                        : candidate.label}
+                  </strong>
                   {gpuDetails(candidate) && <span>{gpuDetails(candidate)}</span>}
-                  <span>SmolVLA fine-tuning</span>
+                  <span>
+                    {candidate.training_model_ids.includes('act') ? 'Native ACT training' : 'SmolVLA fine-tuning'}
+                  </span>
                   {candidate.reason && <p>{candidate.reason}</p>}
                 </div>
                 {candidate.status === 'ready' ? (
@@ -184,10 +192,13 @@ export function LocalComputeSettingsPanel() {
             )}
             {discovery.candidates.some((candidate) => candidate.setup_supported) && (
               <p className="local-compute-note">
-                Setup installs several GB of dependencies. Models and datasets download when you start a run.
+                On Apple Silicon, setup reuses the installed ACT environment. NVIDIA setup installs dependencies. Models
+                and datasets download when you start a run.
               </p>
             )}
-            <p className="local-compute-note">Supports SmolVLA fine-tuning. Other GPU training needs at least 16 GB.</p>
+            <p className="local-compute-note">
+              Apple Silicon supports native ACT with 16 GB unified memory. NVIDIA workers support SmolVLA fine-tuning.
+            </p>
           </div>
         )}
         {setup.data && setup.data.status !== 'idle' && (
@@ -213,7 +224,9 @@ export function LocalComputeSettingsPanel() {
         {otherWorkers.map((worker) => (
           <div className="local-worker-card" key={worker.id}>
             <div className="local-worker-details">
-              <strong>{worker.gpu_name ? 'Local NVIDIA GPU' : worker.label}</strong>
+              <strong>
+                {worker.device === 'mps' ? 'Apple GPU' : worker.gpu_name ? 'Local NVIDIA GPU' : worker.label}
+              </strong>
               <span>{gpuDetails(worker)}</span>
               <span>{worker.training_model_ids?.join(', ') || 'Configured training worker'}</span>
             </div>

@@ -173,7 +173,8 @@ export function useWorkflowPanel({
     runtimes.find((item) => item.id === runtimeId) ??
     (cloudCheckpoint ? runtimes.find((item) => item.provider === 'gcp' || item.execution === 'skypilot') : undefined) ??
     runtimes[0];
-  const defaultLanguage = options.data?.quantization_defaults[runtime?.device ?? 'cpu'].language ?? 'Q8_0';
+  const defaultLanguage =
+    options.data?.quantization_defaults[runtime?.device === 'cuda' ? 'cuda' : 'cpu'].language ?? 'Q8_0';
   const nativeQuantization = stage === 'Quantize' && runtime?.execution !== 'skypilot';
   const cloudEngine = (stage === 'Evaluate' || stage === 'Run') && runtime?.execution === 'skypilot';
   const evaluationMode = cloudEngine ? 'engine' : preferences.mode;

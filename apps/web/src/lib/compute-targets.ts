@@ -40,7 +40,7 @@ export type ComputeTargetList = {
     id: string;
     label: string;
     operations: string[];
-    device?: 'cpu' | 'cuda';
+    device?: 'cpu' | 'cuda' | 'mps';
     accelerator?: string | null;
     remote_only?: boolean;
   }[];
