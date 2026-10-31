@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import importlib.metadata
 import importlib.util
@@ -51,6 +52,7 @@ from lerobot_control import (
 )
 from motion import MiddleMotion, RestMotion, control_limits, middle_targets, step_target
 from policy import PolicyRunner
+from policy_install import install_archive
 from recording import MAX_RECORDING_FPS, CaptureRate, Collection
 from rest_position import RestPositions
 from verification import (
@@ -559,6 +561,8 @@ class RobotLab:
         return value
 
     def _idle(self):
+        if self.policy.phase in {"loading", "checking", "installing"}:
+            raise RequestError("Finish policy preparation before opening hardware")
         if (
             self.mode != "idle"
             or self.bus is not None
@@ -675,6 +679,7 @@ class RobotLab:
                 "auto_recording_fps": True,
                 "agent_control": hardware,
                 "run_policy": hardware,
+                "policy_install": True,
                 "move_to_middle": hardware,
                 "middle_tolerance": hardware,
                 "partial_control": hardware,
@@ -2387,7 +2392,7 @@ class RobotLab:
                     reason = "AI operator or execution lease expired; torque disabled"
             elif mode == "policy":
                 if self.policy.expired():
-                    reason = "Policy operator heartbeat expired; torque disabled"
+                    reason = "Policy operator heartbeat or run duration expired; torque disabled"
             elif mode not in {"idle", "calibration"} and time.monotonic() - self.heartbeat > (
                 10 if mode in {"setup", "verification"} else 2
             ):
@@ -2529,6 +2534,21 @@ class Handler(BaseHTTPRequestHandler):
         if not self._authenticate():
             return
         try:
+            if urlsplit(self.path).path == "/v1/policy/install":
+                if (
+                    self.headers.get("Transfer-Encoding")
+                    or self.headers.get("Content-Type") != "application/x-tar"
+                ):
+                    raise RequestError("Install one complete policy TAR with an explicit length")
+                header = self.headers.get("X-OpenJensen-Policy", "")
+                if len(header) > 8192:
+                    raise RequestError("Policy installation metadata is oversized")
+                descriptor = agent_json(base64.b64decode(header, validate=True))
+                length = int(self.headers.get("Content-Length", "0"))
+                self.connection.settimeout(120)
+                return self._send(
+                    200, install_archive(self.server.lab, self.rfile, length, descriptor)
+                )
             length = int(self.headers.get("Content-Length", "0"))
             if not 0 <= length <= 16_384:
                 raise RequestError("Request body too large")

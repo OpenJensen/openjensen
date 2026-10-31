@@ -1610,6 +1610,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects/{project_id}/robot-lab/policies/{artifact_id}/install": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Install Project Policy */
+        post: operations["install_project_policy_api_v1_projects__project_id__robot_lab_policies__artifact_id__install_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects/{project_id}/scene-jobs": {
         parameters: {
             query?: never;
@@ -5166,6 +5183,18 @@ export interface components {
             project_id: string;
             /** Run Name */
             run_name?: string | null;
+        };
+        /** PolicyInstallRequest */
+        PolicyInstallRequest: {
+            /**
+             * Confirm So101 Units
+             * @default false
+             */
+            confirm_so101_units: boolean;
+            /** Fps */
+            fps?: number | null;
+            /** Name */
+            name: string;
         };
         /** PolicyRequest */
         PolicyRequest: {
@@ -10049,6 +10078,42 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    install_project_policy_api_v1_projects__project_id__robot_lab_policies__artifact_id__install_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                artifact_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PolicyInstallRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             201: {

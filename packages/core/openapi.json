@@ -5312,6 +5312,40 @@
         "title": "PolicyArtifact",
         "type": "object"
       },
+      "PolicyInstallRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "confirm_so101_units": {
+            "default": false,
+            "title": "Confirm So101 Units",
+            "type": "boolean"
+          },
+          "fps": {
+            "anyOf": [
+              {
+                "maximum": 40.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fps"
+          },
+          "name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "PolicyInstallRequest",
+        "type": "object"
+      },
       "PolicyRequest": {
         "additionalProperties": false,
         "properties": {
@@ -13926,6 +13960,65 @@
           }
         },
         "summary": "Import Recording",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/robot-lab/policies/{artifact_id}/install": {
+      "post": {
+        "operationId": "install_project_policy_api_v1_projects__project_id__robot_lab_policies__artifact_id__install_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "artifact_id",
+            "required": true,
+            "schema": {
+              "title": "Artifact Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PolicyInstallRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Install Project Policy",
         "tags": [
           "Robot Lab"
         ]

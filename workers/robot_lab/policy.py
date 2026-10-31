@@ -14,20 +14,16 @@ import stat
 import subprocess
 import threading
 import time
+from collections import deque
 from pathlib import Path
 
 from hardware import JOINTS, HardwareError
 from motion import control_limits
+from policy_contract import read_json, validate_act_config, validate_processors
 
 UNITS = ["degrees"] * 5 + ["percent"]
 MAX_SPEED = 10.0
 MAX_ACCELERATION = 20.0
-
-
-def read_json(path, maximum=1024 * 1024):
-    if path.is_symlink() or not path.is_file() or path.stat().st_size > maximum:
-        raise ValueError("Policy metadata must be a bounded regular file")
-    return json.loads(path.read_text())
 
 
 def admit(root, ident):
@@ -79,7 +75,8 @@ def admit(root, ident):
     }
     if not required <= set(files):
         raise ValueError("Checkpoint needs model weights and its saved pre/postprocessors")
-    config = read_json(checkpoint / "config.json")
+    validate_processors(checkpoint)
+    config = validate_act_config(checkpoint)
     images = {
         k: v
         for k, v in config.get("input_features", {}).items()
@@ -205,6 +202,7 @@ class PolicyRunner:
         self.cancel = threading.Event()
         self.lock = threading.RLock()
         self.operator_deadline = 0.0
+        self.run_deadline = 0.0
         self.predicted = None
         self.last_prediction = 0.0
         self.last_health = 0.0
@@ -290,7 +288,7 @@ class PolicyRunner:
             raise ValueError("Choose one installed policy")
         with self.lock:
             if (
-                self.phase in {"running", "loading", "checking"}
+                self.phase in {"running", "loading", "checking", "installing"}
                 or self.thread
                 and self.thread.is_alive()
             ):
@@ -490,6 +488,7 @@ class PolicyRunner:
             self.started = time.monotonic()
             self.last_prediction = self.last_health = self.started
             self.operator_deadline = self.started + 2
+            self.run_deadline = self.started + duration
             self.phase, self.error = "running", None
             self.lab.mode = "policy"
             self.thread = threading.Thread(
@@ -525,6 +524,8 @@ class PolicyRunner:
             self.operation += 1
             if self.phase == "loading":
                 self.phase = "idle"
+            if self.phase == "installing":
+                self.phase = "ready" if self.runtime and self.model else "idle"
             if self.phase == "checking":
                 self.phase = "ready"
                 self.check = None
@@ -535,7 +536,9 @@ class PolicyRunner:
             self.predicted = None
 
     def expired(self):
-        return self.phase == "running" and time.monotonic() > self.operator_deadline
+        return self.phase == "running" and time.monotonic() > min(
+            self.operator_deadline, self.run_deadline
+        )
 
     def apply(self, measured, now):
         with self.lock:
@@ -547,7 +550,7 @@ class PolicyRunner:
                 raise HardwareError("Policy controller authority was revoked")
             self.last_health = now
             if self.expired():
-                raise HardwareError("Policy operator heartbeat expired")
+                raise HardwareError("Policy operator heartbeat or run duration expired")
             if now - self.last_prediction > max(0.5, 3 / self.model["fps"]):
                 raise HardwareError("Policy predictions fell behind the trained frame rate")
             if self.predicted is None:
@@ -583,6 +586,7 @@ class PolicyRunner:
         try:
             self.runtime.request({"reset": True})
             deadline, due = time.monotonic() + duration, time.monotonic()
+            camera_stamps = deque(maxlen=max(16, 2 * self.model["fps"]))
             while not cancel.is_set() and time.monotonic() < deadline:
                 if generation != self.lab.generation or self.lab.mode != "policy":
                     return
@@ -591,6 +595,12 @@ class PolicyRunner:
                 capture = self.lab.camera.latest_timed_jpeg(
                     camera, max_age=max(0.15, 2 / self.model["fps"])
                 )
+                camera_stamps.append(capture["captured_monotonic"])
+                if (
+                    len(camera_stamps) == camera_stamps.maxlen
+                    and len(set(camera_stamps)) < len(camera_stamps) * 0.9
+                ):
+                    raise ValueError("Policy camera fell below the trained frame rate")
                 positions = dict(self.lab.positions)
                 if set(positions) != set(JOINTS) or time.monotonic() - self.last_health > 0.15:
                     raise ValueError("Fresh full-arm encoder observations are unavailable")

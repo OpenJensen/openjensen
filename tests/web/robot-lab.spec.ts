@@ -40,6 +40,7 @@ function initialStatus(calibrated = false): any {
       device_registry: true,
       device_removal: true,
       run_policy: true,
+      policy_install: true,
       partial_control: true,
       move_to_middle: true,
       mapping_verification: true,
@@ -108,6 +109,7 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin', 
         description: 'Leader controller',
       },
     ] as any[],
+    projectModels: [] as any[],
     removedDevices: [] as any[],
     removeDeviceError: null as string | null,
     writes: [] as { path: string; body: any }[],
@@ -596,6 +598,9 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin', 
       return route.fulfill({ json: installedModules.filter((item) => ['datasets', 'robot-lab'].includes(item.id)) });
     if (path === '/api/v1/projects')
       return route.fulfill({ json: ['alpha', 'beta'].map((id) => ({ id, name: `Robot ${id}`, created_at: stamp })) });
+    if (/\/api\/v1\/projects\/[^/]+\/artifacts$/.test(path)) return route.fulfill({ json: state.projectModels });
+    if (/\/robot-lab\/policies\/[^/]+\/install$/.test(path))
+      return route.fulfill({ status: 201, json: { installed_policy_id: 'pen' } });
     if (path === '/api/v1/policy-options')
       return route.fulfill({
         json: { runtimes: [], sources: [], training_models: [], training_methods: [], default_training_method: 'full' },
@@ -2707,5 +2712,40 @@ test('Run policy requires a native preflight and attended start, then renews onl
   await page.getByRole('button', { name: 'Stop arm and disable torque' }).click();
   await expect.poll(() => state.status.session.mode).toBe('idle');
   await expect(run).toBeDisabled();
+  expect(state.errors).toEqual([]);
+});
+
+test('Run policy installs a project model without loading or starting hardware', async ({ page }) => {
+  const state = await fixture(page, true, 'Darwin', false);
+  state.projectModels = [
+    {
+      id: 'native-act',
+      project_id: 'alpha',
+      job_id: 'training-one',
+      label: 'Pen ACT imported',
+      format: 'training_checkpoint',
+      metadata: { architecture: 'act', training_backend: 'lerobot', reload_verified: true },
+    },
+  ];
+  await page
+    .getByRole('navigation', { name: 'Robot Lab tabs' })
+    .getByRole('button', { name: 'Run policy', exact: true })
+    .click();
+  await page.getByText('Install from Models', { exact: true }).click();
+  await expect(page.getByRole('combobox', { name: 'Project model', exact: true })).toHaveValue('native-act');
+  await page.getByLabel('Training FPS, if missing from the model').fill('13');
+  await page.getByRole('checkbox', { name: /If the model has no saved units/ }).check();
+  await page.getByRole('button', { name: 'Install policy on USB computer', exact: true }).click();
+  await expect
+    .poll(() => state.writes.filter((entry) => entry.path.endsWith('/policies/native-act/install')).length)
+    .toBe(1);
+  expect(state.writes.find((entry) => entry.path.endsWith('/policies/native-act/install'))?.body).toEqual({
+    name: 'Pen ACT imported',
+    fps: 13,
+    confirm_so101_units: true,
+  });
+  expect(writes(state, '/policy/load')).toEqual([]);
+  expect(writes(state, '/control/start')).toEqual([]);
+  expect(writes(state, '/policy/start')).toEqual([]);
   expect(state.errors).toEqual([]);
 });

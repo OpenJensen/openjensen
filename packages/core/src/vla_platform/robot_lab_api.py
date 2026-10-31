@@ -15,6 +15,7 @@ from pydantic import (
 )
 
 from vla_platform.robot_lab_bridge import RobotLabError, safe_id, strict_json
+from vla_platform.robot_policy_install import PolicyInstallRequest, install_artifact
 
 router = APIRouter(prefix="/api/v1", tags=["Robot Lab"])
 
@@ -366,3 +367,13 @@ async def import_recording(project_id: str, dataset_id: str, request: Request):
         )
     except RobotLabError as exc:
         raise HTTPException(exc.status, str(exc)) from None
+
+
+@router.post("/projects/{project_id}/robot-lab/policies/{artifact_id}/install", status_code=201)
+async def install_project_policy(
+    project_id: str, artifact_id: str, payload: PolicyInstallRequest, request: Request
+):
+    try:
+        return await install_artifact(request.app, project_id, artifact_id, payload)
+    except RobotLabError as error:
+        raise HTTPException(error.status, str(error)) from None

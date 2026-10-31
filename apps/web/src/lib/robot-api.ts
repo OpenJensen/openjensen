@@ -58,7 +58,7 @@ export type CalibrationDocument = {
   calibration: Record<RobotJoint, MotorCalibration>;
 };
 export type RobotPolicyState = {
-  phase: 'idle' | 'loading' | 'ready' | 'checking' | 'running' | 'error';
+  phase: 'idle' | 'loading' | 'ready' | 'installing' | 'checking' | 'running' | 'error';
   policy_id: string | null;
   name: string | null;
   error: string | null;
@@ -118,6 +118,7 @@ export type RobotStatus = {
     persistent_diagnostics?: boolean;
     agent_control?: boolean;
     run_policy?: boolean;
+    policy_install?: boolean;
     lerobot_position_control?: boolean;
     large_joint_steps?: boolean;
     arm_readiness?: boolean;

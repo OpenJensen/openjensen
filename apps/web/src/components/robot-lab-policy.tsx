@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { robotApi, robotJoints } from '@/lib/robot-api';
+import { RobotLabPolicyInstall } from './robot-lab-policy-install';
 import { Heading, Notice } from './robot-lab-shared';
 import type { RobotLabState } from './robot-lab-state';
 
@@ -54,6 +55,13 @@ export function RobotLabPolicy({ lab }: { lab: RobotLabState }) {
                 ))}
               </select>
             </label>
+            <RobotLabPolicyInstall
+              lab={lab}
+              installed={(id) => {
+                setSelected(id);
+                void catalog.refetch();
+              }}
+            />
             <label>
               Installed policy
               <select

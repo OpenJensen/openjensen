@@ -9,9 +9,14 @@ import os
 import sys
 from pathlib import Path
 
+from policy_contract import validate_act_config, validate_processors
+
 
 def main():
     output = sys.stdout
+    checkpoint, device = Path(sys.argv[1]), sys.argv[2]
+    validate_processors(checkpoint)
+    validate_act_config(checkpoint)
     os.environ.update(HF_HUB_OFFLINE="1", TRANSFORMERS_OFFLINE="1")
     with contextlib.redirect_stdout(sys.stderr):
         import numpy as np
@@ -21,7 +26,6 @@ def main():
         from lerobot.policies.factory import make_pre_post_processors
         from PIL import Image
 
-        checkpoint, device = Path(sys.argv[1]), sys.argv[2]
         torch.set_num_threads(2)
         config = PreTrainedConfig.from_pretrained(checkpoint, local_files_only=True)
         config.device = device

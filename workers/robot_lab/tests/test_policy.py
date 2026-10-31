@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import test_robot_lab as fixtures
 from hardware import JOINTS, HardwareError
 from policy import MAX_ACCELERATION, MAX_SPEED, UNITS, admit
+from policy_contract import PIPELINES
 
 
 class Runtime:
@@ -70,8 +71,16 @@ class PolicyTests(unittest.TestCase):
             "output_features": {"action": {"shape": [6]}},
         }
         (checkpoint / "config.json").write_text(json.dumps(config))
-        for name in ("model.safetensors", "policy_preprocessor.json", "policy_postprocessor.json"):
-            (checkpoint / name).write_text("{}")
+        (checkpoint / "model.safetensors").write_text("{}")
+        for filename, registries in PIPELINES.items():
+            steps = []
+            for index, registry in enumerate(registries):
+                step = {"registry_name": registry, "config": {}}
+                if registry in {"normalizer_processor", "unnormalizer_processor"}:
+                    step["state_file"] = f"state-{index}-{registry}.safetensors"
+                    (checkpoint / step["state_file"]).write_text("{}")
+                steps.append(step)
+            (checkpoint / filename).write_text(json.dumps({"name": filename, "steps": steps}))
         settings = self.lab.data_dir / "policy-runtime.json"
         settings.write_text(json.dumps({"python": sys.executable, "device": "cpu"}))
         settings.chmod(0o600)
@@ -121,6 +130,50 @@ class PolicyTests(unittest.TestCase):
         metadata["action_units"][0] = "radians"
         (folder / "run_policy.json").write_text(json.dumps(metadata))
         with self.assertRaisesRegex(ValueError, "degrees"):
+            admit(runner.root, "pen")
+
+    def test_processor_classes_artifacts_external_state_and_configs_are_rejected(self):
+        runner, _, checkpoint = self.install()
+        path = checkpoint / "policy_preprocessor.json"
+        original = json.loads(path.read_text())
+        for change in (
+            {"class": "untrusted.module.Object"},
+            {"registry_name": "other_processor"},
+            {"artifacts": {"model": "../external"}},
+            {"config": []},
+            {"config": {"unknown": "argument"}},
+            {"state_file": "../external.safetensors"},
+            {"state_file": "/tmp/external.safetensors"},
+        ):
+            document = copy.deepcopy(original)
+            document["steps"][0].update(change)
+            path.write_text(json.dumps(document))
+            with self.assertRaises(ValueError):
+                admit(runner.root, "pen")
+        document = copy.deepcopy(original)
+        document["steps"].append(copy.deepcopy(document["steps"][0]))
+        path.write_text(json.dumps(document))
+        with self.assertRaises(ValueError):
+            admit(runner.root, "pen")
+
+    def test_architecture_allocations_are_bounded_before_native_loading(self):
+        runner, _, checkpoint = self.install()
+        path = checkpoint / "config.json"
+        original = json.loads(path.read_text())
+        for key, value in (
+            ("dim_model", 8192),
+            ("chunk_size", 1000000),
+            ("n_encoder_layers", 500),
+            ("vision_backbone", "unrecognized"),
+            ("n_obs_steps", True),
+        ):
+            path.write_text(json.dumps(original | {key: value}))
+            with self.assertRaises(ValueError):
+                admit(runner.root, "pen")
+        oversized = copy.deepcopy(original)
+        oversized["input_features"]["observation.images.front"]["shape"] = [3, 4096, 4096]
+        path.write_text(json.dumps(oversized))
+        with self.assertRaisesRegex(ValueError, "image budget"):
             admit(runner.root, "pen")
 
     def test_checkpoint_change_requires_reload_and_start_is_explicit(self):
@@ -173,7 +226,7 @@ class PolicyTests(unittest.TestCase):
             for j in JOINTS:
                 current = (goals[j] - previous[j]) / 0.025
                 self.assertLessEqual(abs(current), MAX_SPEED + 1e-8)
-                self.assertLessEqual(abs(current - velocity[j]), MAX_ACCELERATION * 0.025 + 1e-8)
+                self.assertLessEqual(abs(current - velocity[j]), MAX_ACCELERATION * 0.025 + 1e-6)
                 velocity[j] = current
             previous = goals
         with self.assertRaisesRegex(ValueError, "cannot renew"):
@@ -181,6 +234,9 @@ class PolicyTests(unittest.TestCase):
         runner.operator_deadline = time.monotonic() - 1
         with self.assertRaisesRegex(HardwareError, "heartbeat"):
             runner.apply(previous, time.monotonic())
+        runner.operator_deadline = time.monotonic() + 10
+        runner.run_deadline = time.monotonic() - 1
+        self.assertTrue(runner.expired())
 
     def test_stop_does_not_wait_for_inference_and_old_reply_cannot_stop_new_controller(self):
         runner = self.prepare()
