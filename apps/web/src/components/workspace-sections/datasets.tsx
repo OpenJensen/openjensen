@@ -532,7 +532,7 @@ export default function DatasetsSection() {
                     )
                   }
                 />
-                {selectedJob.result && !selectedJob.request.library_id && (
+                {selectedJob.result && (
                   <DatasetExplorer
                     key={`explorer-${selectedJob.id}`}
                     job={selectedJob}
