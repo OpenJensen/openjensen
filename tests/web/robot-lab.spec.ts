@@ -39,6 +39,8 @@ function initialStatus(calibrated = false): any {
       calibration_transfer: true,
       device_registry: true,
       device_removal: true,
+      run_policy: true,
+      policy_install: true,
       partial_control: true,
       move_to_middle: true,
       mapping_verification: true,
@@ -107,6 +109,7 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin', 
         description: 'Leader controller',
       },
     ] as any[],
+    projectModels: [] as any[],
     removedDevices: [] as any[],
     removeDeviceError: null as string | null,
     writes: [] as { path: string; body: any }[],
@@ -147,6 +150,55 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin', 
     if (request.method() === 'POST') state.writes.push({ path, body });
     if (path.startsWith('/api/v1/robot-lab/')) {
       const action = path.slice('/api/v1/robot-lab'.length);
+      if (action === '/policy/catalog')
+        return route.fulfill({
+          json: {
+            policies: [
+              {
+                id: 'pen',
+                name: 'Pen ACT',
+                compatible: true,
+                message: 'Native checkpoint',
+                fps: 13,
+                camera_key: 'observation.images.front',
+                image_shape: [3, 480, 640],
+              },
+            ],
+            runtime: { configured: true, device: 'cpu', message: 'Configured' },
+            state: state.status.policy,
+          },
+        });
+      if (action === '/policy/load') {
+        state.status.policy = {
+          phase: 'ready',
+          policy_id: 'pen',
+          name: 'Pen ACT',
+          error: null,
+          fps: 13,
+          steps: 0,
+          inference_ms: null,
+          preflight: null,
+          device: 'cpu',
+          limits: {},
+        };
+        return route.fulfill({ json: state.status });
+      }
+      if (action === '/policy/preflight') {
+        state.status.policy.preflight = {
+          passed: true,
+          camera_index: body.camera_index,
+          measured_fps: 13,
+          mean_latency_ms: 20,
+          message: 'Camera and inference meet the frame rate',
+        };
+        return route.fulfill({ json: state.status });
+      }
+      if (action === '/policy/start') {
+        state.status.policy.phase = 'running';
+        state.status.session.mode = 'policy';
+        return route.fulfill({ json: state.status });
+      }
+      if (action === '/policy/heartbeat') return route.fulfill({ json: state.status });
       if (action === '/status')
         return state.statusFailures ? route.abort('failed') : route.fulfill({ json: state.status });
       if (action === '/devices/remove' || action === '/devices/restore') {
@@ -546,6 +598,9 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin', 
       return route.fulfill({ json: installedModules.filter((item) => ['datasets', 'robot-lab'].includes(item.id)) });
     if (path === '/api/v1/projects')
       return route.fulfill({ json: ['alpha', 'beta'].map((id) => ({ id, name: `Robot ${id}`, created_at: stamp })) });
+    if (/\/api\/v1\/projects\/[^/]+\/artifacts$/.test(path)) return route.fulfill({ json: state.projectModels });
+    if (/\/robot-lab\/policies\/[^/]+\/install$/.test(path))
+      return route.fulfill({ status: 201, json: { installed_policy_id: 'pen' } });
     if (path === '/api/v1/policy-options')
       return route.fulfill({
         json: { runtimes: [], sources: [], training_models: [], training_methods: [], default_training_method: 'full' },
@@ -633,10 +688,10 @@ test('motor IDs require a fresh isolation acknowledgement for every motor', asyn
   expect(writes(state, '/control/start')).toEqual([]);
 });
 
-test('device library has three main tabs and saves names independently of roles', async ({ page }, testInfo) => {
+test('device library has four main tabs and saves names independently of roles', async ({ page }, testInfo) => {
   const state = await fixture(page, false, 'Darwin', false);
   const tabs = page.getByRole('navigation', { name: 'Robot Lab tabs' });
-  await expect(tabs.getByRole('button')).toHaveCount(3);
+  await expect(tabs.getByRole('button')).toHaveCount(4);
   await expect(page.getByRole('combobox', { name: 'Devices', exact: true })).toHaveCount(0);
   await expect(page.getByTestId('device-arm-a')).toContainText('Motor IDs');
   await page.getByTestId('device-arm-a').click();
@@ -2617,4 +2672,80 @@ test('recording file work prevents overlapping dataset creation', async ({ page 
   state.status.recording.saving = false;
   await expect(page.getByRole('button', { name: 'Create recording dataset', exact: true })).toBeEnabled();
   expect(writes(state, '/recording/start')).toEqual([]);
+});
+
+test('Run policy requires a native preflight and attended start, then renews only policy authority', async ({
+  page,
+}, testInfo) => {
+  const state = await fixture(page, true, 'Darwin', false);
+  await page
+    .getByRole('navigation', { name: 'Robot Lab tabs' })
+    .getByRole('button', { name: 'Run policy', exact: true })
+    .click();
+  const run = page.getByRole('button', { name: 'Run policy', exact: true }).last();
+  await expect(run).toBeDisabled();
+  await page.getByRole('button', { name: 'Load and check policy', exact: true }).click();
+  expect(writes(state, '/control/start')).toEqual([]);
+  expect(writes(state, '/policy/start')).toEqual([]);
+  await page.getByRole('button', { name: 'Check camera and inference rate', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Enable policy control', exact: true })).toBeDisabled();
+  await page.getByRole('checkbox', { name: /I am present; the arm is secured/ }).check();
+  await page.getByRole('button', { name: 'Enable policy control', exact: true }).click();
+  expect(writes(state, '/control/start').at(-1)?.body).toMatchObject({
+    mode: 'manual',
+    move_to_middle: false,
+    joints,
+  });
+  expect(writes(state, '/policy/start')).toEqual([]);
+  await expect(run).toBeEnabled();
+  await run.click();
+  await expect.poll(() => writes(state, '/policy/heartbeat').length).toBeGreaterThan(0);
+  expect(writes(state, '/policy/start').at(-1)?.body).toEqual({
+    confirm: 'RUN POLICY',
+    operator_present: true,
+    workspace_clear: true,
+    camera_index: 0,
+    duration_seconds: 10,
+    expected_generation: 1,
+  });
+  await page.screenshot({ path: testInfo.outputPath('run-policy.png'), fullPage: true });
+  await page.getByRole('button', { name: 'Stop arm and disable torque' }).click();
+  await expect.poll(() => state.status.session.mode).toBe('idle');
+  await expect(run).toBeDisabled();
+  expect(state.errors).toEqual([]);
+});
+
+test('Run policy installs a project model without loading or starting hardware', async ({ page }) => {
+  const state = await fixture(page, true, 'Darwin', false);
+  state.projectModels = [
+    {
+      id: 'native-act',
+      project_id: 'alpha',
+      job_id: 'training-one',
+      label: 'Pen ACT imported',
+      format: 'training_checkpoint',
+      metadata: { architecture: 'act', training_backend: 'lerobot', reload_verified: true },
+    },
+  ];
+  await page
+    .getByRole('navigation', { name: 'Robot Lab tabs' })
+    .getByRole('button', { name: 'Run policy', exact: true })
+    .click();
+  await page.getByText('Install from Models', { exact: true }).click();
+  await expect(page.getByRole('combobox', { name: 'Project model', exact: true })).toHaveValue('native-act');
+  await page.getByLabel('Training FPS, if missing from the model').fill('13');
+  await page.getByRole('checkbox', { name: /If the model has no saved units/ }).check();
+  await page.getByRole('button', { name: 'Install policy on USB computer', exact: true }).click();
+  await expect
+    .poll(() => state.writes.filter((entry) => entry.path.endsWith('/policies/native-act/install')).length)
+    .toBe(1);
+  expect(state.writes.find((entry) => entry.path.endsWith('/policies/native-act/install'))?.body).toEqual({
+    name: 'Pen ACT imported',
+    fps: 13,
+    confirm_so101_units: true,
+  });
+  expect(writes(state, '/policy/load')).toEqual([]);
+  expect(writes(state, '/control/start')).toEqual([]);
+  expect(writes(state, '/policy/start')).toEqual([]);
+  expect(state.errors).toEqual([]);
 });

@@ -143,7 +143,13 @@ class RobotLabBridge:
     async def request(self, method, path, *, payload=None, query=None, image=False):
         config = self.config()
         # Episode compression and final metadata can exceed an ordinary device read.
-        seconds = 80 if path in {"recording/episode/save", "recording/finish"} else 30
+        seconds = (
+            120
+            if path == "policy/load"
+            else 80
+            if path in {"recording/episode/save", "recording/finish"}
+            else 30
+        )
         try:
             async with (
                 asyncio.timeout(seconds + 5),

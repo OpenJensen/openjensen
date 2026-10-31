@@ -614,3 +614,73 @@ def test_invalid_guided_recording_settings_never_contact_hardware(tmp_path, chan
             == 422
         )
     asyncio.run(companion.close())
+
+
+@pytest.mark.parametrize(
+    ("path", "payload"),
+    [
+        ("policy/load", {"policy_id": "../escape"}),
+        ("policy/load", {"policy_id": "pen", "python": "/tmp/untrusted"}),
+        ("policy/preflight", {"camera_index": True}),
+        ("policy/heartbeat", {"expected_generation": True}),
+        (
+            "policy/start",
+            {
+                "confirm": "RUN POLICY",
+                "operator_present": False,
+                "workspace_clear": True,
+                "camera_index": 0,
+                "duration_seconds": 10,
+                "expected_generation": 42,
+            },
+        ),
+        (
+            "policy/start",
+            {
+                "confirm": "RUN POLICY",
+                "operator_present": True,
+                "workspace_clear": True,
+                "camera_index": 0,
+                "duration_seconds": 121,
+                "expected_generation": 42,
+            },
+        ),
+        ("policy/stop", {"unexpected": True}),
+    ],
+)
+def test_policy_routes_reject_invalid_browser_authority_before_proxy(tmp_path, path, payload):
+    connection(tmp_path)
+    companion = bridge(tmp_path, lambda _: pytest.fail("Invalid policy request reached hardware"))
+    with browser(tmp_path, companion) as client:
+        assert client.post("/api/v1/robot-lab/" + path, json=payload).status_code == 422
+    asyncio.run(companion.close())
+
+
+def test_policy_catalog_load_and_explicit_start_are_finite_proxy_routes(tmp_path):
+    connection(tmp_path)
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        return httpx.Response(200, json={"ok": True})
+
+    companion = bridge(tmp_path, handler)
+    with browser(tmp_path, companion) as client:
+        assert client.get("/api/v1/robot-lab/policy/catalog").status_code == 200
+        assert (
+            client.post("/api/v1/robot-lab/policy/load", json={"policy_id": "pen"}).status_code
+            == 200
+        )
+        assert calls[-1].extensions["timeout"]["read"] == 120
+        payload = {
+            "confirm": "RUN POLICY",
+            "operator_present": True,
+            "workspace_clear": True,
+            "camera_index": 0,
+            "duration_seconds": 10,
+            "expected_generation": 42,
+        }
+        assert client.post("/api/v1/robot-lab/policy/start", json=payload).status_code == 200
+        assert json.loads(calls[-1].content) == payload
+        assert client.post("/api/v1/robot-lab/policy/arbitrary", json={}).status_code == 404
+    asyncio.run(companion.close())

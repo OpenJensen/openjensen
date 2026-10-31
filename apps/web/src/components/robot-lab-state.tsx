@@ -524,7 +524,11 @@ export function useRobotLab() {
       if (localCalibrationRef.current || inFlight || stopped) return;
       inFlight = true;
       try {
-        const next = await robotApi.heartbeat();
+        const current = client.getQueryData<RobotStatus>(statusKey)?.session;
+        const next =
+          current?.mode === 'policy' && current.generation !== undefined
+            ? await robotApi.policyHeartbeat(current.generation)
+            : await robotApi.heartbeat(current?.generation);
         if (!stopped && mounted.current) setReconnecting(false);
         if (!stopped && mounted.current && next.session?.mode === 'idle') {
           ownedRef.current = false;

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import importlib.metadata
 import importlib.util
@@ -50,6 +51,8 @@ from lerobot_control import (
     prepare_single_turn_feedback,
 )
 from motion import MiddleMotion, RestMotion, control_limits, middle_targets, step_target
+from policy import PolicyRunner
+from policy_install import install_archive
 from recording import MAX_RECORDING_FPS, CaptureRate, Collection
 from rest_position import RestPositions
 from verification import (
@@ -287,6 +290,7 @@ class RobotLab:
         self.finished = threading.Event()
         self.threads = []
         self.agent = AgentExecutor(self)
+        self.policy = PolicyRunner(self)
         self.last_raw = {}
         self.last_fault = None
         self.motor_alarms = {}
@@ -557,6 +561,8 @@ class RobotLab:
         return value
 
     def _idle(self):
+        if self.policy.phase in {"loading", "checking", "installing"}:
+            raise RequestError("Finish policy preparation before opening hardware")
         if (
             self.mode != "idle"
             or self.bus is not None
@@ -672,6 +678,8 @@ class RobotLab:
                 "guided_recording": True,
                 "auto_recording_fps": True,
                 "agent_control": hardware,
+                "run_policy": hardware,
+                "policy_install": True,
                 "move_to_middle": hardware,
                 "middle_tolerance": hardware,
                 "partial_control": hardware,
@@ -682,6 +690,7 @@ class RobotLab:
             },
             "diagnostics": self.diagnostics.snapshot(),
             "agent_control": self.agent.status(),
+            "policy": self.policy.snapshot(),
             "session": {
                 "generation": self.generation,
                 "mode": self.mode,
@@ -690,9 +699,11 @@ class RobotLab:
                 "role": self.role,
                 "positions": dict(self.positions),
                 "active_joints": list(self.calibration)
-                if self.mode in {"manual", "leader", "handguide", "agent"}
+                if self.mode in {"manual", "leader", "handguide", "agent", "policy"}
                 else [],
-                "targets": dict(self.action) if self.mode in {"manual", "leader", "agent"} else {},
+                "targets": dict(self.action)
+                if self.mode in {"manual", "leader", "agent", "policy"}
+                else {},
                 "joint_limits": control_limits(self.calibration) if self.mode == "manual" else {},
                 "slider_targets": dict(self.action) if self.mode == "manual" else {},
                 "torque_limits": dict(self.controller.torque_limits) if self.controller else {},
@@ -1546,7 +1557,7 @@ class RobotLab:
         if not isinstance(payload, dict) or set(payload) - {"expected_generation"}:
             raise RequestError("Invalid manual heartbeat")
         with self.lifecycle_lock:
-            if self.mode == "agent":
+            if self.mode in {"agent", "policy"}:
                 raise RequestError("Manual heartbeat cannot renew AI controller authority")
             if "expected_generation" in payload and (
                 type(payload["expected_generation"]) is not int
@@ -1719,6 +1730,8 @@ class RobotLab:
                 self.writer.episode_active = False
             if self.collection:
                 self.collection.pause(time.monotonic(), "Control stopped. Collection paused")
+        # Generation is revoked before waiting on policy state or serial I/O.
+        self.policy.revoke(reason)
         errors = []
         if verification is not None:
             try:
@@ -2193,6 +2206,18 @@ class RobotLab:
             control = self.controller
             if generation != self.generation:
                 return
+            if mode == "policy":
+                if control is None:
+                    raise HardwareError("Policy position controller is unavailable")
+                goals = self.policy.apply(positions, time.monotonic())
+                if generation != self.generation or self.mode != "policy":
+                    return
+                sent = control.command(goals)
+                if generation != self.generation:
+                    return
+                self.commanded_raw.update(sent)
+                self.action.update(goals)
+                return
             if mode == "manual":
                 if control is None:
                     raise HardwareError("LeRobot position controller is unavailable")
@@ -2365,6 +2390,9 @@ class RobotLab:
             if mode == "agent":
                 if self.agent.expired():
                     reason = "AI operator or execution lease expired; torque disabled"
+            elif mode == "policy":
+                if self.policy.expired():
+                    reason = "Policy operator heartbeat or run duration expired; torque disabled"
             elif mode not in {"idle", "calibration"} and time.monotonic() - self.heartbeat > (
                 10 if mode in {"setup", "verification"} else 2
             ):
@@ -2382,6 +2410,7 @@ class RobotLab:
     def close(self):
         self.finished.set()
         self.stop("Companion shutting down")
+        self.policy.close()
         self.camera.close()
         if self.recording_thread:
             self.recording_thread.join(timeout=5)
@@ -2451,6 +2480,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(
                     200, lab.calibration_export(query["robot_id"][0], query["role"][0])
                 )
+            if path == "/v1/policy/catalog":
+                return self._send(200, lab.policy.catalog())
             if path == "/v1/devices":
                 return self._send(200, lab.devices())
             if path == "/v1/camera.jpg":
@@ -2459,7 +2490,8 @@ class Handler(BaseHTTPRequestHandler):
                 )
                 image = (
                     lab.camera.cached_jpeg(index)
-                    if lab.writer and not lab.writer.finalized and lab.camera_index == index
+                    if lab.mode == "policy"
+                    or (lab.writer and not lab.writer.finalized and lab.camera_index == index)
                     else lab.camera.jpeg(index)
                 )
                 return self._send(200, image, "image/jpeg")
@@ -2502,6 +2534,21 @@ class Handler(BaseHTTPRequestHandler):
         if not self._authenticate():
             return
         try:
+            if urlsplit(self.path).path == "/v1/policy/install":
+                if (
+                    self.headers.get("Transfer-Encoding")
+                    or self.headers.get("Content-Type") != "application/x-tar"
+                ):
+                    raise RequestError("Install one complete policy TAR with an explicit length")
+                header = self.headers.get("X-OpenJensen-Policy", "")
+                if len(header) > 8192:
+                    raise RequestError("Policy installation metadata is oversized")
+                descriptor = agent_json(base64.b64decode(header, validate=True))
+                length = int(self.headers.get("Content-Length", "0"))
+                self.connection.settimeout(120)
+                return self._send(
+                    200, install_archive(self.server.lab, self.rfile, length, descriptor)
+                )
             length = int(self.headers.get("Content-Length", "0"))
             if not 0 <= length <= 16_384:
                 raise RequestError("Request body too large")
@@ -2522,6 +2569,16 @@ class Handler(BaseHTTPRequestHandler):
                 "release",
             }:
                 result = lab.agent.command(path.rsplit("/", 1)[-1], payload)
+            elif path == "/v1/policy/load":
+                result = lab.policy.load(payload)
+            elif path == "/v1/policy/preflight":
+                result = lab.policy.preflight(payload)
+            elif path == "/v1/policy/start":
+                result = lab.policy.start(payload)
+            elif path == "/v1/policy/heartbeat":
+                result = lab.policy.heartbeat(payload)
+            elif path == "/v1/policy/stop":
+                result = lab.stop()
             elif path == "/v1/probe":
                 result = lab.probe(payload)
             elif path == "/v1/setup/motor":
