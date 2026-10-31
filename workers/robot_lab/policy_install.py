@@ -11,7 +11,7 @@ from pathlib import Path, PurePosixPath
 
 from hardware import JOINTS
 from policy import UNITS, admit
-from policy_contract import validate_act_config
+from policy_contract import SMOLVLM_ASSET_FILES, validate_policy_config
 
 MAX_ARCHIVE = 2 * 1024**3
 
@@ -37,6 +37,7 @@ def install_archive(lab, source, length, descriptor):
         "id",
         "name",
         "policy_type",
+        "offline_only",
         "fps",
         "camera_key",
         "joint_names",
@@ -45,19 +46,33 @@ def install_archive(lab, source, length, descriptor):
         "checkpoint",
         "source_manifest_sha256",
     }
+    offline = descriptor.get("offline_only", False) if isinstance(descriptor, dict) else False
     if (
         not isinstance(descriptor, dict)
         or set(descriptor) - allowed
         or type(descriptor.get("schema_version")) is not int
         or descriptor["schema_version"] != 1
         or not re.fullmatch(r"[A-Za-z0-9_-]{1,80}", str(descriptor.get("id", "")))
-        or descriptor.get("policy_type") != "act"
-        or descriptor.get("joint_names") != list(JOINTS)
-        or descriptor.get("state_units") != UNITS
-        or descriptor.get("action_units") != UNITS
+        or descriptor.get("policy_type") not in {"act", "smolvla"}
+        or type(offline) is not bool
+        or (
+            not offline
+            and (
+                descriptor.get("joint_names") != list(JOINTS)
+                or descriptor.get("state_units") != UNITS
+                or descriptor.get("action_units") != UNITS
+            )
+        )
         or descriptor.get("checkpoint") != "pretrained_model"
-        or type(descriptor.get("fps")) is not int
-        or not 1 <= descriptor["fps"] <= 40
+        or (
+            not offline
+            and (type(descriptor.get("fps")) is not int or not 1 <= descriptor["fps"] <= 40)
+        )
+        or (
+            offline
+            and descriptor.get("fps") is not None
+            and (type(descriptor["fps"]) is not int or not 1 <= descriptor["fps"] <= 240)
+        )
         or not re.fullmatch(r"[a-f0-9]{64}", str(descriptor.get("source_manifest_sha256", "")))
     ):
         raise ValueError(
@@ -126,9 +141,20 @@ def install_archive(lab, source, length, descriptor):
                     for prefix in ("checkpoint/pretrained_model/", "pretrained_model/"):
                         if relative.startswith(prefix):
                             basename = relative.removeprefix(prefix)
-                            if "/" in basename or not basename:
-                                raise ValueError("Native policy checkpoint must be flat")
+                            parts = PurePosixPath(basename).parts
+                            if not basename or (
+                                len(parts) != 1
+                                and (
+                                    len(parts) != 3
+                                    or parts[:2] != ("assets", "smolvlm")
+                                    or parts[2] not in SMOLVLM_ASSET_FILES
+                                )
+                            ):
+                                raise ValueError(
+                                    "Policy checkpoint has an unsupported nested asset"
+                                )
                             target = checkpoint / basename
+                            target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
                             break
                     checksum = hashlib.sha256()
                     output = target.open("xb") if target else None
@@ -176,13 +202,16 @@ def install_archive(lab, source, length, descriptor):
                 )
             if seen - {"policy/" + name for name in hashes} - directories:
                 raise ValueError("Unexpected policy archive directories")
-            config = validate_act_config(checkpoint)
+            config = validate_policy_config(checkpoint)
             images = [
-                k for k in config.get("input_features", {}) if k.startswith("observation.images.")
+                k
+                for k, value in config.get("input_features", {}).items()
+                if value.get("type") == "VISUAL"
+                or k.startswith(("observation.images.", "observation.image"))
             ]
-            if len(images) != 1 or descriptor.get("camera_key") not in {None, images[0]}:
+            if not images or descriptor.get("camera_key") not in {None, *images}:
                 raise ValueError("Policy requires one matching camera feature")
-            saved = dict(descriptor, camera_key=images[0])
+            saved = dict(descriptor, camera_key=descriptor.get("camera_key") or images[0])
             saved.pop("id")
             (staging / "run_policy.json").write_text(json.dumps(saved, allow_nan=False) + "\n")
             os.chmod(staging / "run_policy.json", 0o600)

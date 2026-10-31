@@ -41,6 +41,8 @@ function initialStatus(calibrated = false): any {
       device_removal: true,
       run_policy: true,
       policy_install: true,
+      policy_preview: true,
+      native_policy_adapters: true,
       partial_control: true,
       move_to_middle: true,
       mapping_verification: true,
@@ -109,6 +111,8 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin', 
         description: 'Leader controller',
       },
     ] as any[],
+    policyOffline: false,
+    policyKind: 'act',
     projectModels: [] as any[],
     removedDevices: [] as any[],
     removeDeviceError: null as string | null,
@@ -156,6 +160,9 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin', 
             policies: [
               {
                 id: 'pen',
+                policy_type: state.policyKind,
+                task_required: state.policyKind === 'smolvla',
+                offline_only: state.policyOffline,
                 name: 'Pen ACT',
                 compatible: true,
                 message: 'Native checkpoint',
@@ -172,6 +179,9 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin', 
         state.status.policy = {
           phase: 'ready',
           policy_id: 'pen',
+          policy_type: state.policyKind,
+          task_required: state.policyKind === 'smolvla',
+          offline_only: state.policyOffline,
           name: 'Pen ACT',
           error: null,
           fps: 13,
@@ -180,6 +190,17 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin', 
           preflight: null,
           device: 'cpu',
           limits: {},
+        };
+        return route.fulfill({ json: state.status });
+      }
+      if (action === '/policy/preview') {
+        state.status.policy.preview = {
+          action: [1, 2, 3, 4, 5, 6],
+          input_state: body.state ?? [0, 0, 0, 0, 0, 0],
+          policy_id: 'pen',
+          source: body.synthetic ? 'Synthetic test inputs' : 'Uploaded observation',
+          inference_ms: 25,
+          executed: false,
         };
         return route.fulfill({ json: state.status });
       }
@@ -615,7 +636,7 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin', 
   return state;
 }
 const tab = (page: Page, title: string) => {
-  if (['Teleoperate', 'Record', 'Devices'].includes(title))
+  if (['Teleoperate', 'Record', 'Devices', 'Run policy'].includes(title))
     return page
       .getByRole('navigation', { name: 'Robot Lab tabs' })
       .getByRole('button', { name: new RegExp(title === 'Teleoperate' ? 'Teleoperation' : title) });
@@ -626,7 +647,7 @@ const tab = (page: Page, title: string) => {
 };
 async function openTab(page: Page, title: string) {
   if (
-    !['Teleoperate', 'Record', 'Devices'].includes(title) &&
+    !['Teleoperate', 'Record', 'Devices', 'Run policy'].includes(title) &&
     !(await page.getByRole('navigation', { name: 'Device sections' }).isVisible())
   ) {
     await tab(page, 'Devices').click();
@@ -2733,6 +2754,7 @@ test('Run policy installs a project model without loading or starting hardware',
     .click();
   await page.getByText('Install from Models', { exact: true }).click();
   await expect(page.getByRole('combobox', { name: 'Project model', exact: true })).toHaveValue('native-act');
+  await page.getByRole('checkbox', { name: 'Offline inference only (no arm control)' }).uncheck();
   await page.getByLabel('Training FPS, if missing from the model').fill('13');
   await page.getByRole('checkbox', { name: /If the model has no saved units/ }).check();
   await page.getByRole('button', { name: 'Install policy on USB computer', exact: true }).click();
@@ -2743,8 +2765,57 @@ test('Run policy installs a project model without loading or starting hardware',
     name: 'Pen ACT imported',
     fps: 13,
     confirm_so101_units: true,
+    offline_only: false,
   });
   expect(writes(state, '/policy/load')).toEqual([]);
+  expect(writes(state, '/control/start')).toEqual([]);
+  expect(writes(state, '/policy/start')).toEqual([]);
+  expect(state.errors).toEqual([]);
+});
+
+test('Run policy previews an offline ACT observation without devices or motor authority', async ({ page }) => {
+  const state = await fixture(page, true, 'Darwin', false);
+  state.catalog = [];
+  state.portsConnected = false;
+  state.policyOffline = true;
+  await openTab(page, 'Run policy');
+  await page.getByRole('button', { name: 'Load and check policy', exact: true }).click();
+  await expect(page.getByLabel('Task instruction', { exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Try with test inputs', exact: true }).click();
+  await expect(page.getByText('Latest prediction · 25 ms · no movement')).toBeVisible();
+  expect(writes(state, '/policy/preview').at(-1)?.body).toEqual({ synthetic: true });
+  await page.getByText('Use an observation image and state', { exact: true }).click();
+  await page.getByLabel('Observation image', { exact: true }).setInputFiles({
+    name: 'observation.png',
+    mimeType: 'image/png',
+    buffer: pixel,
+  });
+  await page.getByLabel('State 1', { exact: true }).fill('12.5');
+  await page.getByRole('button', { name: 'Preview uploaded observation', exact: true }).click();
+  await expect.poll(() => writes(state, '/policy/preview').length).toBe(2);
+  expect(writes(state, '/policy/preview').at(-1)?.body).toEqual({
+    state: [12.5, 0, 0, 0, 0, 0],
+    jpeg: pixel.toString('base64'),
+  });
+  await expect(page.getByRole('button', { name: 'Enable policy control', exact: true })).toHaveCount(0);
+  expect(writes(state, '/control/start')).toEqual([]);
+  expect(writes(state, '/policy/start')).toEqual([]);
+  expect(state.errors).toEqual([]);
+});
+
+test('Run policy supplies a task only for the language-conditioned offline adapter', async ({ page }) => {
+  const state = await fixture(page, true, 'Darwin', false);
+  state.policyKind = 'smolvla';
+  state.policyOffline = true;
+  await openTab(page, 'Run policy');
+  await page.getByRole('button', { name: 'Load and check policy', exact: true }).click();
+  await page.getByLabel('Task instruction', { exact: true }).fill('Pick up the white pen.');
+  await page.getByRole('button', { name: 'Try with test inputs', exact: true }).click();
+  await expect.poll(() => writes(state, '/policy/preview').length).toBe(1);
+  expect(writes(state, '/policy/preview').at(-1)?.body).toEqual({
+    synthetic: true,
+    task: 'Pick up the white pen.',
+  });
   expect(writes(state, '/control/start')).toEqual([]);
   expect(writes(state, '/policy/start')).toEqual([]);
   expect(state.errors).toEqual([]);
