@@ -299,3 +299,26 @@ def test_trainer_joint_name_mismatches_are_rejected(tmp_path, key, change):
             {},
             PolicyInstallRequest(name="Pen", confirm_so101_units=True),
         )
+
+
+def test_offline_native_import_preserves_unknown_units_and_timing(tmp_path):
+    _, artifact = bundle(tmp_path, known=False)
+    value = _descriptor(
+        artifact, artifact.metadata, {}, PolicyInstallRequest(name="Offline", offline_only=True)
+    )
+    assert value["offline_only"] is True
+    assert value["fps"] is None and value["state_units"] is None and value["action_units"] is None
+    assert value["joint_names"] is None and value["id"].endswith("-offline")
+
+
+def test_smol_unknown_control_semantics_cannot_be_claimed_by_checkbox(tmp_path):
+    _, artifact = bundle(tmp_path, known=False)
+    artifact.metadata["architecture"] = "smolvla"
+    value = _descriptor(
+        artifact,
+        artifact.metadata,
+        {},
+        PolicyInstallRequest(name="Base", fps=13, confirm_so101_units=True),
+    )
+    assert value["offline_only"] is True
+    assert value["joint_names"] is None and value["action_units"] is None

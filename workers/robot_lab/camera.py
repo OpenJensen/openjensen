@@ -5,9 +5,7 @@ from __future__ import annotations
 import os
 import platform
 import re
-import shutil
 import struct
-import subprocess
 import threading
 import time
 from pathlib import Path
@@ -192,64 +190,12 @@ class CameraPool:
     def discover(self):
         # Inventory only: do not open every camera or compete with recording.
         if platform.system() == "Darwin":
-            executable = shutil.which("ffmpeg")
-            if executable:
-                result = subprocess.run(
-                    [
-                        executable,
-                        "-hide_banner",
-                        "-f",
-                        "avfoundation",
-                        "-list_devices",
-                        "true",
-                        "-i",
-                        "",
-                    ],
-                    capture_output=True,
-                    text=True,
-                    timeout=5,
-                )
-                cameras, video = [], False
-                for line in result.stderr.splitlines():
-                    if "AVFoundation video devices" in line:
-                        video = True
-                    elif "AVFoundation audio devices" in line:
-                        video = False
-                    elif video:
-                        match = re.search(r"\[(\d+)\] (.+)$", line)
-                        if match and not match.group(2).startswith("Capture screen"):
-                            cameras.append(
-                                {
-                                    "index": int(match.group(1)),
-                                    "name": match.group(2),
-                                    "width": 640,
-                                    "height": 480,
-                                    "verified": False,
-                                }
-                            )
-                if cameras:
-                    return cameras
-            # macOS system_profiler is a read-only inventory fallback. Its list
-            # order is not a verified AVFoundation index; preview verifies it.
-            import json
-
-            result = subprocess.run(
-                ["/usr/sbin/system_profiler", "SPCameraDataType", "-json"],
-                capture_output=True,
-                text=True,
-                timeout=8,
-            )
-            devices = json.loads(result.stdout).get("SPCameraDataType", [])
-            return [
-                {
-                    "index": index,
-                    "name": device.get("_name", f"Camera {index}"),
-                    "width": 640,
-                    "height": 480,
-                    "verified": False,
-                }
-                for index, device in enumerate(devices)
-            ]
+            # Enumerate in the capture process, using the same AVFoundation
+            # devices and unique-ID ordering as OpenCV. FFmpeg and
+            # system_profiler use different device sets and index orders.
+            if self.dispatcher is not None:
+                return self.dispatcher.call(macos_cameras, timeout=5)
+            return macos_cameras()
         return linux_cameras()
 
     def cached_jpeg(self, index=0):
@@ -329,3 +275,70 @@ def linux_cameras(sysfs=Path("/sys/class/video4linux"), devices=Path("/dev")):
             {"index": index, "name": name, "width": 640, "height": 480, "verified": False}
         )
     return sorted(output, key=lambda camera: camera["index"])
+
+
+def macos_cameras():
+    """Inventory only; do not open cameras or request camera authorization."""
+    return [
+        {
+            "index": index,
+            "name": name,
+            "unique_id": unique_id,
+            "width": 640,
+            "height": 480,
+            "verified": False,
+        }
+        for index, (name, unique_id) in enumerate(_avfoundation_devices()[: MAX_CAMERA_INDEX + 1])
+    ]
+
+
+def _avfoundation_devices():
+    """Match OpenCV's Video + Muxed device list and NSString uniqueID compare.
+
+    Native APIs are loaded lazily on macOS, so Linux needs no Apple libraries
+    or additional Python packages. No device is opened by this inventory.
+    """
+    import ctypes
+    from functools import cmp_to_key
+
+    objc = ctypes.CDLL("/usr/lib/libobjc.A.dylib")
+    foundation = ctypes.CDLL("/System/Library/Frameworks/AVFoundation.framework/AVFoundation")
+    objc.objc_getClass.argtypes = [ctypes.c_char_p]
+    objc.objc_getClass.restype = ctypes.c_void_p
+    objc.sel_registerName.argtypes = [ctypes.c_char_p]
+    objc.sel_registerName.restype = ctypes.c_void_p
+    address = ctypes.cast(objc.objc_msgSend, ctypes.c_void_p).value
+
+    def send(obj, selector, result=ctypes.c_void_p, types=(), args=()):
+        # Separate typed function pointers avoid mutating a shared msgSend
+        # signature while another camera request is running.
+        function = ctypes.CFUNCTYPE(result, ctypes.c_void_p, ctypes.c_void_p, *types)(address)
+        return function(obj, objc.sel_registerName(selector.encode("ascii")), *args)
+
+    def string(obj):
+        value = send(obj, "UTF8String", ctypes.c_char_p)
+        if value is None:
+            raise RuntimeError("Camera returned an unavailable native identifier")
+        return value.decode("utf-8")
+
+    pool = send(send(objc.objc_getClass(b"NSAutoreleasePool"), "alloc"), "init")
+    try:
+        cls = objc.objc_getClass(b"AVCaptureDevice")
+        devices = []
+        for media_type in ("AVMediaTypeVideo", "AVMediaTypeMuxed"):
+            media = ctypes.c_void_p.in_dll(foundation, media_type).value
+            array = send(cls, "devicesWithMediaType:", types=(ctypes.c_void_p,), args=(media,))
+            count = send(array, "count", ctypes.c_ulong)
+            if count > 128:
+                raise RuntimeError("Camera inventory exceeds the supported device limit")
+            for index in range(count):
+                device = send(array, "objectAtIndex:", types=(ctypes.c_ulong,), args=(index,))
+                devices.append((device, send(device, "uniqueID")))
+
+        def compare(left, right):
+            return send(left[1], "compare:", ctypes.c_long, (ctypes.c_void_p,), (right[1],))
+
+        devices.sort(key=cmp_to_key(compare))
+        return [(string(send(device, "localizedName")), string(uid)) for device, uid in devices]
+    finally:
+        send(pool, "drain", None)
