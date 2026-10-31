@@ -19,6 +19,7 @@ from vla_platform.lifecycle.service import Lifecycle
 from vla_platform.lifecycle.training_catalog import public_training_models
 from vla_platform.local_worker_registry import LocalWorkerRegistry
 from vla_platform.settings import Settings
+from vla_platform.storage import jobs
 
 
 def runtime(tmp_path, **changes):
@@ -153,7 +154,28 @@ def test_macos_discovery_and_setup_reuse_fixed_existing_env_without_install(tmp_
         assert checked["candidates"][0]["setup_supported"]
         assert checked["candidates"][0]["training_model_ids"] == ["act"]
         assert calls == []
-        adopted = client.post("/api/v1/compute-settings/local/setup")
+
+        async def existing_cloud_fixture(add):
+            async with client.app.state.execution.storage.engine.begin() as connection:
+                if add:
+                    await connection.execute(
+                        jobs.insert().values(
+                            id="ongoing-cloud-fixture",
+                            project_id="fixture",
+                            status="running",
+                            record={"fixture_only": True},
+                        )
+                    )
+                else:
+                    await connection.execute(
+                        jobs.delete().where(jobs.c.id == "ongoing-cloud-fixture")
+                    )
+
+        client.portal.call(existing_cloud_fixture, True)
+        try:
+            adopted = client.post("/api/v1/compute-settings/local/setup")
+        finally:
+            client.portal.call(existing_cloud_fixture, False)
         assert adopted.status_code == 202, adopted.text
         assert adopted.json()["status"] == "succeeded"
         checked = client.post("/api/v1/compute-settings/local/check").json()

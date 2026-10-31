@@ -186,14 +186,6 @@ class LocalWorkerSetup:
 
         if root is None:
             raise ValueError("The bundled native ACT worker is unavailable.")
-        async with self.lifecycle.execution.storage.engine.connect() as connection:
-            active = (
-                await connection.execute(
-                    select(jobs.c.id).where(jobs.c.status.in_(["queued", "running"])).limit(1)
-                )
-            ).first()
-        if active:
-            raise ValueError("Wait for active jobs before changing the local ACT runtime binding.")
         configure_existing(self.lifecycle.settings.data_dir)
         found = await self.discovery.check()
         ready = next(
