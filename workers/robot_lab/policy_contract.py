@@ -221,7 +221,10 @@ def _data_only(value):
             raise ValueError("SmolVLM assets cannot load custom code")
         if value.get("trust_remote_code") not in (None, False):
             raise ValueError("SmolVLM assets cannot trust remote code")
-        for item in value.values():
+        for key, item in value.items():
+            if isinstance(key, str) and key.endswith(("_file", "_files", "_path", "_paths")):
+                if key != "_name_or_path" or item not in (None, "", "None"):
+                    raise ValueError("SmolVLM assets cannot override fixed local data files")
             _data_only(item)
     elif isinstance(value, list):
         for item in value:

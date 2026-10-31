@@ -226,6 +226,45 @@ class SmolVLAContractTests(unittest.TestCase):
                     validate_smolvla_assets(self.checkpoint)
                 self.write_asset(name, original)
 
+    def test_inert_native_name_metadata_cannot_resolve_an_external_path(self):
+        for inert in (None, "", "None"):
+            self.write_asset("config.json", {**self.asset_config, "_name_or_path": inert})
+            validate_smolvla_assets(self.checkpoint)
+        self.write_asset("config.json", {**self.asset_config, "_name_or_path": "../../outside"})
+        with self.assertRaisesRegex(ValueError, "fixed local data files"):
+            validate_smolvla_assets(self.checkpoint)
+
+    def test_asset_metadata_cannot_override_tokenizer_or_processor_files(self):
+        for name in ("tokenizer_config.json", "processor_config.json", "preprocessor_config.json"):
+            original = json.loads((self.assets / name).read_text())
+            for key in (
+                "tokenizer_file",
+                "vocab_file",
+                "merges_file",
+                "added_tokens_file",
+                "special_tokens_map_file",
+                "tokenizer_config_file",
+                "chat_template_file",
+                "vocab_files",
+                "cache_path",
+                "additional_paths",
+            ):
+                for target in ("/private/outside.json", "../../outside.json"):
+                    with self.subTest(name=name, key=key, target=target):
+                        self.write_asset(name, {**original, key: target})
+                        with self.assertRaisesRegex(ValueError, "fixed local data files"):
+                            validate_smolvla_assets(self.checkpoint)
+            self.write_asset(name, original)
+        self.write_asset(
+            "tokenizer_config.json",
+            {
+                "tokenizer_class": "GPT2TokenizerFast",
+                "nested": {"tokenizer_file": "../../outside.json"},
+            },
+        )
+        with self.assertRaisesRegex(ValueError, "fixed local data files"):
+            validate_smolvla_assets(self.checkpoint)
+
     def test_native_backbone_dimensions_are_bounded_before_constructor(self):
         for section, key, value in (
             ("text_config", "num_hidden_layers", 10000),

@@ -128,6 +128,23 @@ class PolicyTests(unittest.TestCase):
         self.assertFalse(self.lab.torque)
         self.assertEqual(self.buses, [])
 
+    def test_uploaded_preview_accepts_explicit_null_camera_without_camera_access(self):
+        runner, _, _ = self.install()
+        runner.load({"policy_id": "pen"})
+        with patch.object(
+            self.lab.camera,
+            "capture_timed",
+            side_effect=AssertionError("camera access"),
+            create=True,
+        ):
+            result = runner.preview_prediction(
+                {"state": [0.0] * 6, "jpeg": "YQ==", "camera_index": None}
+            )
+        self.assertEqual(
+            result["policy"]["preview"]["source"], "Uploaded image and supplied model state"
+        )
+        self.assertEqual(self.buses, [])
+
     def test_unknown_units_and_fps_remain_offline_even_with_valid_weights(self):
         runner, folder, _ = self.install()
         path = folder / "run_policy.json"

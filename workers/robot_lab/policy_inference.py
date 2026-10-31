@@ -52,7 +52,9 @@ def main():
             config.vlm_model_name = str(assets)
             config.load_vlm_weights = False
             overrides["tokenizer_processor"] = {"tokenizer_name": str(assets)}
-        policy = Policy.from_pretrained(checkpoint, config=config, local_files_only=True)
+        policy = Policy.from_pretrained(
+            checkpoint, config=config, local_files_only=True, strict=True
+        )
         policy.to(device).eval()
         pre, post = make_pre_post_processors(
             policy.config,

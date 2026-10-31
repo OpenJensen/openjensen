@@ -426,7 +426,7 @@ class PolicyRunner:
                 Image.new("RGB", (256, 256)).save(buffer, "JPEG")
                 jpeg = base64.b64encode(buffer.getvalue()).decode()
                 source = "Synthetic zero-state and blank image"
-            elif "camera_index" in payload:
+            elif payload.get("camera_index") is not None:
                 camera = payload["camera_index"]
                 if type(camera) is not int or not 0 <= camera <= 63:
                     raise ValueError("Choose an available camera")
