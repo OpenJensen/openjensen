@@ -1,5 +1,6 @@
 """Fixed isolated CPU validator for complete bounded LeRobot v3 video datasets."""
 
+import io
 import json
 import math
 import re
@@ -294,6 +295,30 @@ def validate_demonstration_provenance(provenance, episodes):
         )
 
 
+def validate_image(value, feature, limits):
+    """Decode bounded embedded pixels; never resolve a dataset-supplied image path."""
+    from PIL import Image
+
+    require(
+        isinstance(value, dict)
+        and set(value) == {"bytes", "path"}
+        and value["path"] is None
+        and isinstance(value["bytes"], bytes)
+        and 0 < len(value["bytes"]) <= limits["max_decoded_bytes"],
+        "Camera image must contain bounded embedded bytes without an external path",
+    )
+    height, width, _ = feature["shape"]
+    with Image.open(io.BytesIO(value["bytes"])) as image:
+        require(
+            image.format in {"PNG", "JPEG"}
+            and image.size == (width, height)
+            and image.mode == "RGB"
+            and getattr(image, "n_frames", 1) == 1,
+            "Embedded camera image dimensions, format or channels differ from metadata",
+        )
+        image.load()
+
+
 def validate(root, limits):
     import pyarrow
 
@@ -307,8 +332,8 @@ def validate(root, limits):
         "Local training currently supports finalized LeRobot v3.0",
     )
     require(
-        info.get("data_path") == DATA and info.get("video_path") == VIDEO,
-        "Local training requires the standard v3 Parquet/video layout",
+        info.get("data_path") == DATA and info.get("video_path") in (None, VIDEO),
+        "Local training requires the standard v3 Parquet and optional video layout",
     )
     episodes_count, frames_count = info.get("total_episodes"), info.get("total_frames")
     require(
@@ -323,8 +348,32 @@ def validate(root, limits):
     require(integer(fps, 1) and fps <= 240, "Supported integer camera/control fps is1..240")
     features = info.get("features", {})
     require(isinstance(features, dict), "Invalid feature metadata")
-    cameras = {key: value for key, value in features.items() if value.get("dtype") == "video"}
-    require(1 <= len(cameras) <= 8, "Need1..8 finalized video cameras")
+    cameras = {
+        key: value for key, value in features.items() if value.get("dtype") in {"video", "image"}
+    }
+    videos = {key: value for key, value in cameras.items() if value["dtype"] == "video"}
+    images = {key: value for key, value in cameras.items() if value["dtype"] == "image"}
+    require(1 <= len(cameras) <= 8, "Need1..8 finalized image or video cameras")
+    require(not videos or info.get("video_path") == VIDEO, "Video camera layout is missing")
+    if (root / "openjensen.json").exists():
+        recording = read_json(root, "openjensen.json")
+        require(
+            isinstance(recording, dict)
+            and recording.get("created_by") == "OpenJensen Robot Lab"
+            and recording.get("format_version") == "v3.0"
+            and recording.get("finalized") is True
+            and recording.get("abandoned", False) is False,
+            "Finish the Robot Lab recording before importing its dataset",
+        )
+        require(
+            type(recording.get("episodes")) is int
+            and recording["episodes"] == episodes_count
+            and type(recording.get("frames")) is int
+            and recording["frames"] == frames_count
+            and type(recording.get("fps")) is int
+            and recording["fps"] == fps,
+            "Robot Lab recording totals differ from finalized dataset metadata",
+        )
     for key, value in cameras.items():
         shape = value.get("shape")
         require(
@@ -440,7 +489,7 @@ def validate(root, limits):
             chunk_index=episode["data/chunk_index"], file_index=episode["data/file_index"]
         )
         expected_data.add(data_path)
-        for camera in cameras:
+        for camera in videos:
             prefix = "videos/" + camera
             chunk, file = episode.get(prefix + "/chunk_index"), episode.get(prefix + "/file_index")
             start, end = (
@@ -472,7 +521,7 @@ def validate(root, limits):
         numeric_features = {key: value for key, value in features.items() if key not in cameras}
         for row in rows(root / name, limits, numeric_features):
             require(
-                set(row) == set(features) - set(cameras),
+                set(row) == set(features) - set(videos),
                 "Frame columns differ from declared features",
             )
             require(
@@ -505,6 +554,8 @@ def validate(root, limits):
                 "Unknown frame task",
             )
             observed_tasks[ep].add(task_names[row["task_index"]])
+            for camera, feature in images.items():
+                validate_image(row.get(camera), feature, limits)
             for key in ("action", "observation.state"):
                 value = row.get(key)
                 require(
