@@ -1,6 +1,7 @@
 import { isProjectDataset } from '@/lib/dataset-library';
 import { combinationCameraMapping, datasetCombinationIssue } from '@/lib/dataset-combination';
 import { CameraPlayer } from '@/components/dataset-explorer';
+import { LocalDatasetPlayer } from './local-dataset-player';
 import { Icon } from '@/components/icon';
 import { TrainingDatasetPicker } from './training-dataset-picker';
 import { cameras, datasetIssue, number } from './training-shared';
@@ -194,7 +195,14 @@ export function TrainingDatasetStep({
               </label>
             )}
           </div>
-          {preview.data?.cameras.length ? (
+          {activeDataset.result.source === 'local' && activeDataset.request.library_id ? (
+            <LocalDatasetPlayer
+              key={activeDataset.id}
+              job={activeDataset}
+              active={step === 0}
+              selection={{ keys: activeCameraKeys, onToggle: toggleCamera, disabled: !!resumeId || busy }}
+            />
+          ) : preview.data?.cameras.length ? (
             <CameraPlayer
               key={`${activeDataset.id}-${episodeIndex}`}
               preview={preview.data}
