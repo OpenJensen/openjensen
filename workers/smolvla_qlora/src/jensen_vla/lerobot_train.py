@@ -407,7 +407,11 @@ def install_training_hooks(
                 **(
                     runtime_environment
                     if runtime_environment is not None
-                    else environment_report(torch, getattr(cfg.policy, "dtype", "policy_default"))
+                    else environment_report(
+                        torch,
+                        getattr(cfg.policy, "dtype", "policy_default"),
+                        device=recipe.get("execution_device", "cuda"),
+                    )
                 ),
                 "upstream_revision": LEROBOT_REVISION,
                 "training_backend": "lerobot",
