@@ -561,7 +561,11 @@ class RobotLab:
         return value
 
     def _idle(self):
-        if self.policy.phase in {"loading", "checking", "installing"}:
+        if self.policy.load_in_progress or self.policy.phase in {
+            "loading",
+            "checking",
+            "installing",
+        }:
             raise RequestError("Finish policy preparation before opening hardware")
         if (
             self.mode != "idle"
@@ -678,7 +682,9 @@ class RobotLab:
                 "guided_recording": True,
                 "auto_recording_fps": True,
                 "agent_control": hardware,
-                "run_policy": hardware,
+                "run_policy": True,
+                "native_policy_adapters": True,
+                "policy_preview": True,
                 "policy_install": True,
                 "move_to_middle": hardware,
                 "middle_tolerance": hardware,
@@ -2550,7 +2556,8 @@ class Handler(BaseHTTPRequestHandler):
                     200, install_archive(self.server.lab, self.rfile, length, descriptor)
                 )
             length = int(self.headers.get("Content-Length", "0"))
-            if not 0 <= length <= 16_384:
+            maximum = 4 * 1024**2 if urlsplit(self.path).path == "/v1/policy/preview" else 16_384
+            if not 0 <= length <= maximum:
                 raise RequestError("Request body too large")
             raw = self.rfile.read(length) or b"{}"
             payload = (
@@ -2571,6 +2578,8 @@ class Handler(BaseHTTPRequestHandler):
                 result = lab.agent.command(path.rsplit("/", 1)[-1], payload)
             elif path == "/v1/policy/load":
                 result = lab.policy.load(payload)
+            elif path == "/v1/policy/preview":
+                result = lab.policy.preview_prediction(payload)
             elif path == "/v1/policy/preflight":
                 result = lab.policy.preflight(payload)
             elif path == "/v1/policy/start":

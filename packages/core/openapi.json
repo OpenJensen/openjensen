@@ -5338,6 +5338,11 @@
             "minLength": 1,
             "title": "Name",
             "type": "string"
+          },
+          "offline_only": {
+            "default": false,
+            "title": "Offline Only",
+            "type": "boolean"
           }
         },
         "required": [
@@ -9585,7 +9590,7 @@
   },
   "info": {
     "title": "OPEN JENSEN local VLA application",
-    "version": "0.1.25"
+    "version": "0.1.28"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -16065,6 +16070,12 @@
                     "minimum": 0.0,
                     "title": "Camera Index",
                     "type": "integer"
+                  },
+                  "task": {
+                    "default": "",
+                    "maxLength": 1000,
+                    "title": "Task",
+                    "type": "string"
                   }
                 },
                 "required": [
@@ -16088,6 +16099,91 @@
           }
         },
         "summary": "Robot Lab Post Policy Preflight",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/policy/preview": {
+      "post": {
+        "operationId": "robot_lab_post_policy_preview",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "camera_index": {
+                    "anyOf": [
+                      {
+                        "maximum": 63.0,
+                        "minimum": 0.0,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Camera Index"
+                  },
+                  "jpeg": {
+                    "anyOf": [
+                      {
+                        "maxLength": 3145728,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Jpeg"
+                  },
+                  "state": {
+                    "anyOf": [
+                      {
+                        "items": {
+                          "type": "number"
+                        },
+                        "maxItems": 6,
+                        "minItems": 6,
+                        "type": "array"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "State"
+                  },
+                  "synthetic": {
+                    "default": false,
+                    "title": "Synthetic",
+                    "type": "boolean"
+                  },
+                  "task": {
+                    "default": "",
+                    "maxLength": 1000,
+                    "title": "Task",
+                    "type": "string"
+                  }
+                },
+                "title": "PolicyPreviewRequest",
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Policy Preview",
         "tags": [
           "Robot Lab"
         ]
@@ -16127,6 +16223,12 @@
                     "const": true,
                     "title": "Operator Present",
                     "type": "boolean"
+                  },
+                  "task": {
+                    "default": "",
+                    "maxLength": 1000,
+                    "title": "Task",
+                    "type": "string"
                   },
                   "workspace_clear": {
                     "const": true,

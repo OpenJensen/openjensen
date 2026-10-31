@@ -2468,6 +2468,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/robot-lab/policy/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Robot Lab Post Policy Preview */
+        post: operations["robot_lab_post_policy_preview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/robot-lab/policy/start": {
         parameters: {
             query?: never;
@@ -5195,6 +5212,11 @@ export interface components {
             fps?: number | null;
             /** Name */
             name: string;
+            /**
+             * Offline Only
+             * @default false
+             */
+            offline_only: boolean;
         };
         /** PolicyRequest */
         PolicyRequest: {
@@ -11535,6 +11557,52 @@ export interface operations {
                 "application/json": {
                     /** Camera Index */
                     camera_index: number;
+                    /**
+                     * Task
+                     * @default
+                     */
+                    task?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    robot_lab_post_policy_preview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** Camera Index */
+                    camera_index?: number | null;
+                    /** Jpeg */
+                    jpeg?: string | null;
+                    /** State */
+                    state?: number[] | null;
+                    /**
+                     * Synthetic
+                     * @default false
+                     */
+                    synthetic?: boolean;
+                    /**
+                     * Task
+                     * @default
+                     */
+                    task?: string;
                 };
             };
         };
@@ -11576,6 +11644,11 @@ export interface operations {
                      * @constant
                      */
                     operator_present: true;
+                    /**
+                     * Task
+                     * @default
+                     */
+                    task?: string;
                     /**
                      * Workspace Clear
                      * @constant

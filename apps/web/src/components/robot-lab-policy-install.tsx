@@ -11,6 +11,7 @@ export function RobotLabPolicyInstall({ lab, installed }: { lab: RobotLabState; 
   const [name, setName] = useState('');
   const [fps, setFps] = useState('');
   const [units, setUnits] = useState(false);
+  const [offline, setOffline] = useState(true);
   const models = useQuery({
     queryKey: ['artifacts', lab.projectId],
     queryFn: () => api.artifacts(lab.projectId!),
@@ -20,7 +21,7 @@ export function RobotLabPolicyInstall({ lab, installed }: { lab: RobotLabState; 
     (item) =>
       item.project_id === lab.projectId &&
       ['training_checkpoint', 'native_checkpoint'].includes(item.format) &&
-      item.metadata?.architecture === 'act' &&
+      ['act', 'smolvla'].includes(String(item.metadata?.architecture)) &&
       item.metadata?.training_backend === 'lerobot' &&
       item.metadata?.reload_verified === true,
   );
@@ -34,15 +35,15 @@ export function RobotLabPolicyInstall({ lab, installed }: { lab: RobotLabState; 
       <summary>Install from Models</summary>
       <div className="robot-lab-form">
         <p>
-          Copy a complete native ACT checkpoint from this project to the USB computer. Installation does not load the
-          model or enable motion.
+          Copy a complete native ACT or SmolVLA checkpoint from this project to the USB computer. Installation does not
+          load the model or enable motion.
         </p>
         {models.isPending && <p role="status">Checking project models…</p>}
         {models.error && <Notice kind="warning">{models.error.message}</Notice>}
         {!models.isPending && !compatible.length && (
           <Notice>
-            No reload-verified native ACT checkpoints are available in this project. Open Models to inspect or import a
-            policy.
+            No reload-verified native ACT or SmolVLA checkpoints are available in this project. Open Models to inspect
+            or import a policy.
           </Notice>
         )}
         <label>
@@ -57,7 +58,7 @@ export function RobotLabPolicyInstall({ lab, installed }: { lab: RobotLabState; 
               setUnits(false);
             }}
           >
-            <option value="">Choose a native ACT model</option>
+            <option value="">Choose a native ACT or SmolVLA model</option>
             {compatible.map((item) => (
               <option key={item.id} value={item.id}>
                 {item.run_name || item.label}
@@ -74,31 +75,44 @@ export function RobotLabPolicyInstall({ lab, installed }: { lab: RobotLabState; 
             onChange={(event) => setName(event.target.value)}
           />
         </label>
-        <label>
-          Training FPS, if missing from the model
-          <input
-            type="number"
-            min={1}
-            max={40}
-            value={fps}
-            placeholder="Use saved training FPS"
-            disabled={lab.active || lab.busy}
-            onChange={(event) => setFps(event.target.value)}
-          />
-        </label>
         <label className="robot-lab-check">
           <input
             type="checkbox"
-            checked={units}
+            checked={offline}
             disabled={lab.active || lab.busy}
-            onChange={(event) => setUnits(event.target.checked)}
+            onChange={(event) => setOffline(event.target.checked)}
           />
-          <span>
-            If the model has no saved units, I confirm shoulder pan, shoulder lift, elbow, wrist flex, wrist roll and
-            gripper in that order; five joints in degrees and gripper in percent. Use this only for a policy trained
-            with those units. Saved training FPS is kept.
-          </span>
+          <span>Offline inference only (no arm control)</span>
         </label>
+        {!offline && (
+          <>
+            <label>
+              Training FPS, if missing from the model
+              <input
+                type="number"
+                min={1}
+                max={40}
+                value={fps}
+                placeholder="Use saved training FPS"
+                disabled={lab.active || lab.busy}
+                onChange={(event) => setFps(event.target.value)}
+              />
+            </label>
+            <label className="robot-lab-check">
+              <input
+                type="checkbox"
+                checked={units}
+                disabled={lab.active || lab.busy}
+                onChange={(event) => setUnits(event.target.checked)}
+              />
+              <span>
+                If the model has no saved units, I confirm shoulder pan, shoulder lift, elbow, wrist flex, wrist roll
+                and gripper in that order; five joints in degrees and gripper in percent. Use this only for a policy
+                trained with those units. Saved training FPS is kept.
+              </span>
+            </label>
+          </>
+        )}
         <small>
           Saved incompatible units or FPS cannot be overridden. Frame-rate and hardware checks still run after
           installation.
@@ -111,7 +125,8 @@ export function RobotLabPolicyInstall({ lab, installed }: { lab: RobotLabState; 
             !title.trim() ||
             !validRate ||
             !lab.projectId ||
-            !lab.state?.capabilities?.policy_install
+            !lab.state?.capabilities?.policy_install ||
+            !lab.state?.capabilities?.native_policy_adapters
           }
           onClick={() => {
             if (!model || !lab.projectId) return;
@@ -122,6 +137,7 @@ export function RobotLabPolicyInstall({ lab, installed }: { lab: RobotLabState; 
                   name: title.trim(),
                   ...(rate === undefined ? {} : { fps: rate }),
                   confirm_so101_units: units,
+                  offline_only: offline,
                 }),
               (result) => installed(result.installed_policy_id),
             );
@@ -129,7 +145,7 @@ export function RobotLabPolicyInstall({ lab, installed }: { lab: RobotLabState; 
         >
           Install policy on USB computer
         </button>
-        {!lab.state?.capabilities?.policy_install && (
+        {(!lab.state?.capabilities?.policy_install || !lab.state?.capabilities?.native_policy_adapters) && (
           <Notice kind="warning">Update the robot control service to install policies from Models.</Notice>
         )}
       </div>

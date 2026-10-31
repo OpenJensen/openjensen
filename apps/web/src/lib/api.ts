@@ -331,7 +331,7 @@ export const api = {
   installRobotPolicy: (
     projectId: string,
     artifactId: string,
-    settings: { name: string; fps?: number; confirm_so101_units: boolean },
+    settings: { name: string; fps?: number; confirm_so101_units: boolean; offline_only?: boolean },
   ) =>
     request<{ installed_policy_id: string }>(
       `/projects/${encodeURIComponent(projectId)}/robot-lab/policies/${encodeURIComponent(artifactId)}/install`,

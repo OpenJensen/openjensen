@@ -5,6 +5,7 @@ applies bounded targets; Stop invalidates the generation before torque-off I/O.
 """
 
 import base64
+import hashlib
 import json
 import math
 import os
@@ -19,7 +20,12 @@ from pathlib import Path
 
 from hardware import JOINTS, HardwareError
 from motion import control_limits
-from policy_contract import read_json, validate_act_config, validate_processors
+from policy_contract import (
+    read_json,
+    validate_policy_config,
+    validate_processors,
+    validate_smolvla_assets,
+)
 
 UNITS = ["degrees"] * 5 + ["percent"]
 MAX_SPEED = 10.0
@@ -33,40 +39,68 @@ def admit(root, ident):
     if folder.is_symlink() or not folder.is_dir():
         raise ValueError("Policy directory is unavailable")
     manifest = read_json(folder / "run_policy.json")
+    kind = manifest.get("policy_type")
+    offline = manifest.get("offline_only", False)
     if (
         type(manifest.get("schema_version")) is not int
         or manifest["schema_version"] != 1
-        or manifest.get("policy_type") != "act"
-        or manifest.get("joint_names") != list(JOINTS)
-        or manifest.get("state_units") != UNITS
-        or manifest.get("action_units") != UNITS
+        or kind not in {"act", "smolvla"}
+        or type(offline) is not bool
+        or (
+            not offline
+            and (
+                manifest.get("joint_names") != list(JOINTS)
+                or manifest.get("state_units") != UNITS
+                or manifest.get("action_units") != UNITS
+            )
+        )
         or manifest.get("checkpoint") != "pretrained_model"
-        or type(manifest.get("fps")) is not int
-        or not 1 <= manifest["fps"] <= 40
+        or (
+            not offline and (type(manifest.get("fps")) is not int or not 1 <= manifest["fps"] <= 40)
+        )
+        or (
+            offline
+            and manifest.get("fps") is not None
+            and (type(manifest["fps"]) is not int or not 1 <= manifest["fps"] <= 240)
+        )
         or not re.fullmatch(
-            r"observation\.images\.[a-zA-Z0-9_-]{1,64}", manifest.get("camera_key", "")
+            r"observation\.(?:images\.[a-zA-Z0-9_.-]{1,64}|image[0-9]*)",
+            manifest.get("camera_key", ""),
         )
     ):
         raise ValueError(
-            "Policy needs ACT, six ordered SO-101 joints, degrees/percent and 1–40 FPS"
+            "Policy needs a native adapter, six SO-101 joints, degrees/percent and 1–40 FPS"
         )
     checkpoint = folder / "pretrained_model"
-    if checkpoint.is_symlink() or not checkpoint.is_dir():
-        raise ValueError("Native ACT checkpoint is unavailable")
+    config = validate_policy_config(checkpoint)
+    if config["type"] != kind:
+        raise ValueError("Policy manifest and native model type disagree")
+    validate_processors(checkpoint, kind)
     files, total = {}, 0
-    for path in checkpoint.iterdir():
+    paths = list(checkpoint.iterdir())
+    if kind == "smolvla":
+        assets = validate_smolvla_assets(checkpoint)
+        paths = [path for path in paths if path.name != "assets"]
+        paths.extend(assets.iterdir())
+    for path in paths:
         if (
             path.is_symlink()
             or not path.is_file()
             or path.suffix not in {".json", ".safetensors", ".md", ".txt"}
             and path.name != "LICENSE"
         ):
-            raise ValueError("Only native JSON and safetensors policy files are supported")
+            raise ValueError(
+                "Only native JSON, safetensors and closed tokenizer data are supported"
+            )
         info = path.stat()
         total += info.st_size
         if info.st_size <= 0 or total > 2 * 1024**3 or len(files) >= 128:
             raise ValueError("Policy checkpoint exceeds local admission limits")
-        files[path.name] = (info.st_ino, info.st_size, info.st_mtime_ns)
+        files[path.relative_to(checkpoint).as_posix()] = (
+            info.st_ino,
+            info.st_size,
+            info.st_mtime_ns,
+        )
     required = {
         "config.json",
         "model.safetensors",
@@ -75,36 +109,28 @@ def admit(root, ident):
     }
     if not required <= set(files):
         raise ValueError("Checkpoint needs model weights and its saved pre/postprocessors")
-    validate_processors(checkpoint)
-    config = validate_act_config(checkpoint)
     images = {
         k: v
-        for k, v in config.get("input_features", {}).items()
-        if k.startswith("observation.images.")
+        for k, v in config["input_features"].items()
+        if v.get("type") == "VISUAL" or k.startswith(("observation.images.", "observation.image"))
     }
-    if (
-        config.get("type") != "act"
-        or config.get("input_features", {}).get("observation.state", {}).get("shape") != [6]
-        or config.get("output_features", {}).get("action", {}).get("shape") != [6]
-        or set(images) != {manifest["camera_key"]}
-        or set(config.get("input_features", {})) != {"observation.state", manifest["camera_key"]}
-    ):
-        raise ValueError("Checkpoint state, action or camera features do not fit this arm")
-    shape = images[manifest["camera_key"]].get("shape")
-    if (
-        not isinstance(shape, list)
-        or len(shape) != 3
-        or shape[0] != 3
-        or any(type(n) is not int or not 1 <= n <= 4096 for n in shape)
-    ):
-        raise ValueError("Policy camera shape is invalid")
+    if manifest["camera_key"] not in images or set(config["input_features"]) != {
+        "observation.state",
+        *images,
+    }:
+        raise ValueError("Checkpoint camera features do not fit this arm")
     return {
         "id": ident,
         "name": str(manifest.get("name", ident))[:100],
-        "policy_type": "act",
+        "policy_type": kind,
+        "task_required": kind == "smolvla",
+        "offline_only": offline,
+        "state_units": manifest.get("state_units"),
+        "action_units": manifest.get("action_units"),
         "fps": manifest["fps"],
         "camera_key": manifest["camera_key"],
-        "image_shape": shape,
+        "camera_keys": list(images),
+        "image_shape": images[manifest["camera_key"]]["shape"],
         "checkpoint": checkpoint,
         "files": files,
         "manifest": manifest,
@@ -112,7 +138,7 @@ def admit(root, ident):
 
 
 class InferenceProcess:
-    def __init__(self, python, checkpoint, device, log):
+    def __init__(self, python, checkpoint, device, log, camera_key=None):
         self.queue = queue.Queue(maxsize=4)
         self.lock = threading.Lock()
         self.log = open(log, "a")
@@ -124,6 +150,7 @@ class InferenceProcess:
                 str(Path(__file__).with_name("policy_inference.py")),
                 str(checkpoint),
                 device,
+                *([camera_key] if camera_key else []),
             ],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
@@ -135,7 +162,8 @@ class InferenceProcess:
         self.reader = threading.Thread(target=self._read, daemon=True)
         self.reader.start()
         try:
-            reply = self.queue.get(timeout=90)
+            kind = read_json(Path(checkpoint) / "config.json").get("type")
+            reply = self.queue.get(timeout=180 if kind == "smolvla" else 90)
             if not isinstance(reply, dict) or reply.get("ready") is not True:
                 raise ValueError("ACT runtime did not load; inspect the local policy runtime log")
             self.info = reply
@@ -170,6 +198,8 @@ class InferenceProcess:
                 raise ValueError("Local policy inference timed out; motion was stopped") from None
             if not isinstance(reply, dict):
                 raise ValueError("Local policy inference failed; inspect its runtime log")
+            if isinstance(reply.get("error"), str):
+                raise ValueError(reply["error"])
             return reply
 
     def close(self):
@@ -213,12 +243,15 @@ class PolicyRunner:
         self.started = None
         self.generation = None
         self.check = None
+        self.preview = None
+        self.task = ""
         self.operation = 0
+        self.load_in_progress = False
 
-    def runtime_config(self):
+    def runtime_config(self, policy_type=None):
         path = self.lab.data_dir / "policy-runtime.json"
         if not path.exists():
-            raise ValueError("Install a compatible local ACT runtime before loading a policy")
+            raise ValueError("Install a compatible local policy runtime before loading")
         info = path.stat()
         if info.st_uid != os.getuid() or info.st_mode & 0o077 or not stat.S_ISREG(info.st_mode):
             raise ValueError("Policy runtime settings must be a private owned file")
@@ -226,7 +259,14 @@ class PolicyRunner:
         python = Path(value.get("python", ""))
         if not python.is_absolute() or not python.is_file() or not os.access(python, os.X_OK):
             raise ValueError("Configured policy Python runtime is unavailable")
-        device = value.get("device", "cpu")
+        routing = value.get("policy_devices", {})
+        if (
+            not isinstance(routing, dict)
+            or set(routing) - {"act", "smolvla"}
+            or any(device not in {"cpu", "mps", "cuda"} for device in routing.values())
+        ):
+            raise ValueError("Policy runtime device routing is invalid")
+        device = routing.get(policy_type, value.get("device", "cpu"))
         if device not in {"cpu", "mps", "cuda"}:
             raise ValueError("Choose a supported local inference device")
         return python, device
@@ -240,7 +280,10 @@ class PolicyRunner:
                 item = admit(self.root, folder.name)
                 policies.append(
                     {k: v for k, v in item.items() if k not in {"checkpoint", "files", "manifest"}}
-                    | {"compatible": True, "message": "Native ACT checkpoint fits this arm"}
+                    | {
+                        "compatible": True,
+                        "message": "Native checkpoint admitted for local inference",
+                    }
                 )
             except (ValueError, OSError, KeyError, TypeError) as error:
                 policies.append(
@@ -272,6 +315,13 @@ class PolicyRunner:
                 "fps": self.model["fps"] if self.model else None,
                 "steps": self.steps,
                 "preflight": self.check,
+                "preview": self.preview,
+                "policy_type": self.model["policy_type"] if self.model else None,
+                "task_required": self.model["task_required"] if self.model else False,
+                "offline_only": self.model["offline_only"] if self.model else False,
+                "warm_inference_ms": self.runtime.info.get("warm_inference_ms")
+                if self.runtime
+                else None,
                 "inference_ms": self.inference_ms,
                 "started": self.started,
                 "limits": {
@@ -288,23 +338,26 @@ class PolicyRunner:
             raise ValueError("Choose one installed policy")
         with self.lock:
             if (
-                self.phase in {"running", "loading", "checking", "installing"}
+                self.load_in_progress
+                or self.phase in {"running", "loading", "checking", "installing"}
                 or self.thread
                 and self.thread.is_alive()
             ):
                 raise ValueError("Stop the current policy operation before loading")
             self.phase, self.error = "loading", None
+            self.load_in_progress = True
             self.check = None
+            self.preview = None
             self.operation += 1
             operation = self.operation
         try:
             model = admit(self.root, payload["policy_id"])
-            python, device = self.runtime_config()
+            python, device = self.runtime_config(model["policy_type"])
             if self.runtime:
                 self.runtime.close()
                 self.runtime = None
             runtime = self.process_factory(
-                python, model["checkpoint"], device, self.root / "runtime.log"
+                python, model["checkpoint"], device, self.root / "runtime.log", model["camera_key"]
             )
             if runtime.info.get("camera_key") != model["camera_key"]:
                 runtime.close()
@@ -321,19 +374,118 @@ class PolicyRunner:
                 if operation == self.operation:
                     self.phase, self.error = "error", str(error)
             raise
+        finally:
+            with self.lock:
+                self.load_in_progress = False
+        return self.lab.status()
+
+    def _task(self, payload):
+        task = payload.get("task", "")
+        if (
+            not isinstance(task, str)
+            or len(task) > 1000
+            or (self.model and self.model["task_required"] and not task.strip())
+        ):
+            raise ValueError("This policy needs a task instruction of at most 1000 characters")
+        return task
+
+    def preview_prediction(self, payload):
+        """One explicitly requested offline observation; never opens a motor bus."""
+        if set(payload) - {"synthetic", "camera_index", "state", "jpeg", "task"}:
+            raise ValueError("Choose one preview observation")
+        task = self._task(payload)
+        synthetic = payload.get("synthetic") is True
+        state = [0.0] * 6 if synthetic else payload.get("state")
+        if (
+            not isinstance(state, list)
+            or len(state) != 6
+            or any(type(v) not in {int, float} or not math.isfinite(v) for v in state)
+        ):
+            raise ValueError("Preview needs six finite model state values")
+        with self.lab.lock, self.lock, self.lab.lifecycle_lock:
+            if (
+                self.phase != "ready"
+                or not self.runtime
+                or not self.model
+                or self.lab.mode != "idle"
+                or self.lab.bus is not None
+                or self.lab.pending_bus is not None
+            ):
+                raise ValueError("Load a policy and stop hardware control before previewing")
+            self.phase, self.error = "checking", None
+            self.operation += 1
+            operation = self.operation
+        try:
+            if synthetic:
+                # Explicit neutral test, not a claim of a measured robot observation.
+                import io
+
+                from PIL import Image
+
+                buffer = io.BytesIO()
+                Image.new("RGB", (256, 256)).save(buffer, "JPEG")
+                jpeg = base64.b64encode(buffer.getvalue()).decode()
+                source = "Synthetic zero-state and blank image"
+            elif payload.get("camera_index") is not None:
+                camera = payload["camera_index"]
+                if type(camera) is not int or not 0 <= camera <= 63:
+                    raise ValueError("Choose an available camera")
+                jpeg = base64.b64encode(self.lab.camera.capture_timed(camera)["jpeg"]).decode()
+                source = "Selected camera and supplied model state"
+            else:
+                jpeg = payload.get("jpeg")
+                if not isinstance(jpeg, str) or len(jpeg) > 3 * 1024**2:
+                    raise ValueError("Upload a bounded preview image")
+                base64.b64decode(jpeg, validate=True)
+                source = "Uploaded image and supplied model state"
+            self.runtime.request({"reset": True})
+            before = time.monotonic()
+            result = self.runtime.request({"state": state, "jpeg": jpeg, "task": task}, timeout=60)
+            action = result.get("action")
+            if (
+                not isinstance(action, list)
+                or len(action) != 6
+                or any(type(v) not in {int, float} or not math.isfinite(v) for v in action)
+            ):
+                raise ValueError("Policy preview did not produce six finite outputs")
+            with self.lock:
+                if operation != self.operation or self.lab.mode != "idle":
+                    raise ValueError("Policy preview was cancelled")
+                self.preview = {
+                    "policy_id": self.model["id"],
+                    "action": action,
+                    "state": state,
+                    "source": source,
+                    "inference_ms": round((time.monotonic() - before) * 1000, 1),
+                    "task_conditioned": self.model["task_required"],
+                    "executed": False,
+                }
+        except Exception as error:
+            with self.lock:
+                if operation == self.operation:
+                    self.error = str(error)
+            raise
+        finally:
+            with self.lock:
+                if operation == self.operation:
+                    self.phase = "ready"
         return self.lab.status()
 
     def preflight(self, payload):
         """Measure actual camera + normalized native inference, without motor writes."""
         if (
-            set(payload) != {"camera_index"}
+            set(payload) - {"camera_index", "task"}
+            or "camera_index" not in payload
             or type(payload["camera_index"]) is not int
             or not 0 <= payload["camera_index"] <= 63
         ):
             raise ValueError("Choose a camera for the policy check")
+        task = self._task(payload)
         with self.lock:
             if self.phase != "ready" or not self.runtime or not self.model:
                 raise ValueError("Load a policy before checking the camera and inference rate")
+            if self.model["offline_only"]:
+                raise ValueError("Offline inference only: physical control units are unverified")
             if self.lab.mode != "idle" or self.thread and self.thread.is_alive():
                 raise ValueError("Stop motor control before running the policy check")
             self.phase, self.error, self.check = "checking", None, None
@@ -366,6 +518,7 @@ class PolicyRunner:
                     {
                         "state": [positions.get(j, 0.0) for j in JOINTS],
                         "jpeg": base64.b64encode(capture["jpeg"]).decode(),
+                        "task": task,
                     },
                     timeout=max(0.5, 3 / fps),
                 )
@@ -396,6 +549,7 @@ class PolicyRunner:
                 "passed": passed,
                 "camera_index": camera,
                 "checked_at": time.monotonic(),
+                "task_sha256": hashlib.sha256(task.encode()).hexdigest(),
                 "fps": fps,
                 "measured_fps": round(actual, 1),
                 "mean_latency_ms": round(mean * 1000, 1),
@@ -422,7 +576,7 @@ class PolicyRunner:
         return self.lab.status()
 
     def start(self, payload):
-        if set(payload) != {
+        if set(payload) - {"task"} != {
             "confirm",
             "operator_present",
             "workspace_clear",
@@ -437,6 +591,7 @@ class PolicyRunner:
             or payload["workspace_clear"] is not True
         ):
             raise ValueError("An attending operator and clear workspace are required")
+        task = self._task(payload)
         duration, camera = payload["duration_seconds"], payload["camera_index"]
         if (
             type(duration) is not int
@@ -448,6 +603,8 @@ class PolicyRunner:
         with self.lab.lock, self.lock, self.lab.lifecycle_lock:
             if self.phase != "ready" or not self.runtime or not self.model:
                 raise ValueError("Load and verify a policy first")
+            if self.model["offline_only"]:
+                raise ValueError("This policy is installed for offline inference only")
             if self.thread and self.thread.is_alive():
                 raise ValueError("Previous inference is still stopping")
             if (
@@ -470,6 +627,10 @@ class PolicyRunner:
                 or not self.check["passed"]
                 or self.check["camera_index"] != camera
                 or time.monotonic() - self.check["checked_at"] > 60
+                or (
+                    self.model["task_required"]
+                    and self.check.get("task_sha256") != hashlib.sha256(task.encode()).hexdigest()
+                )
             ):
                 raise ValueError("Check this policy and selected camera again before starting")
             current = admit(self.root, self.model["id"])
@@ -485,6 +646,7 @@ class PolicyRunner:
             self.last_apply = time.monotonic()
             self.steps = 0
             self.generation = self.lab.generation
+            self.task = task
             self.started = time.monotonic()
             self.last_prediction = self.last_health = self.started
             self.operator_deadline = self.started + 2
@@ -609,6 +771,7 @@ class PolicyRunner:
                     {
                         "state": [positions[j] for j in JOINTS],
                         "jpeg": base64.b64encode(capture["jpeg"]).decode(),
+                        "task": self.task,
                     },
                     timeout=max(0.5, 3 / self.model["fps"]),
                 )

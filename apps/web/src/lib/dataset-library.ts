@@ -48,7 +48,18 @@ export const isProjectDataset = (
   entry: LibraryDataset | DatasetRepairNotice,
   project: string,
 ): entry is LibraryDataset => !!project && entry.project_id === project;
-export type DatasetSample = { episode_index: number; frame_index: number; camera: string; path: string; task: string };
+export type DatasetSample = {
+  episode_index: number;
+  frame_index: number;
+  camera: string;
+  path: string;
+  task: string;
+  timestamp?: number;
+  state?: number[];
+  action?: number[];
+  metadata_sha256?: string;
+  preview_truncated?: boolean;
+};
 const base = `${apiOrigin}/api/v1`;
 export async function datasetRequest<T>(path: string, init?: RequestInit, timeoutMs = 30_000): Promise<T> {
   const controller = new AbortController();

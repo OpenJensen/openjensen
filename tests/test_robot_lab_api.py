@@ -671,7 +671,7 @@ def test_policy_catalog_load_and_explicit_start_are_finite_proxy_routes(tmp_path
             client.post("/api/v1/robot-lab/policy/load", json={"policy_id": "pen"}).status_code
             == 200
         )
-        assert calls[-1].extensions["timeout"]["read"] == 120
+        assert calls[-1].extensions["timeout"]["read"] == 210
         payload = {
             "confirm": "RUN POLICY",
             "operator_present": True,
@@ -683,4 +683,43 @@ def test_policy_catalog_load_and_explicit_start_are_finite_proxy_routes(tmp_path
         assert client.post("/api/v1/robot-lab/policy/start", json=payload).status_code == 200
         assert json.loads(calls[-1].content) == payload
         assert client.post("/api/v1/robot-lab/policy/arbitrary", json={}).status_code == 404
+    asyncio.run(companion.close())
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {},
+        {"synthetic": True, "state": [0] * 6},
+        {"state": [0] * 5, "jpeg": "YQ=="},
+        {"state": [0] * 6, "jpeg": "YQ==", "camera_index": 0},
+        {"state": [0] * 6},
+        {"synthetic": True, "python": "/tmp/custom"},
+    ],
+)
+def test_prediction_preview_rejects_ambiguous_inputs_before_contact(tmp_path, payload):
+    connection(tmp_path)
+    companion = bridge(tmp_path, lambda _: pytest.fail("Invalid preview contacted companion"))
+    with browser(tmp_path, companion) as client:
+        assert client.post("/api/v1/robot-lab/policy/preview", json=payload).status_code == 422
+    asyncio.run(companion.close())
+
+
+def test_prediction_preview_forwards_an_image_and_state_without_hardware_start(tmp_path):
+    connection(tmp_path)
+    calls = []
+
+    def handler(request):
+        calls.append((request.url.path, json.loads(request.content)))
+        return httpx.Response(200, json={"policy": {"preview": {"executed": False}}})
+
+    companion = bridge(tmp_path, handler)
+    with browser(tmp_path, companion) as client:
+        result = client.post(
+            "/api/v1/robot-lab/policy/preview", json={"state": [0] * 6, "jpeg": "YQ=="}
+        )
+        assert result.status_code == 200
+        assert result.json()["policy"]["preview"]["executed"] is False
+    assert len(calls) == 1 and calls[0][0] == "/v1/policy/preview"
+    assert calls[0][1]["state"] == [0] * 6
     asyncio.run(companion.close())
