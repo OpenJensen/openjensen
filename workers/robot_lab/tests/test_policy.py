@@ -116,6 +116,102 @@ class PolicyTests(unittest.TestCase):
         settings.chmod(0o644)
         self.assertFalse(runner.catalog()["runtime"]["configured"])
 
+    def test_offline_preview_needs_no_devices_or_control_session(self):
+        runner, _, _ = self.install()
+        runner.load({"policy_id": "pen"})
+        generation = self.lab.generation
+        result = runner.preview_prediction({"synthetic": True})
+        self.assertEqual(result["policy"]["preview"]["action"], [0.0] * 5 + [50.0])
+        self.assertFalse(result["policy"]["preview"]["executed"])
+        self.assertEqual(self.lab.generation, generation)
+        self.assertEqual(self.lab.mode, "idle")
+        self.assertFalse(self.lab.torque)
+        self.assertEqual(self.buses, [])
+
+    def test_uploaded_preview_accepts_explicit_null_camera_without_camera_access(self):
+        runner, _, _ = self.install()
+        runner.load({"policy_id": "pen"})
+        with patch.object(
+            self.lab.camera,
+            "capture_timed",
+            side_effect=AssertionError("camera access"),
+            create=True,
+        ):
+            result = runner.preview_prediction(
+                {"state": [0.0] * 6, "jpeg": "YQ==", "camera_index": None}
+            )
+        self.assertEqual(
+            result["policy"]["preview"]["source"], "Uploaded image and supplied model state"
+        )
+        self.assertEqual(self.buses, [])
+
+    def test_unknown_units_and_fps_remain_offline_even_with_valid_weights(self):
+        runner, folder, _ = self.install()
+        path = folder / "run_policy.json"
+        metadata = json.loads(path.read_text()) | {
+            "offline_only": True,
+            "fps": None,
+            "state_units": None,
+            "action_units": None,
+            "joint_names": None,
+        }
+        path.write_text(json.dumps(metadata))
+        runner.load({"policy_id": "pen"})
+        self.assertTrue(runner.model["offline_only"])
+        self.assertIsNone(runner.model["fps"])
+        runner.preview_prediction({"synthetic": True})
+        with self.assertRaisesRegex(ValueError, "Offline inference"):
+            runner.preflight({"camera_index": 0})
+        self.assertEqual(runner.phase, "ready")
+        self.start()
+        with self.assertRaisesRegex(ValueError, "offline inference"):
+            runner.start(self.run_payload())
+        self.assertEqual(self.lab.mode, "manual")
+
+    def test_invalid_task_does_not_leave_preview_checking(self):
+        runner, _, _ = self.install()
+        runner.load({"policy_id": "pen"})
+        runner.model["task_required"] = True
+        with self.assertRaisesRegex(ValueError, "task instruction"):
+            runner.preview_prediction({"synthetic": True, "task": ""})
+        self.assertEqual(runner.phase, "ready")
+        with self.assertRaisesRegex(ValueError, "task instruction"):
+            runner.preflight({"camera_index": 0, "task": ""})
+        self.assertEqual(runner.phase, "ready")
+
+    def test_stop_cancels_preview_without_any_motor_access(self):
+        runner, _, _ = self.install()
+        runner.load({"policy_id": "pen"})
+        entered, release = threading.Event(), threading.Event()
+        errors = []
+
+        def request(message, timeout=2):
+            if message.get("reset"):
+                return {"reset": True}
+            entered.set()
+            release.wait(timeout=3)
+            return {"action": [0.0] * 6}
+
+        runner.runtime.request = request
+
+        def preview():
+            try:
+                runner.preview_prediction({"synthetic": True})
+            except ValueError as error:
+                errors.append(str(error))
+
+        thread = threading.Thread(target=preview)
+        thread.start()
+        self.assertTrue(entered.wait(timeout=1))
+        self.lab.stop()
+        release.set()
+        thread.join(timeout=2)
+        self.assertFalse(thread.is_alive())
+        self.assertTrue(any("cancelled" in error for error in errors))
+        self.assertIsNone(runner.preview)
+        self.assertEqual(self.buses, [])
+        self.assertEqual(self.lab.mode, "idle")
+
     def test_native_files_features_units_and_identity_are_required(self):
         runner, folder, checkpoint = self.install()
         self.assertEqual(admit(runner.root, "pen")["fps"], 13)

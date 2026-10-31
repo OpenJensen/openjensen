@@ -65,6 +65,19 @@ export type RobotPolicyState = {
   fps: number | null;
   steps: number;
   inference_ms: number | null;
+  policy_type?: 'act' | 'smolvla' | null;
+  task_required?: boolean;
+  offline_only?: boolean;
+  warm_inference_ms?: number | null;
+  preview?: {
+    policy_id: string;
+    action: number[];
+    state: number[];
+    source: string;
+    inference_ms: number;
+    task_conditioned: boolean;
+    executed: false;
+  } | null;
   preflight: {
     passed: boolean;
     camera_index: number;
@@ -86,7 +99,10 @@ export type RobotPolicyCatalog = {
     name: string;
     compatible: boolean;
     message: string;
-    fps?: number;
+    fps?: number | null;
+    policy_type?: 'act' | 'smolvla';
+    task_required?: boolean;
+    offline_only?: boolean;
     camera_key?: string;
     image_shape?: number[];
   }[];
@@ -118,6 +134,8 @@ export type RobotStatus = {
     persistent_diagnostics?: boolean;
     agent_control?: boolean;
     run_policy?: boolean;
+    native_policy_adapters?: boolean;
+    policy_preview?: boolean;
     policy_install?: boolean;
     lerobot_position_control?: boolean;
     large_joint_steps?: boolean;
@@ -362,9 +380,20 @@ async function request<T>(
 export const robotApi = {
   status: () => request<RobotStatus>('/status'),
   policyCatalog: () => request<RobotPolicyCatalog>('/policy/catalog'),
-  loadPolicy: (policy_id: string) => request<RobotStatus>('/policy/load', { policy_id }, { timeoutMs: 125_000 }),
-  preflightPolicy: (camera_index: number) =>
-    request<RobotStatus>('/policy/preflight', { camera_index }, { timeoutMs: 30_000 }),
+  loadPolicy: (policy_id: string) => request<RobotStatus>('/policy/load', { policy_id }, { timeoutMs: 215_000 }),
+  previewPolicy: (input: {
+    synthetic?: boolean;
+    state?: number[];
+    jpeg?: string;
+    camera_index?: number;
+    task?: string;
+  }) => request<RobotStatus>('/policy/preview', input, { timeoutMs: 90_000 }),
+  preflightPolicy: (camera_index: number, task?: string) =>
+    request<RobotStatus>(
+      '/policy/preflight',
+      { camera_index, ...(task === undefined ? {} : { task }) },
+      { timeoutMs: 30_000 },
+    ),
   startPolicy: (input: { expected_generation: number; camera_index: number; duration_seconds: number }) =>
     request<RobotStatus>('/policy/start', {
       ...input,

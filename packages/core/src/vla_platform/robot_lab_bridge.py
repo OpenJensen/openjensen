@@ -144,8 +144,10 @@ class RobotLabBridge:
         config = self.config()
         # Episode compression and final metadata can exceed an ordinary device read.
         seconds = (
-            120
+            210
             if path == "policy/load"
+            else 80
+            if path == "policy/preview"
             else 80
             if path in {"recording/episode/save", "recording/finish"}
             else 30

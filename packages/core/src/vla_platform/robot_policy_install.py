@@ -28,6 +28,7 @@ class PolicyInstallRequest(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     fps: StrictInt | None = Field(default=None, ge=1, le=40)
     confirm_so101_units: StrictBool = False
+    offline_only: StrictBool = False
 
     @field_validator("name")
     @classmethod
@@ -112,11 +113,11 @@ def _archive_metadata(path, expected_sha):
 def _descriptor(artifact, metadata, recipe, payload):
     if (
         artifact.format not in {"training_checkpoint", "native_checkpoint"}
-        or metadata.get("architecture") != "act"
+        or metadata.get("architecture") not in {"act", "smolvla"}
         or metadata.get("training_backend") != "lerobot"
         or metadata.get("reload_verified") is not True
     ):
-        raise ValueError("Choose a reload-verified native LeRobot ACT checkpoint")
+        raise ValueError("Choose a reload-verified native ACT or SmolVLA checkpoint")
     if metadata != artifact.metadata:
         raise ValueError("Registered policy artifact metadata changed")
     records = [metadata, recipe]
@@ -124,25 +125,26 @@ def _descriptor(artifact, metadata, recipe, payload):
         for key in ("control_contract", "temporal_contract", "dataset"):
             if isinstance(source.get(key), dict):
                 records.append(source[key])
-    rates, units_known = set(), False
+    offline = payload.offline_only
+    rates, units_known, joints_known = set(), False, False
     for record in records:
         for key in ("fps", "action_fps", "dataset_fps"):
             if key in record:
                 value = record[key]
-                if type(value) is not int or not 1 <= value <= 40:
+                if type(value) is not int or not 1 <= value <= (240 if offline else 40):
                     raise ValueError("Saved policy FPS is unsupported by this arm")
                 rates.add(value)
         state, action = record.get("state_units"), record.get("action_units")
         if state is not None or action is not None:
-            if state != UNITS or action != UNITS:
+            if (state != UNITS or action != UNITS) and not offline:
                 raise ValueError(
                     "Saved policy units are incompatible; expected degrees and gripper percent"
                 )
-            units_known = True
+            units_known = state == UNITS and action == UNITS
         if "units" in record:
-            if record["units"] != "degrees; gripper percent":
+            if record["units"] != "degrees; gripper percent" and not offline:
                 raise ValueError("Saved policy units are incompatible with this SO-101 controller")
-            units_known = True
+            units_known = record["units"] == "degrees; gripper percent"
         for key in ("joint_names", "joint_order", "state_names", "action_names"):
             if key in record:
                 names = record[key]
@@ -150,36 +152,43 @@ def _descriptor(artifact, metadata, recipe, payload):
                     not isinstance(names, list)
                     or not all(isinstance(name, str) for name in names)
                     or [name.removesuffix(".pos") for name in names] != JOINTS
-                ):
+                ) and not offline:
                     raise ValueError("Saved policy joint order differs from this SO-101 controller")
+                if isinstance(names, list) and all(isinstance(name, str) for name in names):
+                    joints_known = [name.removesuffix(".pos") for name in names] == JOINTS
+    if metadata["architecture"] == "smolvla" and not (units_known and joints_known):
+        offline = True
     if len(rates) > 1:
         raise ValueError("Saved policy frame rates disagree")
     known_fps = next(iter(rates), None)
     if known_fps is not None and payload.fps is not None and payload.fps != known_fps:
         raise ValueError("Keep the saved training FPS unchanged")
     fps = known_fps if known_fps is not None else payload.fps
-    if fps is None:
+    if fps is None and not offline:
         raise ValueError("Supply the frame rate used when this policy was trained")
-    if not units_known and not payload.confirm_so101_units:
+    if not offline and not units_known and not payload.confirm_so101_units:
         raise ValueError("Confirm six ordered SO-101 joints in degrees/gripper percent")
     camera = metadata.get("camera_keys")
     camera = camera[0] if isinstance(camera, list) and len(camera) == 1 else None
     if camera is not None and (
         not isinstance(camera, str)
-        or not re.fullmatch(r"observation\.images\.[a-zA-Z0-9_-]{1,64}", camera)
+        or not re.fullmatch(r"observation\.(?:images\.[a-zA-Z0-9_.-]{1,64}|image[0-9]*)", camera)
     ):
         raise ValueError("Saved policy camera key is unsupported")
     identity = "\n".join([artifact.project_id, artifact.id, artifact.manifest_sha256])
     return {
         "schema_version": 1,
-        "id": "artifact-" + hashlib.sha256(identity.encode()).hexdigest()[:24],
+        "id": "artifact-"
+        + hashlib.sha256(identity.encode()).hexdigest()[:24]
+        + ("-offline" if offline else ""),
         "name": payload.name,
-        "policy_type": "act",
+        "policy_type": metadata["architecture"],
+        "offline_only": offline,
         "fps": fps,
         "camera_key": camera,
-        "joint_names": JOINTS,
-        "state_units": UNITS,
-        "action_units": UNITS,
+        "joint_names": JOINTS if (joints_known or not offline) else None,
+        "state_units": UNITS if (units_known or not offline) else None,
+        "action_units": UNITS if (units_known or not offline) else None,
         "checkpoint": "pretrained_model",
         "source_manifest_sha256": artifact.manifest_sha256,
     }
@@ -232,14 +241,14 @@ async def install_artifact(app, project_id, artifact_id, payload: PolicyInstallR
         if (
             artifact.project_id != project_id
             or artifact.format not in {"training_checkpoint", "native_checkpoint"}
-            or artifact.metadata.get("architecture") != "act"
+            or artifact.metadata.get("architecture") not in {"act", "smolvla"}
             or artifact.metadata.get("training_backend") != "lerobot"
             or artifact.metadata.get("reload_verified") is not True
             or not re.fullmatch(r"[a-f0-9]{64}", artifact.manifest_sha256)
             or type(artifact.file_bytes) is not int
             or not 0 < artifact.file_bytes <= MAX_ARCHIVE
         ):
-            raise ValueError("Choose a reload-verified native LeRobot ACT checkpoint")
+            raise ValueError("Choose a reload-verified native ACT or SmolVLA checkpoint")
         config = bridge.config()
         async with bridge.import_lock, asyncio.timeout(300):
             spool_root = bridge.data_dir / "policy-install"

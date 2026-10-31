@@ -27,6 +27,7 @@ class PolicyLoadRequest(BaseModel):
 
 class PolicyStartRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    task: str = Field(default="", max_length=1000)
     confirm: Literal["RUN POLICY"]
     operator_present: Literal[True]
     workspace_clear: Literal[True]
@@ -37,7 +38,26 @@ class PolicyStartRequest(BaseModel):
 
 class PolicyPreflightRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    task: str = Field(default="", max_length=1000)
     camera_index: StrictInt = Field(ge=0, le=63)
+
+
+class PolicyPreviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    synthetic: StrictBool = False
+    camera_index: StrictInt | None = Field(default=None, ge=0, le=63)
+    state: list[float] | None = Field(default=None, min_length=6, max_length=6)
+    jpeg: str | None = Field(default=None, max_length=3 * 1024**2)
+    task: str = Field(default="", max_length=1000)
+
+    @model_validator(mode="after")
+    def one_observation(self):
+        if self.synthetic:
+            if self.state is not None or self.camera_index is not None or self.jpeg is not None:
+                raise ValueError("Use either synthetic test inputs or one supplied observation")
+        elif self.state is None or (self.camera_index is None) == (self.jpeg is None):
+            raise ValueError("Supply six state values and one image or camera")
+        return self
 
 
 class PolicyHeartbeatRequest(BaseModel):
@@ -51,6 +71,7 @@ class PolicyStopRequest(BaseModel):
 
 POLICY_REQUESTS = {
     "policy/load": PolicyLoadRequest,
+    "policy/preview": PolicyPreviewRequest,
     "policy/start": PolicyStartRequest,
     "policy/preflight": PolicyPreflightRequest,
     "policy/heartbeat": PolicyHeartbeatRequest,
@@ -143,8 +164,11 @@ async def proxy(path: str, request: Request):
             chunks, size = [], 0
             async for chunk in request.stream():
                 size += len(chunk)
-                if size > 64 * 1024:
-                    raise HTTPException(413, "Robot Lab requests support at most 64 KiB")
+                maximum = 4 * 1024**2 if path == "policy/preview" else 64 * 1024
+                if size > maximum:
+                    raise HTTPException(
+                        413, f"Robot Lab requests support at most {maximum // 1024} KiB"
+                    )
                 chunks.append(chunk)
             try:
                 raw = b"".join(chunks)
