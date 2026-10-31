@@ -1,9 +1,13 @@
 """Unpaid cloud runner tests: all provisioning commands are replaced with doubles."""
 
+import ast
 import asyncio
 import hashlib
 import io
 import json
+import os
+import subprocess
+import sys
 import tarfile
 from pathlib import Path
 
@@ -1206,3 +1210,87 @@ def test_slurm_task_uses_supported_task_level_sbatch_overrides(
     assert task["resources"]["infra"] == "slurm/research" + ("/gpu" if partition else "")
     assert "quota" not in json.dumps(task["config"])
     assert "queue" not in json.dumps(task["config"])
+
+
+@pytest.mark.parametrize(
+    "values,expected",
+    [
+        ({"FIREBIRD_STORAGE_TEST": "legacy"}, "legacy"),
+        ({"JENSEN_STORAGE_TEST": "canonical", "FIREBIRD_STORAGE_TEST": "legacy"}, "canonical"),
+        ({"JENSEN_STORAGE_TEST": "", "FIREBIRD_STORAGE_TEST": "legacy"}, ""),
+    ],
+)
+def test_staged_gcs_bootstrap_runs_without_host_package(
+    payload, target, tmp_path, values, expected
+):
+    from vla_platform.lifecycle.native_profiles import LEROBOT_REVISION
+
+    payload["parameters"].update(
+        training_method="full",
+        training={"model_id": "code://lerobot/act", "model_revision": LEROBOT_REVISION},
+    )
+    target["storage_uri"] = "gs://firebird-fixture/jobs/training-job/run"
+    task, _ = sky_runner.prepare(payload, tmp_path / "stage", target)
+    bundle = task.parent / "sky-bundle"
+    for copied in (bundle / "bootstrap.py", bundle / "cloud_storage.py"):
+        tree = ast.parse(copied.read_text(), feature_version=(3, 11))
+        assert not any(
+            isinstance(node, ast.ImportFrom)
+            and node.module
+            and node.module.startswith("vla_platform")
+            for node in ast.walk(tree)
+        )
+    test_home = tmp_path / "home"
+    (test_home / "sky_logs/1-firebird-training").mkdir(parents=True)
+    script = f"""
+import json, os, sys
+from pathlib import Path
+sys.path.insert(0, {str(bundle)!r})
+import bootstrap, cloud_storage
+assert not any(k == 'vla_platform' or k.startswith('vla_platform.') for k in sys.modules)
+assert cloud_storage.required_env('JENSEN_STORAGE_TEST') == {expected!r}
+assert cloud_storage.required_env('FIREBIRD_STORAGE_TEST') == {expected!r}
+try:
+    cloud_storage.required_env('MISSING_CLOUD_TEST_VALUE')
+except KeyError:
+    pass
+else:
+    raise AssertionError('Missing cloud configuration was accepted')
+def run_fixture(command, *, env, timeout):
+    assert command[2] == 'jensen_vla.lerobot_application'
+    assert env['JENSEN_GCS_PREFIX'] == env['FIREBIRD_GCS_PREFIX'] == {target["storage_uri"]!r}
+    assert env['JENSEN_CLOUD_REQUEST'] == env['FIREBIRD_CLOUD_REQUEST']
+    assert env['PYTHONPATH'] == {str(bundle)!r}
+    assert timeout == 7200
+    Path(command[-1]).write_text(json.dumps({{'schema_version': 1, 'job_id': 'training-job'}}))
+    return 0
+bootstrap.run_worker = run_fixture
+def publish_fixture(output, prefix):
+    assert prefix == {target["storage_uri"]!r}
+    result = json.loads((output / 'result.json').read_text())
+    assert result['job_id'] == 'training-job'
+    Path('published.json').write_text(json.dumps(result))
+cloud_storage.publish_result = publish_fixture
+assert bootstrap.main() == 0
+assert Path('published.json').is_file()
+"""
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if key
+        not in {
+            "PYTHONPATH",
+            "JENSEN_STORAGE_TEST",
+            "FIREBIRD_STORAGE_TEST",
+            "MISSING_CLOUD_TEST_VALUE",
+        }
+    }
+    subprocess.run(
+        [sys.executable, "-I", "-B", "-c", script],
+        cwd=bundle,
+        env={**env, **values, "HOME": str(test_home), "SKYPILOT_INTERNAL_JOB_ID": "1"},
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=10,
+    )
