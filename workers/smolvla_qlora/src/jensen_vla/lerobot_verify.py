@@ -32,9 +32,15 @@ def main():
         actual_temporal = resolved_temporal(config, temporal["action_fps"], recipe["policy_type"])
         if actual_temporal != temporal:
             raise ValueError("Reloaded policy temporal configuration differs from saved contract")
-    config.device = "cuda"
+    config.device = recipe.get("execution_device", "cuda")
+    if config.device not in {"cuda", "mps"} or (config.device == "mps" and config.type != "act"):
+        raise ValueError("Unsupported native checkpoint verification device")
     policy = get_policy_class(config.type).from_pretrained(model_dir, config=config, strict=True)
-    preprocessor, postprocessor = make_pre_post_processors(config, pretrained_path=model_dir)
+    preprocessor, postprocessor = make_pre_post_processors(
+        config,
+        pretrained_path=model_dir,
+        preprocessor_overrides={"device_processor": {"device": config.device}},
+    )
     batch = torch.load(checkpoint / "probe-batch.pt", map_location="cpu", weights_only=True)
     expected = torch.load(checkpoint / "probe-action.pt", map_location="cpu", weights_only=True)
     actual = probe(policy, batch, preprocessor, postprocessor, recipe["seed"])

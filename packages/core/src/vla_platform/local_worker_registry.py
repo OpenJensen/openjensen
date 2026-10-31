@@ -53,9 +53,15 @@ def _validate_managed(runtime: Runtime) -> Runtime:
         or not runtime.training_only
         or canonical_module(runtime.training_module) not in _TRAINING_MODULES
         or set(runtime.model_dump(exclude_defaults=True)) - _MANAGED_FIELDS
-        or set(runtime.env) != {"CUDA_VISIBLE_DEVICES"}
-        or len(runtime.env["CUDA_VISIBLE_DEVICES"]) > 1024
-        or not _CUDA_TARGETS.fullmatch(runtime.env["CUDA_VISIBLE_DEVICES"])
+        or (
+            runtime.device == "cuda"
+            and (
+                set(runtime.env) != {"CUDA_VISIBLE_DEVICES"}
+                or len(runtime.env["CUDA_VISIBLE_DEVICES"]) > 1024
+                or not _CUDA_TARGETS.fullmatch(runtime.env["CUDA_VISIBLE_DEVICES"])
+            )
+        )
+        or runtime.device not in {"cuda", "mps"}
         or len(runtime.label) > 200
         or not runtime.label
         or not runtime.label.isprintable()

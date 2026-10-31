@@ -52,3 +52,21 @@ def test_environment_records_versions_and_source_without_host_secrets(monkeypatc
     assert "torch" in environment["packages"]
     assert "never-publish-me" not in json.dumps(environment)
     assert "not guaranteed" in environment["reproducibility_note"]
+
+
+def test_mps_environment_report_never_queries_a_cuda_device():
+    def no_cuda(index):
+        raise AssertionError("MPS telemetry must not initialize CUDA")
+
+    fake_torch = SimpleNamespace(
+        version=SimpleNamespace(cuda=None),
+        backends=SimpleNamespace(
+            cudnn=SimpleNamespace(version=lambda: None, benchmark=False),
+            cuda=SimpleNamespace(matmul=SimpleNamespace(allow_tf32=False)),
+        ),
+        cuda=SimpleNamespace(get_device_name=no_cuda),
+        are_deterministic_algorithms_enabled=lambda: False,
+    )
+    environment = environment_report(fake_torch, "policy_default", device="mps")
+    assert environment["execution_device"] == "mps"
+    assert environment["gpu"] == "Apple GPU (MPS, unified memory)"

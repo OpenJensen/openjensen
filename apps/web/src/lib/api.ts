@@ -88,7 +88,7 @@ export type PolicyOptions = {
   runtimes: {
     id: string;
     label: string;
-    device: 'cpu' | 'cuda';
+    device: 'cpu' | 'cuda' | 'mps';
     training: boolean;
     training_only?: boolean;
     act_export?: boolean;

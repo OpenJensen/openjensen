@@ -342,7 +342,7 @@ export function useTrainingPanel({
     item.status !== 'coming_soon' &&
     !!item.model_revision &&
     runtime.training &&
-    runtime.device === 'cuda' &&
+    (runtime.device === 'cuda' || (runtime.device === 'mps' && item.id === 'act')) &&
     (!item.minimum_gpu_memory_gb ||
       runtimeMemory(runtime) === 0 ||
       runtimeMemory(runtime) >= item.minimum_gpu_memory_gb) &&
@@ -422,7 +422,7 @@ export function useTrainingPanel({
           (item) =>
             (item.provider ?? 'local') === 'local' &&
             item.training &&
-            item.device === 'cuda' &&
+            ['cuda', 'mps'].includes(item.device) &&
             item.enabled !== false &&
             (!model?.minimum_gpu_memory_gb || runtimeMemory(item) >= model.minimum_gpu_memory_gb),
         )
@@ -448,6 +448,18 @@ export function useTrainingPanel({
     !resumeId && recipe.gradientAccumulation !== 1 && !accumulationSupported
       ? `Accumulation ${recipe.gradientAccumulation} is not supported by the selected model, method and compute target. Choose a supported configuration or explicitly use accumulation 1.`
       : null;
+  useEffect(() => {
+    if (chosenRuntime?.device !== 'mps' || resumeId) return;
+    const timer = setTimeout(() => {
+      setRecipe((previous) => ({ ...previous, batchSize: 1, gradientAccumulation: 1 }));
+      setModelBatchSizes((previous) => ({ ...previous, act: 1 }));
+      setTemporalDrafts((previous) => ({
+        ...previous,
+        act: { enabled: true, prediction: 32, execution: 8 },
+      }));
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [chosenRuntime?.id, chosenRuntime?.device, resumeId]);
   const trainingBudget = `${number(recipe.trainingSteps)} ${accumulationSupported ? 'optimizer updates' : 'steps'} · batch ${recipe.batchSize}`;
   const displayedModelId = model?.id;
   const stepComplete = [!!activeDataset && !datasetIssue(activeDataset.result), !!model && !!activeMethod, !!runtime];
@@ -456,6 +468,17 @@ export function useTrainingPanel({
       ? originalTraining.camera_keys.filter((key): key is string => typeof key === 'string')
       : [String(originalTraining?.camera_key ?? 'observation.images.front')]
     : selectedCameras;
+  const localRecipeIssue =
+    !resumeId &&
+    chosenRuntime?.device === 'mps' &&
+    (recipe.batchSize !== 1 ||
+      recipe.gradientAccumulation !== 1 ||
+      activeCameraKeys.length !== 1 ||
+      !effectiveTiming ||
+      effectiveTiming.prediction > 32 ||
+      effectiveTiming.execution > 8)
+      ? 'Apple GPU ACT uses batch 1, one camera, prediction at most 32 and execution at most 8.'
+      : null;
   const modelIssue = !resumeId
     ? (selectedModels
         .map(
@@ -548,8 +571,8 @@ export function useTrainingPanel({
                                 ? 'Select at least one camera.'
                                 : !model || !activeMethod
                                   ? 'Select a model and method.'
-                                  : mixtureIssue || modelIssue || batchIssue
-                                    ? mixtureIssue || modelIssue || batchIssue
+                                  : mixtureIssue || modelIssue || batchIssue || localRecipeIssue
+                                    ? mixtureIssue || modelIssue || batchIssue || localRecipeIssue
                                     : !runtime
                                       ? 'Choose an available GPU.'
                                       : accumulationIssue

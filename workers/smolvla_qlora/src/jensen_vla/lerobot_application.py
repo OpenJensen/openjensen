@@ -128,7 +128,7 @@ def cli_arguments(
         "dataset.eval_split": recipe["validation_fraction"],
         "output_dir": str(output),
         "job_name": "firebird-" + profile["policy_type"],
-        "policy.device": "cuda",
+        "policy.device": recipe.get("execution_device", "cuda"),
         "policy.push_to_hub": False,
         "steps": recipe["steps"],
         "batch_size": recipe["batch_size"],
@@ -223,6 +223,13 @@ def main():
         if recipe.get("dataset_source") == "local":
             verify_local_snapshot(job.get("dataset_snapshot"))
             write_json(output / "dataset-snapshot.json", job["dataset_snapshot"])
+        device = job.get("runtime", {}).get("device", "cuda")
+        if device not in {"cuda", "mps"} or (device == "mps" and profile["policy_type"] != "act"):
+            raise ValueError("The selected native training device does not support this policy")
+        if device == "mps" or "execution_device" in recipe:
+            recipe["execution_device"] = device
+        if device == "mps":
+            recipe["num_workers"] = 0
         recipe_path = output / "recipe.json"
         write_json(recipe_path, recipe)
         command = [

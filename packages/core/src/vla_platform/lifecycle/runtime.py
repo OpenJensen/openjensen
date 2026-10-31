@@ -60,7 +60,7 @@ class Runtime(StrictRecord):
     vendor: str | None = None
     conversion_vendor: str | None = None
     build: str | None = None
-    device: Literal["cpu", "cuda"] = "cpu"
+    device: Literal["cpu", "cuda", "mps"] = "cpu"
     # Optional operator-declared specifications, not live device discovery.
     gpu_name: str | None = Field(default=None, min_length=1, max_length=200)
     gpu_memory_mib: int | None = Field(default=None, gt=0, strict=True)
@@ -114,11 +114,22 @@ class Runtime(StrictRecord):
             self.execution != "native" or self.provider != "local" or self.device != "cpu"
         ):
             raise ValueError("Native quantization requires a local CPU runtime")
+        if self.device == "mps" and (
+            not self.training_only
+            or self.training_model_ids != ["act"]
+            or canonical_module(self.training_module) != "jensen_vla.lerobot_application"
+            or self.env
+            or self.image
+            or self.training_image
+        ):
+            raise ValueError(
+                "MPS requires a native local ACT-only trainer without container overrides"
+            )
         if self.training_only:
             if (
                 self.execution != "native"
                 or self.provider != "local"
-                or self.device != "cuda"
+                or self.device not in {"cuda", "mps"}
                 or not self.training_python
                 or not self.training_root
                 or self.worker_root
@@ -252,7 +263,7 @@ class PublicRuntime(StrictRecord):
     provider_label: str
     region: str | None
     enabled: bool
-    device: Literal["cpu", "cuda"]
+    device: Literal["cpu", "cuda", "mps"]
     training: bool
     training_only: bool = False
     act_export: bool = False
@@ -345,7 +356,9 @@ class RuntimeCatalog(StrictRecord):
                     # The current native trainer uses one device per run. This
                     # is a recipe constraint, not an available-device count.
                     "training_gpu_count": (
-                        1 if x.device == "cuda" and x.training_python and x.training_root else None
+                        1
+                        if x.device in {"cuda", "mps"} and x.training_python and x.training_root
+                        else None
                     ),
                 }
                 for x in self.runtimes

@@ -151,3 +151,39 @@ test('Slurm settings retain resource limits and connection references', async ({
   expect(Object.keys(state.saved[0])).not.toContain('command');
   expect(Object.keys(state.saved[0])).not.toContain('credentials');
 });
+
+test('Apple Silicon discovers the installed ACT runtime without NVIDIA setup copy', async ({ page }) => {
+  await settings(page);
+  await page.route('**/api/v1/compute-settings/local/check', async (route) => {
+    await route.fulfill({
+      json: {
+        host: { name: 'This Mac', platform: 'Darwin', architecture: 'arm64' },
+        checked_at: '2026-01-01T12:00:00Z',
+        status: 'ready',
+        message: 'Apple GPU checked for native ACT training.',
+        issues: [],
+        candidates: [
+          {
+            id: 'managed-local-act-mps-fixture',
+            label: 'Apple GPU · ACT',
+            gpu_name: 'Apple GPU (MPS, unified memory)',
+            gpu_memory_mib: 16384,
+            training_model_ids: ['act'],
+            status: 'ready',
+            runtime_id: null,
+            reason: null,
+            setup_supported: true,
+          },
+        ],
+      },
+    });
+  });
+  await page.locator('summary').filter({ hasText: 'Local worker setup' }).click();
+  await page.getByRole('button', { name: 'Check this machine', exact: true }).click();
+  await expect(page.getByText('Native ACT training', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Add Apple GPU · ACT', exact: true })).toBeVisible();
+  await expect(page.getByText('Local NVIDIA GPU', { exact: true })).toHaveCount(0);
+  await expect(
+    page.getByText('On Apple Silicon, setup reuses the installed ACT environment.', { exact: false }),
+  ).toBeVisible();
+});

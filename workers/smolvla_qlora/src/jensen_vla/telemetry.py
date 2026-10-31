@@ -32,7 +32,7 @@ def report(output, phase, message, *, step, total_steps, **details):
     return record
 
 
-def environment_report(torch, compute_dtype):
+def environment_report(torch, compute_dtype, *, device="cuda"):
     packages = {}
     for name in (
         "torch",
@@ -62,7 +62,10 @@ def environment_report(torch, compute_dtype):
         "packages": packages,
         "cuda": torch.version.cuda,
         "cudnn": torch.backends.cudnn.version(),
-        "gpu": torch.cuda.get_device_name(0),
+        "gpu": "Apple GPU (MPS, unified memory)"
+        if device == "mps"
+        else torch.cuda.get_device_name(0),
+        "execution_device": device,
         "compute_dtype": compute_dtype,
         "source_files_sha256": source_files,
         "deterministic_algorithms": torch.are_deterministic_algorithms_enabled(),
