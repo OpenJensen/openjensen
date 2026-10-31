@@ -328,6 +328,16 @@ export const api = {
 
   cloudRuns: () => request<components['schemas']['CloudRunsFeed']>('/cloud-runs'),
   policyOptions: () => request<PolicyOptions>('/policy-options'),
+  installRobotPolicy: (
+    projectId: string,
+    artifactId: string,
+    settings: { name: string; fps?: number; confirm_so101_units: boolean },
+  ) =>
+    request<{ installed_policy_id: string }>(
+      `/projects/${encodeURIComponent(projectId)}/robot-lab/policies/${encodeURIComponent(artifactId)}/install`,
+      { method: 'POST', body: JSON.stringify(settings) },
+      300_000,
+    ),
   artifacts: (id: string) => request<PolicyArtifact[]>(`/projects/${encodeURIComponent(id)}/artifacts`),
   renameModelRun: (projectId: string, jobId: string, name: string) =>
     request<{ name: string }>(

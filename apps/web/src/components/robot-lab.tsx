@@ -7,6 +7,7 @@ import { RobotLabConnect } from './robot-lab-connect';
 import { RobotLabMotorIds } from './robot-lab-motor-ids';
 import { RobotLabCalibrate } from './robot-lab-calibrate';
 import { RobotLabTeleoperate } from './robot-lab-teleoperate';
+import { RobotLabPolicy } from './robot-lab-policy';
 import { RobotLabRecord } from './robot-lab-record';
 import { RobotLabCamera } from './robot-lab-camera';
 import { RobotLabDiagnostics } from './robot-lab-diagnostics';
@@ -84,6 +85,7 @@ export function RobotLab() {
           { title: 'Devices', step: 0 },
           { title: 'Teleoperation', step: 3 },
           { title: 'Record', step: 4 },
+          { title: 'Run policy', step: 5 },
         ].map((item) => (
           <button
             key={item.title}
@@ -137,7 +139,9 @@ export function RobotLab() {
         <div className="robot-lab-grid">
           <section
             className="robot-lab-main"
-            aria-label={step < 3 ? 'Device configuration' : step === 3 ? 'Teleoperation' : 'Record'}
+            aria-label={
+              step < 3 ? 'Device configuration' : step === 3 ? 'Teleoperation' : step === 4 ? 'Record' : 'Run policy'
+            }
           >
             {step < 3 && (
               <RobotLabDeviceDetail lab={lab}>
@@ -148,6 +152,7 @@ export function RobotLab() {
             )}
             {step === 3 && <RobotLabTeleoperate lab={lab} />}
             {step === 4 && <RobotLabRecord lab={lab} />}
+            {step === 5 && <RobotLabPolicy lab={lab} />}
             {busy && (
               <p className="robot-lab-subtle" role="status" style={{ marginTop: 16 }}>
                 {pending === 'Arm stopped.'
