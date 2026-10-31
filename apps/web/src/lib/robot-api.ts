@@ -57,9 +57,46 @@ export type CalibrationDocument = {
   role: RobotRole;
   calibration: Record<RobotJoint, MotorCalibration>;
 };
+export type RobotPolicyState = {
+  phase: 'idle' | 'loading' | 'ready' | 'checking' | 'running' | 'error';
+  policy_id: string | null;
+  name: string | null;
+  error: string | null;
+  fps: number | null;
+  steps: number;
+  inference_ms: number | null;
+  preflight: {
+    passed: boolean;
+    camera_index: number;
+    checked_at: number;
+    fps: number;
+    measured_fps: number;
+    mean_latency_ms: number;
+    max_latency_ms: number;
+    fresh_frames: number;
+    samples: number;
+    message: string;
+  } | null;
+  device: string | null;
+  limits: { max_speed: number; max_acceleration: number; max_run_seconds: number; operator_heartbeat_seconds: number };
+};
+export type RobotPolicyCatalog = {
+  policies: {
+    id: string;
+    name: string;
+    compatible: boolean;
+    message: string;
+    fps?: number;
+    camera_key?: string;
+    image_shape?: number[];
+  }[];
+  runtime: { configured: boolean; device: string | null; message: string };
+  state: RobotPolicyState;
+};
 export type RobotStatus = {
   calibration_transfer?: { robot_id: string; role: RobotRole; verified: boolean; backup_created: boolean };
   diagnostics?: RobotDiagnostics;
+  policy?: RobotPolicyState;
   controller?: {
     name: string;
     upstream: string;
@@ -80,6 +117,7 @@ export type RobotStatus = {
   capabilities?: {
     persistent_diagnostics?: boolean;
     agent_control?: boolean;
+    run_policy?: boolean;
     lerobot_position_control?: boolean;
     large_joint_steps?: boolean;
     arm_readiness?: boolean;
@@ -104,7 +142,7 @@ export type RobotStatus = {
     guided_recording?: boolean;
   };
   session?: {
-    mode: 'idle' | 'calibration' | 'setup' | 'verification' | 'agent' | ControlMode;
+    mode: 'idle' | 'calibration' | 'setup' | 'verification' | 'agent' | 'policy' | ControlMode;
     generation?: number;
     robot_id: string | null;
     port: string | null;
@@ -322,6 +360,19 @@ async function request<T>(
 
 export const robotApi = {
   status: () => request<RobotStatus>('/status'),
+  policyCatalog: () => request<RobotPolicyCatalog>('/policy/catalog'),
+  loadPolicy: (policy_id: string) => request<RobotStatus>('/policy/load', { policy_id }, { timeoutMs: 125_000 }),
+  preflightPolicy: (camera_index: number) =>
+    request<RobotStatus>('/policy/preflight', { camera_index }, { timeoutMs: 30_000 }),
+  startPolicy: (input: { expected_generation: number; camera_index: number; duration_seconds: number }) =>
+    request<RobotStatus>('/policy/start', {
+      ...input,
+      confirm: 'RUN POLICY',
+      operator_present: true,
+      workspace_clear: true,
+    }),
+  policyHeartbeat: (expected_generation: number) =>
+    request<RobotStatus>('/policy/heartbeat', { expected_generation }, { timeoutMs: 2_000 }),
   diagnostics: () => request<RobotDiagnostics>('/diagnostics'),
   devices: () => request<RobotDevices>('/devices', undefined, { timeoutMs: 30_000 }),
   configureDevice: (input: { id: string; port: string; name: string; role: RobotRole }) =>

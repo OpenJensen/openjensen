@@ -15856,6 +15856,252 @@
         ]
       }
     },
+    "/api/v1/robot-lab/policy/catalog": {
+      "get": {
+        "operationId": "robot_lab_get_policy_catalog",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Get Policy Catalog",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/policy/heartbeat": {
+      "post": {
+        "operationId": "robot_lab_post_policy_heartbeat",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "expected_generation": {
+                    "title": "Expected Generation",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "expected_generation"
+                ],
+                "title": "PolicyHeartbeatRequest",
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Policy Heartbeat",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/policy/load": {
+      "post": {
+        "operationId": "robot_lab_post_policy_load",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "policy_id": {
+                    "pattern": "^[A-Za-z0-9_-]{1,80}$",
+                    "title": "Policy Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "policy_id"
+                ],
+                "title": "PolicyLoadRequest",
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Policy Load",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/policy/preflight": {
+      "post": {
+        "operationId": "robot_lab_post_policy_preflight",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "camera_index": {
+                    "maximum": 63.0,
+                    "minimum": 0.0,
+                    "title": "Camera Index",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "camera_index"
+                ],
+                "title": "PolicyPreflightRequest",
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Policy Preflight",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/policy/start": {
+      "post": {
+        "operationId": "robot_lab_post_policy_start",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "camera_index": {
+                    "maximum": 63.0,
+                    "minimum": 0.0,
+                    "title": "Camera Index",
+                    "type": "integer"
+                  },
+                  "confirm": {
+                    "const": "RUN POLICY",
+                    "title": "Confirm",
+                    "type": "string"
+                  },
+                  "duration_seconds": {
+                    "maximum": 120.0,
+                    "minimum": 1.0,
+                    "title": "Duration Seconds",
+                    "type": "integer"
+                  },
+                  "expected_generation": {
+                    "title": "Expected Generation",
+                    "type": "integer"
+                  },
+                  "operator_present": {
+                    "const": true,
+                    "title": "Operator Present",
+                    "type": "boolean"
+                  },
+                  "workspace_clear": {
+                    "const": true,
+                    "title": "Workspace Clear",
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "confirm",
+                  "operator_present",
+                  "workspace_clear",
+                  "camera_index",
+                  "duration_seconds",
+                  "expected_generation"
+                ],
+                "title": "PolicyStartRequest",
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Policy Start",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/policy/stop": {
+      "post": {
+        "operationId": "robot_lab_post_policy_stop",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "title": "PolicyStopRequest",
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Policy Stop",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
     "/api/v1/robot-lab/probe": {
       "post": {
         "operationId": "robot_lab_post_probe",

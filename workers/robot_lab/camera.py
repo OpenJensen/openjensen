@@ -179,6 +179,16 @@ class CameraPool:
             "image_sensor_timestamp_verified": False,
         }
 
+    def latest_timed_jpeg(self, index=0, max_age=0.15):
+        """Encode the background reader's latest atomic host-timestamped frame."""
+        import cv2
+
+        frame, captured = self.read_latest_timed(index, max_age)
+        ok, encoded = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+        if not ok:
+            raise RuntimeError("Could not encode policy camera observation")
+        return {"jpeg": encoded.tobytes(), "captured_monotonic": captured}
+
     def discover(self):
         # Inventory only: do not open every camera or compete with recording.
         if platform.system() == "Darwin":

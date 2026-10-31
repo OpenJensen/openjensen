@@ -26,6 +26,8 @@ SOURCE_MODULES = (
     "server.py",
     "recording.py",
     "agent_control.py",
+    "policy.py",
+    "policy_inference.py",
     "hardware.py",
     "lerobot_control.py",
     "motion.py",

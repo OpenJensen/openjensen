@@ -24,6 +24,8 @@ Open **Robot logs** to see the last stop and download recent events and readings
 
 Control also stops when Robot Lab is hidden or closed, after a two-second browser heartbeat loss, or on a hardware communication fault. Keep the page visible during control. The saved stop reason distinguishes these cases.
 
+Open **Run policy** for compatible ACT checkpoints installed on the USB computer. Load a policy, select the training camera view, and run **Check camera and inference rate**. This checks the saved normalization and actual local inference cadence without enabling torque. A passing check is required before **Enable policy control**, which holds the current pose. Review the attended-workspace checkbox and duration, then choose **Run policy**. Targets are limited to 10°/s (gripper 10%/s) and 20°/s²; Stop, a lost operator heartbeat, stale observations or predictions, incompatible targets and the run deadline disable torque. This rate check does not establish task success or collision avoidance.
+
 ## AI teleoperation
 
 Open **ROBOT LAB → AI teleoperation** for saved session jobs, then choose **New job** or **Workspace** for physical SO101 control. **Agent Control** opens with **Physical SO101** selected; choose the USB port, saved calibration and workspace camera before explicitly enabling movement. Describe the task and review the selected provider, current observation and run limits. A proposed action is separate from measured execution and verified task completion.

@@ -19,6 +19,44 @@ from vla_platform.robot_lab_bridge import RobotLabError, safe_id, strict_json
 router = APIRouter(prefix="/api/v1", tags=["Robot Lab"])
 
 
+class PolicyLoadRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    policy_id: str = Field(pattern=r"^[A-Za-z0-9_-]{1,80}$")
+
+
+class PolicyStartRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    confirm: Literal["RUN POLICY"]
+    operator_present: Literal[True]
+    workspace_clear: Literal[True]
+    camera_index: StrictInt = Field(ge=0, le=63)
+    duration_seconds: StrictInt = Field(ge=1, le=120)
+    expected_generation: StrictInt
+
+
+class PolicyPreflightRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    camera_index: StrictInt = Field(ge=0, le=63)
+
+
+class PolicyHeartbeatRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expected_generation: StrictInt
+
+
+class PolicyStopRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+POLICY_REQUESTS = {
+    "policy/load": PolicyLoadRequest,
+    "policy/start": PolicyStartRequest,
+    "policy/preflight": PolicyPreflightRequest,
+    "policy/heartbeat": PolicyHeartbeatRequest,
+    "policy/stop": PolicyStopRequest,
+}
+
+
 class DeviceConfigurationRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     id: str = Field(min_length=1, max_length=100)
@@ -114,6 +152,13 @@ async def proxy(path: str, request: Request):
                     raise ValueError
             except ValueError, UnicodeDecodeError, RecursionError:
                 raise HTTPException(422, "Supply a JSON object for this operation") from None
+        if path in POLICY_REQUESTS:
+            try:
+                POLICY_REQUESTS[path].model_validate(payload)
+            except ValidationError:
+                raise HTTPException(
+                    422, "Choose valid policy settings and confirm attended operation"
+                ) from None
         if path == "devices/configure":
             try:
                 DeviceConfigurationRequest.model_validate(payload)
@@ -167,8 +212,16 @@ async def proxy(path: str, request: Request):
 
 
 PROTOCOL = {
-    "GET": {"devices", "datasets", "camera.jpg", "diagnostics", "calibration/export"},
+    "GET": {
+        "devices",
+        "datasets",
+        "camera.jpg",
+        "diagnostics",
+        "calibration/export",
+        "policy/catalog",
+    },
     "POST": {
+        *POLICY_REQUESTS,
         "devices/configure",
         "devices/remove",
         "devices/restore",
@@ -252,7 +305,9 @@ for method, protocol_paths in PROTOCOL.items():
                     "content": {
                         "application/json": {
                             "schema": request_schema(
-                                DeviceConfigurationRequest
+                                POLICY_REQUESTS[protocol_path]
+                                if protocol_path in POLICY_REQUESTS
+                                else DeviceConfigurationRequest
                                 if protocol_path == "devices/configure"
                                 else DeviceVisibilityRequest
                                 if protocol_path in {"devices/remove", "devices/restore"}
@@ -270,6 +325,7 @@ for method, protocol_paths in PROTOCOL.items():
             }
             if protocol_path
             in {
+                *POLICY_REQUESTS,
                 "recording/finish",
                 "recording/start",
                 "recording/collection/start",
