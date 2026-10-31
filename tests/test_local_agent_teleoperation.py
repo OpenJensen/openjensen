@@ -376,9 +376,40 @@ def test_external_camera_reads_do_not_renew_operator_presence(local):
         assert response.status_code == 200, response.text
         time.sleep(0.1)
     assert response.status_code == 403
-    current = client.get(route).json()
+    assert not client.get(route).json()["control_armed"]
+    # Revocation denies access before asynchronous target release completes.
+    # Reading the session immediately can still observe that paused transition.
+    current = wait(client, session, {"interrupted", "error"}, presence=False)
     assert current["status"] == "interrupted" and not current["control_armed"]
     assert robot.releases and not robot.executions
+
+
+def test_operator_expiry_revokes_authority_before_target_release_finishes(local, monkeypatch):
+    client, robot, session, route, _token = local
+    entered, gate = asyncio.Event(), asyncio.Event()
+    release = robot.release
+
+    async def delayed_release(*args):
+        entered.set()
+        await gate.wait()
+        await release(*args)
+
+    async def wait_for_release():
+        await asyncio.wait_for(entered.wait(), timeout=5)
+
+    monkeypatch.setattr(robot, "release", delayed_release)
+    try:
+        # Only the operator page can renew presence; no heartbeat is sent here.
+        client.portal.call(wait_for_release)
+        current = client.get(route).json()
+        assert current["status"] == "paused" and not current["control_armed"]
+        assert robot.owner == session["id"]
+        assert not robot.releases and not robot.executions
+    finally:
+        client.portal.call(gate.set)
+    current = wait(client, session, {"interrupted", "error"}, presence=False)
+    assert current["status"] == "interrupted" and not current["control_armed"]
+    assert robot.owner is None and robot.releases and not robot.executions
 
 
 def test_foreign_sites_cannot_create_local_agent_credentials(local):
