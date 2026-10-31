@@ -43,6 +43,10 @@ writer.finalize()
         check=True,
         timeout=30,
     )
+    exported = source / "pen-demo/openjensen"
+    exported.mkdir()
+    (exported / "source.json").write_text(json.dumps({"format": "lerobot_v3", "example": False}))
+    (exported / "annotations.json").write_text(json.dumps({"views": {}, "frames": {}}))
     return source / "pen-demo"
 
 
@@ -107,3 +111,9 @@ pq.write_table(pa.Table.from_pylist(rows, schema=table.schema), path)
     with pytest.raises(SnapshotError, match="Dataset validation failed"):
         snapshot(recording, tmp_path)
     assert not list((tmp_path / "snapshots").iterdir())
+
+
+def test_export_metadata_must_be_valid_json(recording, tmp_path):
+    (recording / "openjensen/source.json").write_text("not json")
+    with pytest.raises(SnapshotError, match="Dataset validation failed"):
+        snapshot(recording, tmp_path)

@@ -399,6 +399,12 @@ def validate(root, limits):
             and feature["shape"][0] <= 256,
             f"Unsupported training feature: {key}",
         )
+    for sidecar in ("openjensen/source.json", "openjensen/annotations.json"):
+        if (root / sidecar).exists():
+            require(
+                isinstance(read_json(root, sidecar), dict),
+                "Export metadata must be a JSON object",
+            )
     stats = read_json(root, "meta/stats.json")
     for key in ("action", "observation.state", *cameras):
         value = stats.get(key, {})
