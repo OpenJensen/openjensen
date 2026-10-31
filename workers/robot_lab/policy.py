@@ -30,6 +30,9 @@ from policy_contract import (
 UNITS = ["degrees"] * 5 + ["percent"]
 MAX_SPEED = 10.0
 MAX_ACCELERATION = 20.0
+# Model predictions may slightly overshoot an endpoint: degrees for arm joints,
+# percentage points for the gripper. Commanded motion keeps its original bounds.
+PREDICTION_TOLERANCE = 5.0
 
 
 def admit(root, ident):
@@ -327,6 +330,8 @@ class PolicyRunner:
                 "limits": {
                     "max_speed": MAX_SPEED,
                     "max_acceleration": MAX_ACCELERATION,
+                    "prediction_tolerance_degrees": PREDICTION_TOLERANCE,
+                    "prediction_tolerance_gripper_percent": PREDICTION_TOLERANCE,
                     "max_run_seconds": 120,
                     "operator_heartbeat_seconds": 2,
                 },
@@ -725,8 +730,20 @@ class PolicyRunner:
                 if abs(measured[j] - self.commanded[j]) > 15:
                     raise HardwareError("Policy tracking error exceeded the motion envelope")
                 target = self.predicted[j]
-                if not ranges[j]["min"] <= target <= ranges[j]["max"]:
-                    raise HardwareError("Policy target is outside calibrated joint limits")
+                lower, upper = ranges[j]["min"], ranges[j]["max"]
+                if (
+                    not math.isfinite(target)
+                    or target < lower - PREDICTION_TOLERANCE
+                    or target > upper + PREDICTION_TOLERANCE
+                ):
+                    raise HardwareError(
+                        "Policy target is outside calibrated joint limits: "
+                        f"{j} predicted {target:.3f}, allowed {lower:.3f} to {upper:.3f} "
+                        f"with {PREDICTION_TOLERANCE:g} prediction tolerance"
+                    )
+                # Project only small prediction overshoots onto the existing
+                # inset limits, before applying the speed/acceleration envelope.
+                target = min(upper, max(lower, target))
                 delta = target - self.commanded[j]
                 # A proportional velocity goal approaches each target without
                 # snapping the final step, which would violate acceleration limits.
