@@ -6,13 +6,12 @@ are fetched by a subsequent cloud worker, checked against the committed manifest
 
 import hashlib
 import json
+import os
 import re
 import sys
 import tarfile
 import tempfile
 from pathlib import Path, PurePosixPath
-
-from vla_platform.environment import required_env
 
 MAX_METADATA = 8 * 1024**2
 MAX_FILES = 10000
@@ -44,6 +43,20 @@ TRAINING_SUMMARY_FILES = (
     "resource-preflight.json",
 )
 SUMMARY_FILES = frozenset((*TRAINING_SUMMARY_FILES, *INFERENCE_EVIDENCE_FILES))
+
+
+def required_env(name):
+    """Keep this copied worker helper independent of the application package."""
+    if name.startswith("FIREBIRD_"):
+        canonical, legacy = "JENSEN_" + name.removeprefix("FIREBIRD_"), name
+    elif name.startswith("JENSEN_"):
+        canonical, legacy = name, "FIREBIRD_" + name.removeprefix("JENSEN_")
+    else:
+        canonical = legacy = name
+    value = os.environ.get(canonical, os.environ.get(legacy))
+    if value is None:
+        raise KeyError(name)
+    return value
 
 
 def digest(path):
