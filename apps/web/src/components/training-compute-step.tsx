@@ -66,6 +66,12 @@ export function TrainingComputeStep({
           Compute
         </h2>
       </div>
+      {runtime?.device === 'mps' && (
+        <p className="training-help">
+          Apple GPU ACT uses batch 1, one camera up to 640 × 480, prediction horizon 32 and execution horizon 8. It
+          reuses the installed environment.
+        </p>
+      )}
       <section className="training-recipe-review" aria-label="Training recipe review">
         <div className="training-recipe-title">
           <span>{resumeId ? 'Resume saved training' : 'Your training recipe'}</span>
@@ -124,6 +130,7 @@ export function TrainingComputeStep({
           )}
         </dl>
         {!resumeId &&
+          runtime?.device !== 'mps' &&
           selectedModels.map((item) => {
             const family = temporalFamily(item.id);
             const draft = family ? (temporalDrafts[family] ?? defaultTemporal(family)) : null;

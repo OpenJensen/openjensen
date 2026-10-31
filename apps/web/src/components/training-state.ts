@@ -342,7 +342,7 @@ export function useTrainingPanel({
     item.status !== 'coming_soon' &&
     !!item.model_revision &&
     runtime.training &&
-    runtime.device === 'cuda' &&
+    (runtime.device === 'cuda' || (runtime.device === 'mps' && item.id === 'act')) &&
     (!item.minimum_gpu_memory_gb ||
       runtimeMemory(runtime) === 0 ||
       runtimeMemory(runtime) >= item.minimum_gpu_memory_gb) &&
@@ -422,7 +422,7 @@ export function useTrainingPanel({
           (item) =>
             (item.provider ?? 'local') === 'local' &&
             item.training &&
-            item.device === 'cuda' &&
+            ['cuda', 'mps'].includes(item.device) &&
             item.enabled !== false &&
             (!model?.minimum_gpu_memory_gb || runtimeMemory(item) >= model.minimum_gpu_memory_gb),
         )
@@ -448,6 +448,15 @@ export function useTrainingPanel({
     !resumeId && recipe.gradientAccumulation !== 1 && !accumulationSupported
       ? `Accumulation ${recipe.gradientAccumulation} is not supported by the selected model, method and compute target. Choose a supported configuration or explicitly use accumulation 1.`
       : null;
+  useEffect(() => {
+    if (chosenRuntime?.device !== 'mps' || resumeId) return;
+    setRecipe((previous) => ({ ...previous, batchSize: 1, gradientAccumulation: 1 }));
+    setModelBatchSizes((previous) => ({ ...previous, act: 1 }));
+    setTemporalDrafts((previous) => ({
+      ...previous,
+      act: { enabled: true, prediction: 32, execution: 8 },
+    }));
+  }, [chosenRuntime?.id, resumeId]);
   const trainingBudget = `${number(recipe.trainingSteps)} ${accumulationSupported ? 'optimizer updates' : 'steps'} · batch ${recipe.batchSize}`;
   const displayedModelId = model?.id;
   const stepComplete = [!!activeDataset && !datasetIssue(activeDataset.result), !!model && !!activeMethod, !!runtime];

@@ -324,3 +324,41 @@ def test_act_accumulation_resolves_to_native_microbatch_units():
     assert "--save_freq=3" in arguments
     assert "--eval_steps=6" in arguments
     assert recipe["steps"] == 2
+
+
+def test_native_act_device_dispatch_preserves_cuda_default_and_accepts_saved_mps():
+    recipe, profile = resolve_recipe(request("act", batch_size=1))
+    arguments = cli_arguments(recipe, profile, output="out", dataset_root="data")
+    assert "--policy.device=cuda" in arguments
+    recipe["execution_device"] = "mps"
+    arguments = cli_arguments(recipe, profile, output="out", dataset_root="data")
+    assert "--policy.device=mps" in arguments
+    assert "--policy.device=cuda" not in arguments
+
+
+def test_mps_device_admission_bounds_allocator_and_keeps_cuda_default(monkeypatch):
+    import platform
+    from types import SimpleNamespace
+
+    from jensen_vla.lerobot_train import configure_training_device
+
+    calls = []
+    torch = SimpleNamespace(
+        cuda=SimpleNamespace(is_available=lambda: True),
+        backends=SimpleNamespace(mps=SimpleNamespace(is_available=lambda: True)),
+        mps=SimpleNamespace(
+            set_per_process_memory_fraction=lambda value: calls.append(("memory", value))
+        ),
+        set_num_threads=lambda value: calls.append(("threads", value)),
+        set_num_interop_threads=lambda value: calls.append(("interop", value)),
+    )
+    configure_training_device(torch, "act", "cuda")
+    assert not calls
+    monkeypatch.setattr(platform, "system", lambda: "Darwin")
+    configure_training_device(torch, "act", "mps")
+    assert calls == [("memory", 0.45), ("threads", 2), ("interop", 1)]
+    with pytest.raises(RuntimeError, match="ACT/MPS"):
+        configure_training_device(torch, "smolvla", "mps")
+    monkeypatch.setattr(platform, "system", lambda: "Linux")
+    with pytest.raises(RuntimeError, match="ACT/MPS"):
+        configure_training_device(torch, "act", "mps")

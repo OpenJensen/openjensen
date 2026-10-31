@@ -149,7 +149,7 @@ def public_training_models(catalog: RuntimeCatalog) -> list[dict]:
             for runtime in catalog.runtimes
             if runtime.training_python
             and runtime.training_root
-            and runtime.device == "cuda"
+            and (runtime.device == "cuda" or (runtime.device == "mps" and model.id == "act"))
             and model.id in runtime.training_model_ids
             and model.model_revision is not None
         ]

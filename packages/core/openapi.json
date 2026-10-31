@@ -6230,7 +6230,8 @@
           "device": {
             "enum": [
               "cpu",
-              "cuda"
+              "cuda",
+              "mps"
             ],
             "title": "Device",
             "type": "string"
@@ -8201,7 +8202,8 @@
             "default": "cpu",
             "enum": [
               "cpu",
-              "cuda"
+              "cuda",
+              "mps"
             ],
             "title": "Device",
             "type": "string"

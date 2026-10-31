@@ -852,6 +852,14 @@ class Lifecycle:
                 raise ValueError(
                     "Train ACT separately, then export it; its GGUF workflow is unsupported"
                 )
+            if runtime.device == "mps":
+                from vla_platform.macos_act_runtime import validate_training_recipe
+
+                if model.id != "act" or request.training_method != "full":
+                    raise ValueError("Apple GPU training currently supports native ACT only")
+                selected = await self.execution.get(request.dataset_job_id)
+                features = getattr(getattr(selected, "result", None), "features", {})
+                validate_training_recipe(recipe, features)
             if not model.model_revision:
                 raise ValueError("This model needs a pinned checkpoint before training")
             if model.id not in runtime.training_model_ids:

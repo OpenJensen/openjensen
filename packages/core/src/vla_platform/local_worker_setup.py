@@ -92,8 +92,12 @@ class LocalWorkerSetup:
             runtime is None
             or runtime.execution != "native"
             or runtime.provider != "local"
-            or runtime.device != "cuda"
-            or "smolvla" not in runtime.training_model_ids
+            or not (
+                runtime.device == "cuda"
+                and "smolvla" in runtime.training_model_ids
+                or runtime.device == "mps"
+                and runtime.training_model_ids == ["act"]
+            )
             or not runtime.training_python
             or not runtime.training_root
             or canonical_module(runtime.training_module)
@@ -105,6 +109,11 @@ class LocalWorkerSetup:
             if not python.is_file() or not os.access(python, os.X_OK) or not root.is_dir():
                 return False
             worker_module(root, runtime.training_module)
+            if runtime.device == "mps":
+                from vla_platform.macos_act_runtime import binding_python
+
+                if binding_python(self.lifecycle.settings.data_dir) != python:
+                    return False
         except OSError, ValueError:
             return False
         return True
@@ -115,6 +124,8 @@ class LocalWorkerSetup:
                 return self.public()
             self.activate_module = activate_module
             root = _worker_root()
+            if platform.system() == "Darwin" and platform.machine() == "arm64":
+                return await self._adopt_macos(root)
             if platform.system() != "Linux" or platform.machine() not in {"x86_64", "AMD64"}:
                 raise ValueError("Automatic NVIDIA setup requires Linux x86-64.")
             if root is None or not (root / "requirements-smolvla-linux.txt").is_file():
@@ -169,6 +180,44 @@ class LocalWorkerSetup:
             self._save()
             self.task = asyncio.create_task(self._install(root, Path(uv), destination))
             return self.public()
+
+    async def _adopt_macos(self, root):
+        from vla_platform.macos_act_runtime import configure_existing
+
+        if root is None:
+            raise ValueError("The bundled native ACT worker is unavailable.")
+        async with self.lifecycle.execution.storage.engine.connect() as connection:
+            active = (
+                await connection.execute(
+                    select(jobs.c.id).where(jobs.c.status.in_(["queued", "running"])).limit(1)
+                )
+            ).first()
+        if active:
+            raise ValueError("Wait for active jobs before changing the local ACT runtime binding.")
+        configure_existing(self.lifecycle.settings.data_dir)
+        found = await self.discovery.check()
+        ready = next(
+            (
+                item
+                for item in found.candidates
+                if item.status in {"ready", "registered"} and item.training_model_ids == ["act"]
+            ),
+            None,
+        )
+        if ready is None:
+            raise ValueError(
+                "The existing ACT environment did not pass the offline Apple GPU check."
+            )
+        runtime = await self.discovery.add(ready.id)
+        self._activate_feature()
+        self.state = LocalSetupState(
+            status="succeeded",
+            runtime_id=runtime.id,
+            finished_at=now(),
+            message="The existing ACT environment was added; no dependencies were installed.",
+        )
+        self._save()
+        return self.public()
 
     async def _stop(self, process):
         try:

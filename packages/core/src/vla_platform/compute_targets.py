@@ -142,7 +142,7 @@ class TargetRuntimeOption(Strict):
     id: str
     label: str
     operations: list[str]
-    device: Literal["cpu", "cuda"] = "cpu"
+    device: Literal["cpu", "cuda", "mps"] = "cpu"
     accelerator: str | None = None
     remote_only: bool = False
 
