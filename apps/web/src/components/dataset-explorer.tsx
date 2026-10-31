@@ -11,6 +11,7 @@ import {
   type DatasetJob,
 } from '@/lib/api';
 import '@/app/dataset-explorer.css';
+import { LocalDatasetPlayer } from './local-dataset-player';
 
 const pageSize = 6;
 
@@ -701,5 +702,13 @@ function Explorer({ job, active }: { job: DatasetJob; active: boolean }) {
 }
 
 export function DatasetExplorer({ job, active = true }: { job: DatasetJob; active?: boolean }) {
+  if (job.result?.source === 'local' && job.request.library_id) {
+    return (
+      <section className="dataset-explorer">
+        <h2>Cameras</h2>
+        <LocalDatasetPlayer key={job.id} job={job} active={active} />
+      </section>
+    );
+  }
   return <Explorer key={job.id} job={job} active={active} />;
 }

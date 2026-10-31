@@ -9,6 +9,7 @@ import re
 import shutil
 import subprocess
 import sys
+import uuid
 from pathlib import Path
 
 MAX_ROWS = 100_000
@@ -48,7 +49,7 @@ def inventory(root):
     return hashlib.sha256(json.dumps(files, separators=(",", ":")).encode()).hexdigest(), files
 
 
-def tabular(path):
+def tabular(path, *, batch_size=256):
     if path.suffix == ".csv":
         with path.open(newline="") as handle:
             for row in csv.DictReader(handle):
@@ -68,7 +69,7 @@ def tabular(path):
             raise ValueError("Parquet table exceeds the 512 MiB decoded limit")
         if table.metadata.num_rows > MAX_ROWS:
             raise ValueError("Table exceeds 100,000 rows")
-        for batch in table.iter_batches(batch_size=256, use_threads=False):
+        for batch in table.iter_batches(batch_size=batch_size, use_threads=False):
             yield from batch.to_pylist()
     else:
         with path.open() as handle:
@@ -743,6 +744,79 @@ def convert(root, output, detected, settings):
 
 
 def preview_lerobot(root, output):
+    """Bounded recorded-image sequences; video sources keep their thumbnail path."""
+    import io
+
+    from PIL import Image
+
+    metadata = (root / "meta/info.json").read_bytes()
+    info = json.loads(metadata)
+    cameras = {k: v for k, v in info["features"].items() if v["dtype"] in ("image", "video")}
+    if not cameras or any(v["dtype"] != "image" for v in cameras.values()):
+        return _preview_lerobot_samples(root, output)
+    if any(not re.fullmatch(r"observation\.[A-Za-z0-9_.-]{1,100}", k) for k in cameras):
+        raise ValueError("Camera names are not safe preview filenames")
+    if output.is_symlink():
+        raise ValueError("Preview output must not be a symlink")
+    output.mkdir(exist_ok=True)
+    metadata_sha256 = hashlib.sha256(metadata).hexdigest()
+    samples, total, truncated = [], 0, False
+    paths = sorted((root / "data").rglob("*.parquet"))
+    for path in paths[:64]:
+        safe(root, path.relative_to(root).as_posix())
+        for row in tabular(path, batch_size=1):
+            for key in cameras:
+                if len(samples) >= 2400:
+                    truncated = True
+                    break
+                episode, frame = row["episode_index"], row["frame_index"]
+                if type(episode) is not int or type(frame) is not int or min(episode, frame) < 0:
+                    raise ValueError("Preview frame indices must be nonnegative integers")
+                rendered = Image.fromarray(image(row[key], root)).convert("RGB")
+                rendered.thumbnail((640, 480))
+                buffer = io.BytesIO()
+                rendered.save(buffer, format="JPEG", quality=80)
+                data = buffer.getvalue()
+                if total + len(data) > 64 * 1024**2:
+                    truncated = True
+                    break
+                name = f"{episode}-{frame}-{key}.jpg"
+                temporary = output / (".preview-" + uuid.uuid4().hex)
+                try:
+                    temporary.write_bytes(data)
+                    temporary.replace(output / name)
+                finally:
+                    temporary.unlink(missing_ok=True)
+                total += len(data)
+                samples.append(
+                    {
+                        "episode_index": episode,
+                        "frame_index": frame,
+                        "camera": key,
+                        "path": name,
+                        "task": str(row.get("task", "")),
+                        "timestamp": float(row.get("timestamp", frame / info["fps"])),
+                        "state": row.get("observation.state"),
+                        "action": row.get("action"),
+                        "metadata_sha256": metadata_sha256,
+                    }
+                )
+            if truncated:
+                break
+        if truncated:
+            break
+    if samples and (truncated or len(paths) > 64):
+        samples[-1]["preview_truncated"] = True
+    temporary = output.parent / (".samples-" + uuid.uuid4().hex)
+    try:
+        temporary.write_text(json.dumps(samples, allow_nan=False))
+        temporary.replace(output.parent / "samples.json")
+    finally:
+        temporary.unlink(missing_ok=True)
+    return {"samples": len(samples), "bytes": total, "truncated": truncated or len(paths) > 64}
+
+
+def _preview_lerobot_samples(root, output):
     from PIL import Image
 
     info = json.loads((root / "meta/info.json").read_text())
