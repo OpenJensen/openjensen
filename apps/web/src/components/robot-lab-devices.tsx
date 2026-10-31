@@ -36,41 +36,43 @@ export function RobotLabDevices({ lab }: { lab: RobotLabState }) {
       )}
       <div className="robot-lab-device-tiles">
         {catalog.map((device) => (
-          <button
-            key={device.id}
-            data-testid={`device-${device.id}`}
-            className="robot-lab-device-tile"
-            onClick={() => chooseDevice(device)}
-            disabled={lab.busy || lab.active}
-          >
-            <div className="robot-lab-device-tile-top">
-              <span className="robot-lab-device-icon">
-                <Icon name="robot" size={22} />
+          <article key={device.id} className="robot-lab-device-card" data-testid={`device-card-${device.id}`}>
+            <button
+              data-testid={`device-${device.id}`}
+              className="robot-lab-device-tile"
+              onClick={() => chooseDevice(device)}
+              disabled={lab.busy || lab.active}
+            >
+              <div className="robot-lab-device-tile-top">
+                <span className="robot-lab-device-icon">
+                  <Icon name="robot" size={22} />
+                </span>
+                <span className={device.connected && online ? 'robot-lab-pass' : 'robot-lab-subtle'}>
+                  {device.connected && online ? 'Connected' : 'Disconnected'}
+                </span>
+              </div>
+              <strong>{device.name || device.port || device.robot_id}</strong>
+              <span className="robot-lab-device-address">{device.port || 'USB port not assigned'}</span>
+              <span className="robot-lab-device-role">
+                {device.role ? `Default ${device.role}` : 'Choose a role to set up'}
               </span>
-              <span className={device.connected && online ? 'robot-lab-pass' : 'robot-lab-subtle'}>
-                {device.connected && online ? 'Connected' : 'Disconnected'}
+              <div className="robot-lab-device-badges">
+                <span>Motor IDs · {device.motor_ids ? 'Saved' : 'Needs setup'}</span>
+                <span>
+                  Calibration ·{' '}
+                  {device.calibration === 'saved'
+                    ? 'Saved'
+                    : device.calibration === 'needs_attention'
+                      ? 'Needs attention'
+                      : 'Not saved'}
+                </span>
+              </div>
+              <span className="robot-lab-device-open">
+                Open device <Icon name="arrow" size={14} />
               </span>
-            </div>
-            <strong>{device.name || device.port || device.robot_id}</strong>
-            <span className="robot-lab-device-address">{device.port || 'USB port not assigned'}</span>
-            <span className="robot-lab-device-role">
-              {device.role ? `Default ${device.role}` : 'Choose a role to set up'}
-            </span>
-            <div className="robot-lab-device-badges">
-              <span>Motor IDs · {device.motor_ids ? 'Saved' : 'Needs setup'}</span>
-              <span>
-                Calibration ·{' '}
-                {device.calibration === 'saved'
-                  ? 'Saved'
-                  : device.calibration === 'needs_attention'
-                    ? 'Needs attention'
-                    : 'Not saved'}
-              </span>
-            </div>
-            <span className="robot-lab-device-open">
-              Open device <Icon name="arrow" size={14} />
-            </span>
-          </button>
+            </button>
+            <DeviceRemoval lab={lab} device={device} tile />
+          </article>
         ))}
       </div>
       {!!devices.data?.removed_devices?.length && (
@@ -96,9 +98,56 @@ export function RobotLabDevices({ lab }: { lab: RobotLabState }) {
   );
 }
 
+function DeviceRemoval({
+  lab,
+  device,
+  tile = false,
+}: {
+  lab: RobotLabState;
+  device: RobotLabState['catalog'][number];
+  tile?: boolean;
+}) {
+  const [removingId, setRemovingId] = useState<string | null>(null);
+  const name = device.name || device.port || device.robot_id;
+  if (!device.role || !lab.state?.capabilities?.device_removal) return null;
+  return (
+    <div className="robot-lab-device-removal">
+      {removingId === device.id ? (
+        <section aria-label="Remove saved device">
+          <p>
+            Remove {name} from your saved devices? Calibration files and recordings are kept. You can restore it from
+            Removed devices.
+          </p>
+          {device.connected && <p>This connected controller will still appear by its USB address.</p>}
+          <div className="robot-lab-actions">
+            <button
+              className="secondary-button"
+              disabled={!lab.online || lab.busy || lab.active || !!lab.recording?.active}
+              onClick={() => void lab.removeDevice(device.id)}
+            >
+              Remove saved device
+            </button>
+            <button className="secondary-button" disabled={lab.busy} onClick={() => setRemovingId(null)}>
+              Cancel
+            </button>
+          </div>
+        </section>
+      ) : (
+        <button
+          className="text-button"
+          aria-label={tile ? `Remove ${name}` : undefined}
+          disabled={!lab.online || lab.busy || lab.active || !!lab.recording?.active}
+          onClick={() => setRemovingId(device.id)}
+        >
+          Remove device
+        </button>
+      )}
+    </div>
+  );
+}
+
 export function RobotLabDeviceDetail({ lab, children }: { lab: RobotLabState; children: React.ReactNode }) {
   const device = lab.selectedDevice;
-  const [removingId, setRemovingId] = useState<string | null>(null);
   if (!device) return null;
   return (
     <>
@@ -117,39 +166,7 @@ export function RobotLabDeviceDetail({ lab, children }: { lab: RobotLabState; ch
           </p>
         </div>
       </header>
-      {!!device.role && lab.state?.capabilities?.device_removal && (
-        <div className="robot-lab-device-removal">
-          {removingId === device.id ? (
-            <section aria-label="Remove saved device">
-              <p>
-                Remove {device.name || device.port || device.robot_id} from your saved devices? Calibration files and
-                recordings are kept. You can restore it from Removed devices.
-              </p>
-              {device.connected && <p>This connected controller will still appear by its USB address.</p>}
-              <div className="robot-lab-actions">
-                <button
-                  className="secondary-button"
-                  disabled={!lab.online || lab.busy || lab.active || !!lab.recording?.active}
-                  onClick={() => void lab.removeDevice()}
-                >
-                  Remove saved device
-                </button>
-                <button className="secondary-button" disabled={lab.busy} onClick={() => setRemovingId(null)}>
-                  Cancel
-                </button>
-              </div>
-            </section>
-          ) : (
-            <button
-              className="text-button"
-              disabled={!lab.online || lab.busy || lab.active || !!lab.recording?.active}
-              onClick={() => setRemovingId(device.id)}
-            >
-              Remove device
-            </button>
-          )}
-        </div>
-      )}
+      <DeviceRemoval lab={lab} device={device} />
       {!device.role ? (
         <section className="robot-lab-role-onboarding" aria-label="Choose device role">
           <h3>How will you usually use this arm?</h3>

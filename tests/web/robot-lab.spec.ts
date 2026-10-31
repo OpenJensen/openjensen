@@ -2820,3 +2820,72 @@ test('Run policy supplies a task only for the language-conditioned offline adapt
   expect(writes(state, '/policy/start')).toEqual([]);
   expect(state.errors).toEqual([]);
 });
+
+test('device tiles remove disconnected saved profiles and allow restoration', async ({ page }, testInfo) => {
+  const state = await fixture(page, true, 'Darwin', false);
+  state.portsConnected = false;
+  state.catalog.forEach((device) => {
+    device.connected = false;
+  });
+  await page.getByRole('button', { name: 'Refresh devices', exact: true }).click();
+  const card = page.getByTestId('device-card-arm-a');
+  await card.getByRole('button', { name: 'Remove my-so101', exact: true }).click();
+  await expect(card.getByRole('region', { name: 'Remove saved device' })).toContainText(
+    'Calibration files and recordings are kept',
+  );
+  await expect(page.getByRole('region', { name: 'Device settings', exact: true })).toHaveCount(0);
+  await card.getByRole('button', { name: 'Cancel', exact: true }).click();
+  expect(writes(state, '/devices/remove')).toEqual([]);
+  await card.getByRole('button', { name: 'Remove my-so101', exact: true }).click();
+  await card.getByRole('button', { name: 'Remove saved device', exact: true }).click();
+  await expect(card).toHaveCount(0);
+  await expect(page.getByTestId('device-card-arm-b')).toBeVisible();
+  expect(writes(state, '/devices/remove').map((entry) => entry.body)).toEqual([{ id: 'arm-a' }]);
+  expect(state.status.calibrations).toHaveLength(1);
+  await page.getByText('Removed devices (1)', { exact: true }).click();
+  await page.getByRole('button', { name: 'Restore my-so101', exact: true }).click();
+  await expect(card.getByRole('button', { name: 'Remove my-so101', exact: true })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('tile-remove-device.png'), fullPage: true });
+  expect(state.errors).toEqual([]);
+});
+
+test('device tile removal uses that tile identity without opening device details', async ({ page }) => {
+  const state = await fixture(page, true, 'Darwin', false);
+  const card = page.getByTestId('device-card-arm-b');
+  await card.getByRole('button', { name: 'Remove my-so101-leader', exact: true }).click();
+  await expect(card).toContainText('This connected controller will still appear by its USB address');
+  await card.getByRole('button', { name: 'Remove saved device', exact: true }).click();
+  await expect(card).toContainText('Choose a role to set up');
+  await expect(card.getByRole('button', { name: /^Remove / })).toHaveCount(0);
+  await expect(page.getByTestId('device-card-arm-a')).toContainText('my-so101');
+  expect(writes(state, '/devices/remove').map((entry) => entry.body)).toEqual([{ id: 'arm-b' }]);
+  await expect(page.getByRole('region', { name: 'Device settings', exact: true })).toHaveCount(0);
+  expect(state.errors).toEqual([]);
+});
+
+test('device tile removal preserves a saved profile after server refusal', async ({ page }) => {
+  const state = await fixture(page, true, 'Darwin', false);
+  state.removeDeviceError = 'Finish recording before changing devices';
+  const card = page.getByTestId('device-card-arm-a');
+  await card.getByRole('button', { name: 'Remove my-so101', exact: true }).click();
+  await card.getByRole('button', { name: 'Remove saved device', exact: true }).click();
+  await expect(page.getByText(state.removeDeviceError, { exact: true })).toBeVisible();
+  await expect(card).toContainText('my-so101');
+  expect(state.removedDevices).toEqual([]);
+  expect(state.status.calibrations).toHaveLength(1);
+});
+
+test('device tiles block removal during arm control and hide unsupported removal', async ({ page }) => {
+  const state = await fixture(page, true, 'Darwin', false);
+  state.status.session.mode = 'manual';
+  state.status.session.torque_enabled = true;
+  await page.getByRole('button', { name: 'Refresh devices', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Remove my-so101', exact: true })).toBeDisabled();
+  expect(writes(state, '/devices/remove')).toEqual([]);
+  state.status.session.mode = 'idle';
+  state.status.session.torque_enabled = false;
+  state.status.capabilities.device_removal = false;
+  await page.reload();
+  await expect(page.getByTestId('device-card-arm-a')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Remove my-so101', exact: true })).toHaveCount(0);
+});

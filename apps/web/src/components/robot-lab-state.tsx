@@ -215,9 +215,10 @@ export function useRobotLab() {
       },
     );
   }
-  async function removeDevice() {
-    if (!selectedDevice || active || busy || recording?.active) return;
-    const removed = selectedDevice;
+  async function removeDevice(id?: string) {
+    if (!online || active || busy || recording?.active) return;
+    const removed = catalog.find((device) => device.id === (id ?? selectedDevice?.id));
+    if (!removed) return;
     await perform(
       'Device removed. Its calibration files are kept; you can restore it from Removed devices.',
       () => robotApi.removeDevice(removed.id),
