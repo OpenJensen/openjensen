@@ -24,7 +24,7 @@ from .local_preview import PreviewError, _identity, _open_beneath, reader_python
 MANIFEST = "firebird-snapshot.json"
 HEX = re.compile(r"[0-9a-f]{64}\Z")
 FILE = re.compile(
-    r"(?:meta/(?:info|stats|firebird-lineage|firebird-demonstrations)\.json|"
+    r"(?:openjensen\.json|openjensen/(?:source|annotations)\.json|meta/(?:info|stats|firebird-lineage|firebird-demonstrations)\.json|"
     r"meta/tasks\.parquet|(?:data|meta/episodes)/chunk-[0-9]{3,}/file-[0-9]{3,}\.parquet|"
     r"videos/[a-zA-Z0-9_.-]+/chunk-[0-9]{3,}/file-[0-9]{3,}\.mp4|README\.md|\.gitattributes)\Z"
 )
