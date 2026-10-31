@@ -963,3 +963,61 @@ test('upload detection initializes mapping and FPS once without replacing edits 
     releaseFile();
   }
 });
+
+test('recorded local frames play and seek in inspection and training without Hub previews', async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(120000);
+  const project = await ownProject(page, `Local playback ${testInfo.project.name}`);
+  expect((await page.request.post(`/api/v1/projects/${project.id}/datasets/example`)).status()).toBe(202);
+  let entry: any;
+  await expect
+    .poll(
+      async () => {
+        const rows = await (await page.request.get(`/api/v1/datasets?project_id=${project.id}`)).json();
+        entry = rows.find((row: any) => row.status === 'ready');
+        return !!entry;
+      },
+      { timeout: 30000 },
+    )
+    .toBe(true);
+  const original = await (await page.request.get(`/api/v1/datasets/${entry.id}/samples`)).json();
+  const frames = original.flatMap((sample: any) =>
+    [0, 1, 2].map((frame) => ({
+      ...sample,
+      frame_index: frame,
+      timestamp: frame / 6,
+      state: [frame, 1],
+      action: [frame + 1, 2],
+    })),
+  );
+  await page.route(`**/api/v1/datasets/${entry.id}/samples`, (route) => route.fulfill({ json: frames }));
+  const unexpected: string[] = [];
+  await page.route('**/api/v1/jobs/*/episodes**', async (route) => {
+    unexpected.push(route.request().url());
+    await route.fulfill({ status: 422, json: { detail: 'Local playback must use saved frames' } });
+  });
+  await page.reload();
+  await page.getByRole('button', { name: 'Open dataset Robot labeling playground' }).click();
+  await page.getByRole('button', { name: 'Inspect for training' }).click();
+  await page.getByRole('button', { name: 'Inspect dataset', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Dataset inspection', exact: true })).toBeVisible();
+  await expect(page.getByLabel('Preview episode')).toBeVisible({ timeout: 30000 });
+  await page.getByLabel('Preview episode').selectOption('1');
+  await page.getByRole('slider', { name: 'Episode playback position' }).press('End');
+  const picture = page.getByRole('img', { name: 'observation.images.front · episode 2 · frame 2', exact: true });
+  await expect(picture).toBeVisible();
+  await expect
+    .poll(() => picture.evaluate((node: HTMLImageElement) => node.complete && node.naturalWidth > 0))
+    .toBe(true);
+  await page.getByRole('button', { name: 'Play episode', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Play episode', exact: true })).toBeVisible();
+  await expect(picture).toBeVisible();
+  await page.getByRole('link', { name: 'Fine-tune', exact: true }).click();
+  await expect(page.getByLabel('Preview episode')).toBeVisible();
+  await page.getByLabel('Preview episode').selectOption('1');
+  await page.getByRole('slider', { name: 'Episode playback position' }).press('End');
+  await expect(picture).toBeVisible();
+  expect(unexpected).toEqual([]);
+  await page.screenshot({ path: testInfo.outputPath('local-recorded-playback.png'), fullPage: true });
+});
