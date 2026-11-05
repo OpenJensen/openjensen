@@ -118,6 +118,53 @@ class LatestCameraTests(unittest.TestCase):
             VideoWriter_fourcc=lambda *chars: int.from_bytes("".join(chars).encode(), "little"),
         )
 
+    def test_switching_preview_releases_old_usb_stream_before_opening_next(self):
+        operations = []
+        captures = {
+            index: SimpleNamespace(
+                isOpened=lambda: True,
+                set=lambda *args: True,
+                read=lambda: (True, object()),
+                release=lambda index=index: operations.append(("release", index)),
+            )
+            for index in (2, 4)
+        }
+        cv = self.fake_cv(None)
+        cv.VideoCapture = lambda index, backend: (
+            operations.append(("open", index)),
+            captures[index],
+        )[-1]
+        pool = CameraPool()
+        with patch.dict(sys.modules, cv2=cv):
+            pool.read(2)
+            pool.read(4)
+            self.assertEqual(operations, [("open", 2), ("release", 2), ("open", 4)])
+            self.assertNotIn(2, pool.last_frames)
+            pool.close()
+
+    def test_switching_preview_preserves_a_recording_reader(self):
+        operations = []
+        captures = {
+            index: SimpleNamespace(
+                isOpened=lambda: True,
+                set=lambda *args: True,
+                read=lambda: (True, object()),
+                release=lambda index=index: operations.append(("release", index)),
+            )
+            for index in (2, 4)
+        }
+        cv = self.fake_cv(None)
+        cv.VideoCapture = lambda index, backend: captures[index]
+        pool = CameraPool()
+        with patch.dict(sys.modules, cv2=cv):
+            pool.read(2)
+            pool.readers[2] = (Mock(), threading.Event())
+            pool.read(4)
+            self.assertEqual(operations, [])
+            self.assertIn(2, pool.handles)
+            self.assertIn(2, pool.last_frames)
+            pool.close()
+
     def test_latest_peek_does_not_wait_for_blocked_camera_and_rejects_stale_frames(self):
         entered, release = threading.Event(), threading.Event()
         first = object()

@@ -38,6 +38,20 @@ class CameraPool:
             if _stop is not None and _stop.is_set():
                 raise RuntimeError("Camera reader stopped")
             if index not in self.handles:
+                # An unused preview still reserves USB bandwidth until released.
+                # Switch previews immediately, while leaving reader-owned
+                # recording/policy streams alive.
+                with self.frame_lock:
+                    previous = [
+                        key for key in self.handles if key != index and key not in self.readers
+                    ]
+                    captures = [self.handles.pop(key) for key in previous]
+                    for key in previous:
+                        self.last_used.pop(key, None)
+                        self.last_frames.pop(key, None)
+                        self.frame_times.pop(key, None)
+                for capture in captures:
+                    capture.release()
 
                 def open_capture():
                     # OpenCV must request AVFoundation authorization from the
