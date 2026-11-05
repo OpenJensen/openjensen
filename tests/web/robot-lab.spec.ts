@@ -2825,3 +2825,37 @@ test('Run policy supplies a task only for the language-conditioned offline adapt
   expect(writes(state, '/policy/start')).toEqual([]);
   expect(state.errors).toEqual([]);
 });
+
+test('recording creation explains every missing requirement beside the disabled button', async ({ page }, testInfo) => {
+  const state = await fixture(page, true);
+  state.status.capabilities.guided_recording = true;
+  state.status.datasets = [
+    { id: 'toy-home', episodes: 0, frames: 0, fps: 10, task: 'Pick up the toy.', abandoned: true },
+  ];
+  await page.reload();
+  await openTab(page, 'Record');
+  await page.getByLabel('Dataset name', { exact: true }).fill('toy-home');
+  const requirements = page.getByRole('region', { name: 'Recording requirements', exact: true });
+  const create = page.getByRole('button', { name: 'Create recording dataset', exact: true });
+  await expect(requirements).toContainText('Start teleoperation for the follower arm.');
+  await expect(requirements).toContainText('“toy-home” already exists.');
+  await expect(requirements).toContainText('Enter a task instruction.');
+  await expect(create).toBeDisabled();
+  await expect(create).toHaveAttribute('aria-describedby', 'recording-requirements');
+  await page.screenshot({ path: testInfo.outputPath('recording-requirements.png'), fullPage: true });
+  await requirements.getByRole('button', { name: 'Open teleoperation', exact: true }).click();
+  await startManual(page);
+  await openTab(page, 'Record');
+  await page.getByLabel('Dataset name', { exact: true }).fill('toy-home-2');
+  await page.getByLabel('Task instruction', { exact: true }).fill('Pick up the toy.');
+  await page.getByLabel('Episode length in seconds', { exact: true }).fill('0');
+  await expect(requirements).toContainText('Set the episode length to a whole number from 1 to 300 seconds.');
+  await expect(requirements).not.toContainText('Start teleoperation');
+  await expect(requirements).not.toContainText('already exists');
+  await expect(create).toBeDisabled();
+  await page.getByLabel('Episode length in seconds', { exact: true }).fill('5');
+  await expect(requirements).toHaveCount(0);
+  await expect(create).toBeEnabled();
+  expect(writes(state, '/recording/start')).toEqual([]);
+  expect(state.errors).toEqual([]);
+});

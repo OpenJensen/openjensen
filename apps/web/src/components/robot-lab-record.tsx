@@ -24,6 +24,7 @@ export function RobotLabRecord({ lab }: { lab: RobotLabState }) {
     jog,
     jogging,
     navigateStage,
+    online,
     ownsSession,
     partialControl,
     pending,
@@ -31,6 +32,7 @@ export function RobotLabRecord({ lab }: { lab: RobotLabState }) {
     projectId,
     recordCamera,
     recording,
+    reconnecting,
     session,
     sessionJoints,
     setDatasetId,
@@ -118,6 +120,43 @@ export function RobotLabRecord({ lab }: { lab: RobotLabState }) {
     Number.isInteger(countdownSeconds) &&
     countdownSeconds >= 0 &&
     countdownSeconds <= 30;
+  const nameUsed = datasetList.some((dataset) => dataset.id === datasetId);
+  const creationBlockers: string[] = [];
+  if (!canAct) {
+    creationBlockers.push(
+      !online
+        ? 'Reconnect to the robot service.'
+        : busy
+          ? 'Wait for the current robot operation to finish.'
+          : reconnecting
+            ? 'Wait for the robot connection to recover.'
+            : 'Finish the calibration confirmation before creating a dataset.',
+    );
+  }
+  if (!controlling) creationBlockers.push('Start teleoperation for the follower arm.');
+  else if (!ownsSession) creationBlockers.push('Start teleoperation from this tab to control the current session.');
+  if (centering) creationBlockers.push('Wait for the arm to finish moving to its rest position.');
+  if (partialControl) creationBlockers.push('Enable all six joints in teleoperation.');
+  if (!datasetId) creationBlockers.push('Enter a dataset name.');
+  else if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(datasetId))
+    creationBlockers.push(
+      'Start the dataset name with a letter or number; use up to 64 letters, numbers, hyphens or underscores.',
+    );
+  else if (nameUsed) creationBlockers.push(`Choose a different dataset name: “${datasetId}” already exists.`);
+  if (!task.trim()) creationBlockers.push('Enter a task instruction.');
+  if (online && !state?.capabilities?.recording)
+    creationBlockers.push('Update the robot service to enable dataset recording.');
+  if (saving) creationBlockers.push('Wait for the previous recording to finish saving.');
+  if (guidedAvailable && guided && !validSchedule) {
+    if (!Number.isInteger(episodeSeconds) || episodeSeconds < 1 || episodeSeconds > 300)
+      creationBlockers.push('Set the episode length to a whole number from 1 to 300 seconds.');
+    if (!Number.isInteger(resetSeconds) || resetSeconds < 0 || resetSeconds > 300)
+      creationBlockers.push('Set the reset time to a whole number from 0 to 300 seconds.');
+    if (!Number.isInteger(episodeCount) || episodeCount < 1 || episodeCount > 1000)
+      creationBlockers.push('Set the number of episodes to a whole number from 1 to 1,000.');
+    if (!Number.isInteger(countdownSeconds) || countdownSeconds < 0 || countdownSeconds > 30)
+      creationBlockers.push('Set the countdown in Advanced recording settings to a whole number from 0 to 30 seconds.');
+  }
   const cueKey = recording?.active && collection ? `${recording.dataset_id}:${collection.cue_id}` : null;
   const cueText = collection?.cue;
   useEffect(() => {
@@ -193,9 +232,7 @@ export function RobotLabRecord({ lab }: { lab: RobotLabState }) {
                   maxLength={64}
                   disabled={busy}
                 />
-                {datasetList.some((dataset) => dataset.id === datasetId) && (
-                  <small role="alert">Name already used.</small>
-                )}
+                {nameUsed && <small role="alert">This dataset name already exists. Choose a different name.</small>}
               </label>
             </div>
             <label>
@@ -331,21 +368,27 @@ export function RobotLabRecord({ lab }: { lab: RobotLabState }) {
                 )}
               </div>
             </details>
+            {creationBlockers.length > 0 && (
+              <section id="recording-requirements" aria-label="Recording requirements" aria-live="polite">
+                <Notice>
+                  <strong>Before you can create this dataset</strong>
+                  <ul>
+                    {creationBlockers.map((reason) => (
+                      <li key={reason}>{reason}</li>
+                    ))}
+                  </ul>
+                  {!controlling && (
+                    <button className="text-button" onClick={() => setStep(3)}>
+                      Open teleoperation
+                    </button>
+                  )}
+                </Notice>
+              </section>
+            )}
             <button
               className="primary-button"
-              disabled={
-                !canAct ||
-                !controlling ||
-                !ownsSession ||
-                centering ||
-                partialControl ||
-                !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(datasetId) ||
-                !task.trim() ||
-                datasetList.some((dataset) => dataset.id === datasetId) ||
-                !state?.capabilities?.recording ||
-                saving ||
-                (guidedAvailable && guided && !validSchedule)
-              }
+              disabled={creationBlockers.length > 0}
+              aria-describedby={creationBlockers.length ? 'recording-requirements' : undefined}
               onClick={() =>
                 void perform('Dataset created. Prepare the scene, then start recording.', () =>
                   robotApi.startRecording({
