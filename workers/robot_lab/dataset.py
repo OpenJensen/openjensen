@@ -97,6 +97,19 @@ class DatasetWriter:
         import pyarrow  # noqa: F401
         from PIL import Image  # noqa: F401
 
+        image_shapes = (
+            image_shape
+            if isinstance(image_shape, dict)
+            else ({"observation.images.front": image_shape} if image_shape is not None else {})
+        )
+        if len(image_shapes) > 4 or any(
+            not re.fullmatch(r"observation\.images\.[a-z][a-z0-9_]{0,63}", key)
+            or len(shape) != 3
+            or shape[2] != 3
+            for key, shape in image_shapes.items()
+        ):
+            raise ValueError("Choose up to four named RGB camera views")
+        self.image_shapes = image_shapes
         self.id = safe_slug(dataset_id)
         self.root = root / self.id
         if self.root.exists():
@@ -120,10 +133,10 @@ class DatasetWriter:
                 "names": [joint + ".pos" for joint in JOINTS],
             },
         }
-        if image_shape is not None:
-            self.features["observation.images.front"] = {
+        for key, shape in self.image_shapes.items():
+            self.features[key] = {
                 "dtype": "image",
-                "shape": list(image_shape),
+                "shape": list(shape),
                 "names": ["height", "width", "channels"],
             }
         for name in ("timestamp", "frame_index", "episode_index", "index", "task_index"):
@@ -146,8 +159,14 @@ class DatasetWriter:
         self.pending = self.root / ".pending"
         self.pending.mkdir()
         self.write_metadata()
-        if image_shape is not None:
-            self.image_writer = AsyncImageWriter()
+        if self.image_shapes:
+            for key in self.image_shapes:
+                self._image_path(key, 0).parent.mkdir(exist_ok=True)
+            self.image_writer = AsyncImageWriter(capacity=max(8, len(self.image_shapes) * 4))
+
+    def _image_path(self, key, index):
+        folder = self.pending if key == "observation.images.front" else self.pending / key
+        return folder / f"{index:06d}.png"
 
     def summary(self):
         return {
@@ -164,6 +183,7 @@ class DatasetWriter:
             "measured_fps": self.episode_capture_fps,
             "capture_timing": self.episode_capture_timing,
             "image_write_error": self.image_writer.error if self.image_writer else None,
+            "camera_features": list(self.image_shapes),
         }
 
     def write_metadata(self):
@@ -284,10 +304,15 @@ class DatasetWriter:
         target = [float(action.get(joint, positions[joint])) for joint in JOINTS]
         if not all(math.isfinite(value) for value in state + target):
             raise ValueError("Non-finite motor reading; episode stopped")
-        if self.image_shape is not None:
-            if image is None or tuple(image.shape) != tuple(self.image_shape):
+        if self.image_shapes:
+            images = image if isinstance(image, dict) else {"observation.images.front": image}
+            if set(images) != set(self.image_shapes) or any(
+                images[key] is None or tuple(images[key].shape) != tuple(shape)
+                for key, shape in self.image_shapes.items()
+            ):
                 raise ValueError("Camera image missing or changed size; episode stopped")
-            self.image_writer.save_image(image, self.pending / f"{self.frames:06d}.png")
+            for key, frame in images.items():
+                self.image_writer.save_image(frame, self._image_path(key, self.frames))
         row = {
             "observation.state": state,
             "action": target,
@@ -353,18 +378,18 @@ class DatasetWriter:
             with (self.pending / "frames.jsonl").open() as stream:
                 for line in stream:
                     row = json.loads(line)
-                    if self.image_shape is not None:
-                        image_path = self.pending / f"{row['frame_index']:06d}.png"
-                        row["observation.images.front"] = {
+                    for key in self.image_shapes:
+                        image_path = self._image_path(key, row["frame_index"])
+                        row[key] = {
                             "bytes": image_path.read_bytes(),
                             "path": None,
                         }
                         with Image.open(image_path) as image:
-                            collected["observation.images.front"].append(
+                            collected[key].append(
                                 np.asarray(image.resize((8, 8)), dtype=float).reshape(-1, 3) / 255
                             )
                     for key in collected:
-                        if key != "observation.images.front":
+                        if key not in self.image_shapes:
                             collected[key].append(row[key])
                     batch.append(row)
                     if len(batch) == 20:
@@ -374,8 +399,7 @@ class DatasetWriter:
                     writer.write_table(pa.Table.from_pylist(batch, schema=schema))
         partial.replace(target)
         stats = {
-            key: statistics(values, key == "observation.images.front")
-            for key, values in collected.items()
+            key: statistics(values, key in self.image_shapes) for key, values in collected.items()
         }
         entry = {
             "episode_index": index,
@@ -420,11 +444,13 @@ class DatasetWriter:
         if self.image_writer:
             self.image_writer.wait_until_done(ignore_error=True)
         # Only this writer's own private pending directory is retired.
-        for path in self.pending.iterdir():
-            if path.is_file() and (
-                path.name == "frames.jsonl" or re.fullmatch(r"\d{6}\.png(?:\.tmp)?", path.name)
-            ):
-                path.unlink()
+        folders = {self.pending} | {self._image_path(key, 0).parent for key in self.image_shapes}
+        for folder in folders:
+            for path in folder.iterdir():
+                if path.is_file() and (
+                    path.name == "frames.jsonl" or re.fullmatch(r"\d{6}\.png(?:\.tmp)?", path.name)
+                ):
+                    path.unlink()
         self.frames = 0
         if self.image_writer:
             self.image_writer.clear_error()
@@ -459,6 +485,10 @@ class DatasetWriter:
             raise ValueError("Save at least one episode before finalizing")
         if self.image_writer:
             self.image_writer.wait_until_done()
+        for key in self.image_shapes:
+            folder = self._image_path(key, 0).parent
+            if folder != self.pending and folder.exists():
+                folder.rmdir()
         self.finalized = True
         try:
             self.write_metadata()

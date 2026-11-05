@@ -12,6 +12,7 @@ export function RobotLabRecord({ lab }: { lab: RobotLabState }) {
     availableCameras,
     busy,
     cameraIndex,
+    selectedCameraIndices,
     canAct,
     centering,
     client,
@@ -255,7 +256,11 @@ export function RobotLabRecord({ lab }: { lab: RobotLabState }) {
               />
               <span>
                 <strong>Record camera</strong>
-                {availableCameras.length ? '' : 'No camera available; state and actions only.'}
+                {availableCameras.length
+                  ? state?.capabilities?.multi_camera_recording && selectedCameraIndices.length > 1
+                    ? ` · ${selectedCameraIndices.length} selected views saved with every frame`
+                    : ''
+                  : 'No camera available; state and actions only.'}
               </span>
             </label>
             {guidedAvailable && (
@@ -406,6 +411,9 @@ export function RobotLabRecord({ lab }: { lab: RobotLabState }) {
                         }
                       : {}),
                     camera_index: recordCamera && availableCameras.length ? cameraIndex : null,
+                    ...(state?.capabilities?.multi_camera_recording
+                      ? { camera_indices: recordCamera ? selectedCameraIndices : [] }
+                      : {}),
                   }),
                 )
               }

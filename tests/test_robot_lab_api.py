@@ -593,6 +593,10 @@ def test_recording_auto_rate_and_guided_configuration_reach_companion(tmp_path, 
 @pytest.mark.parametrize(
     "changes",
     [
+        {"camera_indices": [True]},
+        {"camera_indices": [2, 2]},
+        {"camera_indices": [64]},
+        {"camera_indices": [0, 1, 2, 3, 4]},
         {"fps": True},
         {"fps": 41},
         {"fps": 0},
@@ -722,4 +726,20 @@ def test_prediction_preview_forwards_an_image_and_state_without_hardware_start(t
         assert result.json()["policy"]["preview"]["executed"] is False
     assert len(calls) == 1 and calls[0][0] == "/v1/policy/preview"
     assert calls[0][1]["state"] == [0] * 6
+    asyncio.run(companion.close())
+
+
+def test_multiple_recording_cameras_reach_companion(tmp_path):
+    connection(tmp_path)
+    payload = {"dataset_id": "two-views", "task": "Reach", "fps": None, "camera_indices": [2, 4]}
+    calls = []
+
+    def handler(request):
+        calls.append(json.loads(request.content))
+        return httpx.Response(200, json={"ok": True})
+
+    companion = bridge(tmp_path, handler)
+    with browser(tmp_path, companion) as client:
+        assert client.post("/api/v1/robot-lab/recording/start", json=payload).status_code == 200
+    assert calls == [payload]
     asyncio.run(companion.close())

@@ -120,6 +120,7 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin', 
     errors: [] as string[],
     datasetReads: 0,
     cameraFailure: false,
+    cameras: [{ index: 0, name: 'Robot camera', width: 640, height: 480 }],
     discoverySupported: true,
     probeIds: [1],
     discoveryIds: [1],
@@ -251,7 +252,7 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin', 
           json: {
             saved_devices: state.catalog,
             ports: state.catalog.filter((d) => d.connected).map((d) => ({ device: d.port })),
-            cameras: [{ index: 0, name: 'Robot camera', width: 640, height: 480 }],
+            cameras: state.cameras,
             camera_error: null,
           },
         });
@@ -286,7 +287,7 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin', 
                   },
                 ]
               : [],
-            cameras: [{ index: 0, name: 'Robot camera', width: 640, height: 480 }],
+            cameras: state.cameras,
             camera_error: null,
           },
         });
@@ -2857,5 +2858,35 @@ test('recording creation explains every missing requirement beside the disabled 
   await expect(requirements).toHaveCount(0);
   await expect(create).toBeEnabled();
   expect(writes(state, '/recording/start')).toEqual([]);
+  expect(state.errors).toEqual([]);
+});
+
+test('selected cameras preview together and both are sent to recording', async ({ page }, testInfo) => {
+  const state = await fixture(page, true);
+  state.status.capabilities.multi_camera_recording = true;
+  state.cameras = [
+    { index: 0, name: 'Front USB', width: 640, height: 480 },
+    { index: 4, name: 'Side USB', width: 640, height: 480 },
+  ];
+  await page.reload();
+  await startManual(page);
+  await openTab(page, 'Record');
+  await page.getByRole('checkbox', { name: 'Also use Side USB', exact: true }).check();
+  await page.getByRole('button', { name: 'Start preview', exact: true }).click();
+  const front = page.getByAltText('Live view from the selected robot camera', { exact: true });
+  const side = page.getByAltText('Live view from camera 4', { exact: true });
+  await expect(front).toBeVisible();
+  await expect(side).toBeVisible();
+  await expect(front).toHaveAttribute('src', /index=0.*cameras=0,4/);
+  await expect(side).toHaveAttribute('src', /index=4.*cameras=0,4/);
+  await page.getByLabel('Dataset name', { exact: true }).fill('two-views');
+  await page.getByLabel('Task instruction', { exact: true }).fill('Pick up the toy.');
+  await expect(
+    page.getByText('Record camera · 2 selected views saved with every frame', { exact: true }),
+  ).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('two-camera-recording.png'), fullPage: true });
+  await page.getByRole('button', { name: 'Create recording dataset', exact: true }).click();
+  expect(writes(state, '/recording/start').at(-1)?.body).toMatchObject({ camera_index: 0, camera_indices: [0, 4] });
+  await expect(page.getByRole('checkbox', { name: 'Also use Side USB', exact: true })).toBeDisabled();
   expect(state.errors).toEqual([]);
 });

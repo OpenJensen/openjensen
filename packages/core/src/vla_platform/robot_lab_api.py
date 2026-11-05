@@ -1,6 +1,6 @@
 """Browser-facing Robot Lab API; credentials remain on the operator's server."""
 
-from typing import Literal
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
@@ -116,7 +116,18 @@ class RecordingStartRequest(BaseModel):
     task: str = Field(min_length=1, max_length=1000)
     fps: StrictInt | None = Field(default=None, ge=1, le=40)
     camera_index: StrictInt | None = Field(default=0, ge=0, le=63)
+    camera_indices: list[Annotated[StrictInt, Field(ge=0, le=63)]] | None = Field(
+        default=None, max_length=4
+    )
     collection: RecordingCollectionRequest | None = None
+
+    @model_validator(mode="after")
+    def distinct_cameras(self):
+        if self.camera_indices is not None and len(set(self.camera_indices)) != len(
+            self.camera_indices
+        ):
+            raise ValueError("Choose each camera only once")
+        return self
 
 
 class RecordingCollectionActionRequest(BaseModel):

@@ -24,8 +24,11 @@ class CameraPool:
         self.frame_times = {}
         self.readers = {}
         self.reader_errors = {}
+        self.multi_rate_handles = set()
 
-    def read(self, index=0, width=640, height=480, *, _background=False, _stop=None):
+    def read(
+        self, index=0, width=640, height=480, *, keep_indices=None, _background=False, _stop=None
+    ):
         import cv2
 
         if (
@@ -37,21 +40,26 @@ class CameraPool:
         with self.lock:
             if _stop is not None and _stop.is_set():
                 raise RuntimeError("Camera reader stopped")
-            if index not in self.handles:
+            keep = set(keep_indices) if keep_indices is not None else {index}
+            keep.add(index)
+            if not _background:
                 # An unused preview still reserves USB bandwidth until released.
                 # Switch previews immediately, while leaving reader-owned
                 # recording/policy streams alive.
                 with self.frame_lock:
                     previous = [
-                        key for key in self.handles if key != index and key not in self.readers
+                        key for key in self.handles if key not in keep and key not in self.readers
                     ]
                     captures = [self.handles.pop(key) for key in previous]
                     for key in previous:
                         self.last_used.pop(key, None)
                         self.last_frames.pop(key, None)
                         self.frame_times.pop(key, None)
+                        self.multi_rate_handles.discard(key)
                 for capture in captures:
                     capture.release()
+
+            if index not in self.handles:
 
                 def open_capture():
                     # OpenCV must request AVFoundation authorization from the
@@ -92,6 +100,16 @@ class CameraPool:
                 else:
                     capture = open_capture()
                 self.handles[index] = capture
+            if not _background and platform.system() != "Darwin" and index not in self.readers:
+                multiple = len(keep) > 1
+                if multiple or index in self.multi_rate_handles:
+                    if multiple != (index in self.multi_rate_handles):
+                        # Multiple webcams on one USB hub need a lower bus cadence.
+                        self.handles[index].set(cv2.CAP_PROP_FPS, 15 if multiple else 30)
+                    if multiple:
+                        self.multi_rate_handles.add(index)
+                    else:
+                        self.multi_rate_handles.discard(index)
             if not _background:
                 self.last_used[index] = time.monotonic()
             ok, frame = self.handles[index].read()
@@ -167,10 +185,14 @@ class CameraPool:
             frame = self.read_latest(index, max_age)
             return frame, self.frame_times[index]
 
-    def jpeg(self, index=0):
+    def jpeg(self, index=0, keep_indices=None):
         import cv2
 
-        frame = self.read(index)
+        frame = (
+            self.read(index, keep_indices=keep_indices)
+            if keep_indices is not None
+            else self.read(index)
+        )
         ok, encoded = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
         if not ok:
             raise RuntimeError("Could not encode camera preview")
@@ -242,6 +264,7 @@ class CameraPool:
                 if capture is not None:
                     capture.release()
                 self.last_used.pop(key, None)
+                self.multi_rate_handles.discard(key)
                 with self.frame_lock:
                     self.last_frames.pop(key, None)
                     self.frame_times.pop(key, None)

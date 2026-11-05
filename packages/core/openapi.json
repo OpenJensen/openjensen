@@ -16632,6 +16632,23 @@
                     "default": 0,
                     "title": "Camera Index"
                   },
+                  "camera_indices": {
+                    "anyOf": [
+                      {
+                        "items": {
+                          "maximum": 63.0,
+                          "minimum": 0.0,
+                          "type": "integer"
+                        },
+                        "maxItems": 4,
+                        "type": "array"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Camera Indices"
+                  },
                   "collection": {
                     "anyOf": [
                       {

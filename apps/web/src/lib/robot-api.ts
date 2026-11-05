@@ -159,6 +159,7 @@ export type RobotStatus = {
     recording: boolean;
     auto_recording_fps?: boolean;
     guided_recording?: boolean;
+    multi_camera_recording?: boolean;
   };
   session?: {
     mode: 'idle' | 'calibration' | 'setup' | 'verification' | 'agent' | 'policy' | ControlMode;
@@ -212,6 +213,7 @@ export type RobotStatus = {
   };
   recording?: {
     active: boolean;
+    camera_indices?: number[];
     dataset_id: string | null;
     episode_active: boolean;
     saving?: boolean;
@@ -504,6 +506,7 @@ export const robotApi = {
     task: string;
     fps: number | null;
     camera_index: number | null;
+    camera_indices?: number[];
     collection?: { episode_time_s: number; reset_time_s: number; num_episodes: number; countdown_s: number };
   }) => request<RobotStatus>('/recording/start', input, { timeoutMs: 90_000 }),
   collectionAction: (action: 'start' | 'pause' | 'resume' | 'next' | 'rerecord') =>
@@ -518,7 +521,8 @@ export const robotApi = {
       { abandon_empty: true, confirm: 'ABANDON EMPTY RECORDING' },
       { timeoutMs: 90_000 },
     ),
-  cameraUrl: (index: number, stamp: number) => `${apiOrigin}/api/v1/robot-lab/camera.jpg?index=${index}&t=${stamp}`,
+  cameraUrl: (index: number, stamp: number, cameras?: number[]) =>
+    `${apiOrigin}/api/v1/robot-lab/camera.jpg?index=${index}&t=${stamp}${cameras && cameras.length > 1 ? `&cameras=${cameras.join(',')}` : ''}`,
 };
 
 export async function importRobotDataset(

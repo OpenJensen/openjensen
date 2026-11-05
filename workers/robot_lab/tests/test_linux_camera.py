@@ -105,6 +105,41 @@ class LinuxCameraTests(unittest.TestCase):
                     self.assertEqual(operations[-1], ("read",))
                     pool.close()
 
+    def test_preview_group_keeps_both_handles_and_releases_a_removed_view_immediately(self):
+        released, rates = [], []
+
+        def capture(index, backend):
+            return SimpleNamespace(
+                isOpened=lambda: True,
+                set=lambda prop, value: rates.append((index, prop, value)) or True,
+                read=lambda: (True, object()),
+                release=lambda: released.append(index),
+            )
+
+        cv2 = SimpleNamespace(
+            VideoCapture=capture,
+            VideoWriter_fourcc=lambda *v: 99,
+            CAP_V4L2=200,
+            CAP_PROP_FOURCC=6,
+            CAP_PROP_FRAME_WIDTH=3,
+            CAP_PROP_FRAME_HEIGHT=4,
+            CAP_PROP_BUFFERSIZE=38,
+            CAP_PROP_FPS=5,
+        )
+        pool = CameraPool()
+        with patch.dict(sys.modules, cv2=cv2), patch("platform.system", return_value="Linux"):
+            pool.read(2, keep_indices=[2, 4])
+            pool.read(4, keep_indices=[2, 4])
+            self.assertEqual(set(pool.handles), {2, 4})
+            self.assertEqual(released, [])
+            self.assertIn((2, 5, 15), rates)
+            self.assertIn((4, 5, 15), rates)
+            pool.read(4)
+            self.assertEqual(set(pool.handles), {4})
+            self.assertEqual(released, [2])
+            self.assertIn((4, 5, 30), rates)
+            pool.close()
+
     def test_invalid_camera_indices_are_rejected_before_open(self):
         with patch.dict(sys.modules, cv2=SimpleNamespace()):
             for value in (-1, 64, True, "0"):

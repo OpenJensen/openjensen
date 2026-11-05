@@ -11940,6 +11940,8 @@ export interface operations {
                      * @default 0
                      */
                     camera_index?: number | null;
+                    /** Camera Indices */
+                    camera_indices?: number[] | null;
                     collection?: {
                         /**
                          * Countdown S
