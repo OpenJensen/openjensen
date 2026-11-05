@@ -9590,7 +9590,7 @@
   },
   "info": {
     "title": "OPEN JENSEN local VLA application",
-    "version": "0.1.29"
+    "version": "0.1.30"
   },
   "openapi": "3.1.0",
   "paths": {
