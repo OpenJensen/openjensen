@@ -114,6 +114,8 @@ class LatestCameraTests(unittest.TestCase):
             CAP_PROP_FRAME_WIDTH=3,
             CAP_PROP_FRAME_HEIGHT=4,
             CAP_PROP_BUFFERSIZE=5,
+            CAP_PROP_FOURCC=6,
+            VideoWriter_fourcc=lambda *chars: int.from_bytes("".join(chars).encode(), "little"),
         )
 
     def test_latest_peek_does_not_wait_for_blocked_camera_and_rejects_stale_frames(self):

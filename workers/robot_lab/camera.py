@@ -60,6 +60,12 @@ class CameraPool:
                                 "whether another app is using it, then retry."
                             )
                         raise RuntimeError(message)
+                    if platform.system() != "Darwin":
+                        # Raw webcam streams can exhaust a shared USB 2 bus even
+                        # at 640x480. Prefer the camera's compressed transport
+                        # before the first read starts streaming. Unsupported
+                        # formats return False and retain the device default.
+                        capture.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
                     capture.set(cv2.CAP_PROP_FRAME_WIDTH, min(1920, max(160, int(width))))
                     capture.set(cv2.CAP_PROP_FRAME_HEIGHT, min(1080, max(120, int(height))))
                     capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)
@@ -272,7 +278,13 @@ def linux_cameras(sysfs=Path("/sys/class/video4linux"), devices=Path("/dev")):
         except OSError:
             name = path.name
         output.append(
-            {"index": index, "name": name, "width": 640, "height": 480, "verified": False}
+            {
+                "index": index,
+                "name": f"{name} · /dev/video{index}",
+                "width": 640,
+                "height": 480,
+                "verified": False,
+            }
         )
     return sorted(output, key=lambda camera: camera["index"])
 

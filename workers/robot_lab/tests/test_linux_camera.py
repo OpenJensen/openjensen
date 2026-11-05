@@ -76,6 +76,35 @@ class LinuxCameraTests(unittest.TestCase):
         self.assertEqual(calls, [(12, 200)])
         self.assertEqual(released, [True])
 
+    def test_preview_prefers_mjpeg_before_streaming_and_keeps_unsupported_fallback(self):
+        for supported in (True, False):
+            with self.subTest(supported=supported):
+                operations, image = [], object()
+                capture = SimpleNamespace(
+                    isOpened=lambda: True,
+                    set=lambda prop, value: operations.append(("set", prop, value)) or supported,
+                    read=lambda: (operations.append(("read",)) or True, image),
+                    release=lambda: None,
+                )
+                cv2 = SimpleNamespace(
+                    VideoCapture=lambda *args: capture,
+                    VideoWriter_fourcc=lambda *chars: "".join(chars),
+                    CAP_V4L2=200,
+                    CAP_PROP_FOURCC=6,
+                    CAP_PROP_FRAME_WIDTH=3,
+                    CAP_PROP_FRAME_HEIGHT=4,
+                    CAP_PROP_BUFFERSIZE=5,
+                )
+                pool = CameraPool()
+                with (
+                    patch.dict(sys.modules, cv2=cv2),
+                    patch("platform.system", return_value="Linux"),
+                ):
+                    self.assertIs(pool.read(2), image)
+                    self.assertEqual(operations[0], ("set", 6, "MJPG"))
+                    self.assertEqual(operations[-1], ("read",))
+                    pool.close()
+
     def test_invalid_camera_indices_are_rejected_before_open(self):
         with patch.dict(sys.modules, cv2=SimpleNamespace()):
             for value in (-1, 64, True, "0"):
