@@ -243,14 +243,16 @@ class CameraPool:
     def cached_jpeg(self, index=0):
         import cv2
 
-        with self.lock:
-            frame = self.last_frames.get(index)
-            if frame is None:
-                return self.jpeg(index)
-            ok, encoded = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
-            if not ok:
-                raise RuntimeError("Could not encode camera preview")
-            return encoded.tobytes()
+        with self.frame_lock:
+            frame = (
+                self.read_latest(index) if index in self.readers else self.last_frames.get(index)
+            )
+        if frame is None:
+            return self.jpeg(index)
+        ok, encoded = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+        if not ok:
+            raise RuntimeError("Could not encode camera preview")
+        return encoded.tobytes()
 
     def close(self, index=None):
         with self.frame_lock:
@@ -273,10 +275,11 @@ class CameraPool:
             if thread is not threading.current_thread():
                 thread.join(timeout=0.5)
 
-    def close_idle(self, max_age=30):
+    def close_idle(self, max_age=30, *, keep_indices=()):
+        keep = set(keep_indices)
         with self.lock:
             for index, used in list(self.last_used.items()):
-                if time.monotonic() - used > max_age:
+                if index not in keep and time.monotonic() - used > max_age:
                     self.close(index)
 
 

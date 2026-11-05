@@ -2430,13 +2430,29 @@ class RobotLab:
                     context=self._diagnostic_context(),
                 )
 
+    def _close_idle_cameras(self):
+        # Camera ownership spans ready, countdown, reset, pause and file-saving
+        # phases. A quiet recorder is still using its background readers.
+        if self.recording_io:
+            return
+        writer = self.writer
+        indices = (
+            self.camera_indices or ([] if self.camera_index is None else [self.camera_index])
+            if writer and not writer.finalized
+            else []
+        )
+        if indices:
+            self.camera.close_idle(keep_indices=indices)
+        else:
+            self.camera.close_idle()
+
     def _loop(self):
         while not self.finished.is_set():
             cycle_started = time.monotonic()
             generation, mode = self.generation, self.mode
             try:
                 self._tick()
-                self.camera.close_idle()
+                self._close_idle_cameras()
             except Exception as caught:
                 with self.lifecycle_lock:
                     if generation != self.generation or mode != self.mode:

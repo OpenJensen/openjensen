@@ -198,6 +198,21 @@ class LatestCameraTests(unittest.TestCase):
                 pool.close()
         self.assertFalse(pool.handles or pool.readers or pool.last_frames)
 
+    def test_recording_preview_rejects_stale_reader_frames_without_waiting_for_device(self):
+        pool = CameraPool()
+        pool.readers[2] = (Mock(is_alive=lambda: True), threading.Event())
+        pool.last_frames[2] = object()
+        pool.frame_times[2] = 0
+        cv = SimpleNamespace(
+            imencode=Mock(return_value=(True, SimpleNamespace(tobytes=lambda: b"jpeg"))),
+            IMWRITE_JPEG_QUALITY=1,
+        )
+        with patch.dict(sys.modules, cv2=cv), patch("camera.time.monotonic", return_value=61):
+            with self.assertRaisesRegex(TimeoutError, "stale"):
+                pool.cached_jpeg(2)
+        cv.imencode.assert_not_called()
+        pool.close()
+
     def test_repeated_capture_failures_are_bounded_and_visible(self):
         read = Mock(return_value=(False, None))
         released = []
@@ -281,6 +296,52 @@ class RecordingIsolationTests(unittest.TestCase):
             episodes=[],
             add_frame=Mock(),
         )
+
+    def test_waiting_recording_keeps_both_readers_beyond_preview_idle_timeout(self):
+        pool = CameraPool()
+        frames = {index: object() for index in (2, 4, 6)}
+        released = []
+        for index, frame in frames.items():
+            pool.handles[index] = SimpleNamespace(release=lambda i=index: released.append(i))
+            pool.last_used[index] = 0
+            pool.last_frames[index] = frame
+            pool.frame_times[index] = 61
+        for index in (2, 4):
+            pool.readers[index] = (Mock(is_alive=lambda: True), threading.Event())
+        self.lab.camera = pool
+        self.lab.camera_index = 2
+        self.lab.camera_indices = [2, 4]
+        self.lab.writer = self.writer()
+        self.lab.writer.episode_active = False
+        original = self.lab.finished
+        self.lab.finished = Mock(is_set=lambda: False, wait=lambda timeout: True)
+        try:
+            with patch.object(self.lab, "_tick"), patch("camera.time.monotonic", return_value=61):
+                self.lab._loop()
+                self.assertEqual(released, [6])
+                for index in (2, 4):
+                    self.assertIs(pool.read_latest(index), frames[index])
+                # Finalization releases ownership; idle cleanup can reclaim both devices.
+                self.lab.writer.finalized = True
+                pool.last_used.update({2: 0, 4: 0})
+                self.lab._loop()
+                self.assertEqual(set(released), {2, 4, 6})
+                self.assertFalse(pool.readers or pool.handles)
+        finally:
+            self.lab.finished = original
+
+    def test_recording_preparation_is_not_interrupted_by_idle_cleanup(self):
+        self.lab.recording_io = True
+        self.lab.camera.close_idle = Mock()
+        original = self.lab.finished
+        self.lab.finished = Mock(is_set=lambda: False, wait=lambda timeout: True)
+        try:
+            with patch.object(self.lab, "_tick"):
+                self.lab._loop()
+            self.lab.camera.close_idle.assert_not_called()
+        finally:
+            self.lab.finished = original
+            self.lab.recording_io = False
 
     def test_capture_failure_pauses_recording_and_keeps_control_until_explicit_stop(self):
         self.start()
