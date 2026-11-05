@@ -879,21 +879,26 @@ test('calibration transfer explains an older companion instead of calling unsupp
   expect(state.writes).toEqual([]);
 });
 
-test('operator Stop clears the old page-closed warning and confirms completion', async ({ page }, testInfo) => {
-  const state = await fixture(page, true, 'Linux');
-  const reason = 'Robot Lab page was closed; motor torque disabled';
-  state.status.session.error = reason;
-  await page.getByRole('button', { name: 'Refresh devices', exact: true }).click();
-  await expect(page.locator('.robot-lab').getByRole('alert')).toContainText(reason);
-  await page.getByRole('button', { name: 'Stop arm and disable torque', exact: true }).click();
-  await expect(page.getByText('Arm stopped.', { exact: true })).toBeVisible();
-  await expect(page.locator('.robot-lab').getByRole('alert')).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Stop arm and disable torque', exact: true })).toHaveCount(0);
-  expect(writes(state, '/stop')).toHaveLength(1);
-  expect(writes(state, '/control/start')).toHaveLength(0);
-  expect(state.errors).toEqual([]);
-  await page.screenshot({ path: testInfo.outputPath('stop-confirmed.png'), fullPage: true });
-});
+for (const reason of [
+  'Robot Lab page was closed; motor torque disabled',
+  'Motor safety check failed: Motor scan cancelled by Stop',
+  'Motor safety check failed: Motor 3 write Goal_Position=3089 failed: Incorrect status packet!',
+]) {
+  test(`operator Stop acknowledges previous fault: ${reason}`, async ({ page }, testInfo) => {
+    const state = await fixture(page, true, 'Linux');
+    state.status.session.error = reason;
+    await page.getByRole('button', { name: 'Refresh devices', exact: true }).click();
+    await expect(page.locator('.robot-lab').getByRole('alert')).toContainText(reason);
+    await page.getByRole('button', { name: 'Stop arm and disable torque', exact: true }).click();
+    await expect(page.getByText('Arm stopped.', { exact: true })).toBeVisible();
+    await expect(page.locator('.robot-lab').getByRole('alert')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Stop arm and disable torque', exact: true })).toHaveCount(0);
+    expect(writes(state, '/stop')).toHaveLength(1);
+    expect(writes(state, '/control/start')).toHaveLength(0);
+    expect(state.errors).toEqual([]);
+    await page.screenshot({ path: testInfo.outputPath('stop-confirmed.png'), fullPage: true });
+  });
+}
 
 test('range and current faults give recovery steps without stale success or readiness', async ({ page }, testInfo) => {
   const state = await fixture(page, true);

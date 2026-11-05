@@ -624,6 +624,7 @@ export function useRobotLab() {
       if (!mounted.current || token !== epoch.current) return;
       if (isStatus(result)) {
         await client.cancelQueries({ queryKey: statusKey });
+        if (!mounted.current || token !== epoch.current) return;
         client.setQueryData(statusKey, result);
       }
       done?.(result);

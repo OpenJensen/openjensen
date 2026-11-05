@@ -209,6 +209,7 @@ class RobotLab:
         self.stop_lock = threading.Lock()
         self.lifecycle_lock = threading.RLock()
         self.stopping = False
+        self.stop_cleanup_failed = False
         self.assembled_factory = assembled_factory
         self.movement_detector = movement_detector
         self.observe_timeout = observe_timeout
@@ -873,6 +874,12 @@ class RobotLab:
                                 profile["error"] = str(error)
                         result["profile"] = profile
                     return result
+            except HardwareError:
+                if generation != self.generation or self.stopping:
+                    # Cancellation is an expected outcome, not a new hardware
+                    # fault. A late scan response must not stop a newer session.
+                    raise RequestError("Motor scan cancelled by Stop") from None
+                raise
             finally:
                 # Probe is read only: closing must never write torque registers.
                 bus.close()
@@ -1503,11 +1510,19 @@ class RobotLab:
                         control.configure()
                         # Sample again after configuration, immediately before holding.
                         raw = self._read_positions(bus, calibration)
+                        # Match the normal control packet path, then verify every
+                        # hold target while torque is still off. Never depend on
+                        # per-motor target ACKs or replay an uncertain motion write.
+                        try:
+                            bus.write_positions(raw, lambda: generation == self.generation)
+                        except HardwareError:
+                            if generation != self.generation:
+                                raise RequestError("Session cancelled by Stop") from None
+                            raise
                         for joint in joints:
                             motor_id = IDS[joint]
                             if generation != self.generation:
                                 raise RequestError("Session cancelled by Stop")
-                            bus.write("Goal_Position", motor_id, raw[joint])
                             if bus.read("Goal_Position", motor_id) != raw[joint]:
                                 raise HardwareError(f"{joint} hold target read-back did not match")
                         control.hold(raw)
@@ -1780,19 +1795,19 @@ class RobotLab:
         except Exception as caught:
             errors.append("Agent evidence flush failed: " + str(caught))
         if errors:
+            self.stop_cleanup_failed = True
             self.error = (
                 ((reason + ". ") if reason else "")
                 + "Stop attempted but motor acknowledgement failed. Cut motor power if needed. "
                 + "; ".join(errors)
             )
-        elif reason is None and self.error in (
-            "Robot Lab page was hidden; motor torque disabled",
-            "Robot Lab page was closed; motor torque disabled",
-            "Browser heartbeat timed out; motor torque disabled",
-        ):
-            # An operator Stop acknowledges an earlier page-lifecycle stop.
-            # Keep real hardware/cleanup faults visible and in diagnostics.
-            self.error = None
+        else:
+            if any(device is not None for device in (bus, leader, verification, assembled)):
+                self.stop_cleanup_failed = False
+            if reason is None and not self.stop_cleanup_failed:
+                # Operator Stop acknowledges the previous session fault. Its
+                # cause remains in Robot logs; unresolved cleanup stays visible.
+                self.error = None
         if self.calibration_state["phase"] in ("center", "ranges"):
             self.calibration_state.update(
                 recoverable=self.calibration_draft.path.exists(),
