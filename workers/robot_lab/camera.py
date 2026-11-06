@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import platform
 import re
@@ -25,6 +26,7 @@ class CameraPool:
         self.readers = {}
         self.reader_errors = {}
         self.multi_rate_handles = set()
+        self.fixed_rate_handles = set()
 
     def read(
         self, index=0, width=640, height=480, *, keep_indices=None, _background=False, _stop=None
@@ -56,10 +58,12 @@ class CameraPool:
                         self.last_frames.pop(key, None)
                         self.frame_times.pop(key, None)
                         self.multi_rate_handles.discard(key)
+                        self.fixed_rate_handles.discard(key)
                 for capture in captures:
                     capture.release()
 
             if index not in self.handles:
+                profile = linux_capture_profile(index) if platform.system() == "Linux" else None
 
                 def open_capture():
                     # OpenCV must request AVFoundation authorization from the
@@ -82,15 +86,43 @@ class CameraPool:
                                 "whether another app is using it, then retry."
                             )
                         raise RuntimeError(message)
+                    settings = []
                     if platform.system() != "Darwin":
-                        # Raw webcam streams can exhaust a shared USB 2 bus even
-                        # at 640x480. Prefer the camera's compressed transport
-                        # before the first read starts streaming. Unsupported
-                        # formats return False and retain the device default.
-                        capture.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
-                    capture.set(cv2.CAP_PROP_FRAME_WIDTH, min(1920, max(160, int(width))))
-                    capture.set(cv2.CAP_PROP_FRAME_HEIGHT, min(1080, max(120, int(height))))
-                    capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                        # Prefer compressed transport unless a device-specific
+                        # profile selects a verified format for this USB camera.
+                        fourcc = profile["fourcc"] if profile else "MJPG"
+                        settings.append((cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*fourcc)))
+                    settings.extend(
+                        [
+                            (
+                                cv2.CAP_PROP_FRAME_WIDTH,
+                                profile["width"] if profile else min(1920, max(160, int(width))),
+                            ),
+                            (
+                                cv2.CAP_PROP_FRAME_HEIGHT,
+                                profile["height"] if profile else min(1080, max(120, int(height))),
+                            ),
+                        ]
+                    )
+                    if profile:
+                        settings.append((cv2.CAP_PROP_FPS, profile["fps"]))
+                    try:
+                        for prop, value in settings:
+                            accepted = capture.set(prop, value)
+                            if profile and not accepted:
+                                raise RuntimeError(
+                                    f"Camera /dev/video{index} rejected its capture profile"
+                                )
+                        if profile and any(
+                            abs(capture.get(prop) - value) > 0.1 for prop, value in settings
+                        ):
+                            raise RuntimeError(
+                                f"Camera /dev/video{index} did not negotiate its capture profile"
+                            )
+                        capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                    except BaseException:
+                        capture.release()
+                        raise
                     return capture
 
                 if self.dispatcher is not None:
@@ -100,7 +132,14 @@ class CameraPool:
                 else:
                     capture = open_capture()
                 self.handles[index] = capture
-            if not _background and platform.system() != "Darwin" and index not in self.readers:
+                if profile:
+                    self.fixed_rate_handles.add(index)
+            if (
+                not _background
+                and platform.system() != "Darwin"
+                and index not in self.readers
+                and index not in self.fixed_rate_handles
+            ):
                 multiple = len(keep) > 1
                 if multiple or index in self.multi_rate_handles:
                     if multiple != (index in self.multi_rate_handles):
@@ -267,6 +306,7 @@ class CameraPool:
                     capture.release()
                 self.last_used.pop(key, None)
                 self.multi_rate_handles.discard(key)
+                self.fixed_rate_handles.discard(key)
                 with self.frame_lock:
                     self.last_frames.pop(key, None)
                     self.frame_times.pop(key, None)
@@ -281,6 +321,44 @@ class CameraPool:
             for index, used in list(self.last_used.items()):
                 if index not in keep and time.monotonic() - used > max_age:
                     self.close(index)
+
+
+def linux_capture_profile(index, sysfs=Path("/sys/class/video4linux")):
+    """Resolve an opt-in transport profile by USB identity, never video index."""
+    raw = os.environ.get("OPENJENSEN_CAMERA_PROFILES")
+    if not raw:
+        return None
+    try:
+        profiles = json.loads(raw)
+    except ValueError as error:
+        raise RuntimeError("OPENJENSEN_CAMERA_PROFILES must be a JSON object") from error
+    if not isinstance(profiles, dict):
+        raise RuntimeError("OPENJENSEN_CAMERA_PROFILES must be a JSON object")
+    device = (sysfs / f"video{index}" / "device").resolve()
+    for parent in (device, *device.parents):
+        try:
+            identity = ":".join(
+                (parent / key).read_text().strip().lower() for key in ("idVendor", "idProduct")
+            )
+        except OSError:
+            continue
+        profile = profiles.get(identity)
+        if profile is None:
+            return None
+        if not isinstance(profile, dict) or set(profile) != {"fourcc", "width", "height", "fps"}:
+            raise RuntimeError("Camera profile requires fourcc, width, height and fps")
+        if not isinstance(profile["fourcc"], str) or not re.fullmatch(
+            r"[A-Z0-9]{4}", profile["fourcc"]
+        ):
+            raise RuntimeError(
+                "Camera profile fourcc must contain four uppercase letters or digits"
+            )
+        for key, low, high in (("width", 160, 1920), ("height", 120, 1080), ("fps", 1, 60)):
+            value = profile[key]
+            if type(value) is not int or not low <= value <= high:
+                raise RuntimeError(f"Camera profile {key} must be an integer from {low} to {high}")
+        return profile
+    return None
 
 
 def linux_cameras(sysfs=Path("/sys/class/video4linux"), devices=Path("/dev")):
@@ -317,12 +395,13 @@ def linux_cameras(sysfs=Path("/sys/class/video4linux"), devices=Path("/dev")):
             name = (path / "name").read_text().strip()
         except OSError:
             name = path.name
+        profile = linux_capture_profile(index, sysfs)
         output.append(
             {
                 "index": index,
                 "name": f"{name} · /dev/video{index}",
-                "width": 640,
-                "height": 480,
+                "width": profile["width"] if profile else 640,
+                "height": profile["height"] if profile else 480,
                 "verified": False,
             }
         )
