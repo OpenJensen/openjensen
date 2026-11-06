@@ -1,15 +1,18 @@
 """Linux camera discovery never starts streaming; preview opens only the chosen node."""
 
+import json
+import os
 import struct
 import sys
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from camera import CameraPool, linux_cameras
+from camera import CameraPool, linux_cameras, linux_capture_profile
 
 
 @unittest.skipUnless(sys.platform == "linux", "V4L2 is a Linux API")
@@ -76,8 +79,225 @@ class LinuxCameraTests(unittest.TestCase):
         self.assertEqual(calls, [(12, 200)])
         self.assertEqual(released, [True])
 
+    def test_preview_prefers_mjpeg_before_streaming_and_keeps_unsupported_fallback(self):
+        for supported in (True, False):
+            with self.subTest(supported=supported):
+                operations, image = [], object()
+                capture = SimpleNamespace(
+                    isOpened=lambda: True,
+                    set=lambda prop, value: operations.append(("set", prop, value)) or supported,
+                    read=lambda: (operations.append(("read",)) or True, image),
+                    release=lambda: None,
+                )
+                cv2 = SimpleNamespace(
+                    VideoCapture=lambda *args: capture,
+                    VideoWriter_fourcc=lambda *chars: "".join(chars),
+                    CAP_V4L2=200,
+                    CAP_PROP_FOURCC=6,
+                    CAP_PROP_FRAME_WIDTH=3,
+                    CAP_PROP_FRAME_HEIGHT=4,
+                    CAP_PROP_BUFFERSIZE=5,
+                )
+                pool = CameraPool()
+                with (
+                    patch.dict(sys.modules, cv2=cv2),
+                    patch("platform.system", return_value="Linux"),
+                ):
+                    self.assertIs(pool.read(2), image)
+                    self.assertEqual(operations[0], ("set", 6, "MJPG"))
+                    self.assertEqual(operations[-1], ("read",))
+                    pool.close()
+
+    def test_preview_group_keeps_both_handles_and_releases_a_removed_view_immediately(self):
+        released, rates = [], []
+
+        def capture(index, backend):
+            return SimpleNamespace(
+                isOpened=lambda: True,
+                set=lambda prop, value: rates.append((index, prop, value)) or True,
+                read=lambda: (True, object()),
+                release=lambda: released.append(index),
+            )
+
+        cv2 = SimpleNamespace(
+            VideoCapture=capture,
+            VideoWriter_fourcc=lambda *v: 99,
+            CAP_V4L2=200,
+            CAP_PROP_FOURCC=6,
+            CAP_PROP_FRAME_WIDTH=3,
+            CAP_PROP_FRAME_HEIGHT=4,
+            CAP_PROP_BUFFERSIZE=38,
+            CAP_PROP_FPS=5,
+        )
+        pool = CameraPool()
+        with patch.dict(sys.modules, cv2=cv2), patch("platform.system", return_value="Linux"):
+            pool.read(2, keep_indices=[2, 4])
+            pool.read(4, keep_indices=[2, 4])
+            self.assertEqual(set(pool.handles), {2, 4})
+            self.assertEqual(released, [])
+            self.assertIn((2, 5, 15), rates)
+            self.assertIn((4, 5, 15), rates)
+            pool.read(4)
+            self.assertEqual(set(pool.handles), {4})
+            self.assertEqual(released, [2])
+            self.assertIn((4, 5, 30), rates)
+            pool.close()
+
     def test_invalid_camera_indices_are_rejected_before_open(self):
         with patch.dict(sys.modules, cv2=SimpleNamespace()):
             for value in (-1, 64, True, "0"):
                 with self.assertRaises(ValueError):
                     CameraPool().read(value)
+
+
+class CaptureProfileTests(unittest.TestCase):
+    profile = {"fourcc": "YUYV", "width": 800, "height": 600, "fps": 10}
+
+    def test_profile_follows_usb_device_after_node_renumbering(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            usb = root / "usb-device"
+            usb.mkdir()
+            (usb / "idVendor").write_text("1234")
+            (usb / "idProduct").write_text("abcd")
+            interface = usb / "interface"
+            interface.mkdir()
+            sysfs = root / "video"
+            sysfs.mkdir()
+            for index in (2, 12):
+                node = sysfs / f"video{index}"
+                node.mkdir()
+                (node / "device").symlink_to(interface)
+            with patch.dict(
+                os.environ, OPENJENSEN_CAMERA_PROFILES=json.dumps({"1234:abcd": self.profile})
+            ):
+                self.assertEqual(linux_capture_profile(2, sysfs), self.profile)
+                self.assertEqual(linux_capture_profile(12, sysfs), self.profile)
+                self.assertIsNone(linux_capture_profile(0, sysfs))
+            with patch.dict(
+                os.environ, OPENJENSEN_CAMERA_PROFILES=json.dumps({"0000:0000": self.profile})
+            ):
+                self.assertIsNone(linux_capture_profile(2, sysfs))
+            with patch.dict(os.environ, OPENJENSEN_CAMERA_PROFILES="[]"):
+                with self.assertRaisesRegex(RuntimeError, "JSON object"):
+                    linux_capture_profile(2, sysfs)
+            for invalid in (
+                {**self.profile, "fps": True},
+                {**self.profile, "width": 0},
+                {**self.profile, "fourcc": "bad"},
+            ):
+                with (
+                    self.subTest(invalid=invalid),
+                    patch.dict(
+                        os.environ, OPENJENSEN_CAMERA_PROFILES=json.dumps({"1234:abcd": invalid})
+                    ),
+                ):
+                    with self.assertRaisesRegex(RuntimeError, "Camera profile"):
+                        linux_capture_profile(2, sysfs)
+
+    def pool_fixture(self, *, rejected=None, negotiated_rate=10):
+        operations, released = [], []
+
+        def open_capture(index, backend):
+            values = {}
+
+            def set_value(prop, value):
+                operations.append((index, prop, value))
+                values[prop] = value
+                return prop != rejected
+
+            return SimpleNamespace(
+                isOpened=lambda: True,
+                set=set_value,
+                get=lambda prop: negotiated_rate if prop == 5 else values[prop],
+                read=lambda: (True, object()),
+                release=lambda: released.append(index),
+            )
+
+        cv2 = SimpleNamespace(
+            VideoCapture=open_capture,
+            VideoWriter_fourcc=lambda *v: 99,
+            CAP_V4L2=200,
+            CAP_PROP_FOURCC=6,
+            CAP_PROP_FRAME_WIDTH=3,
+            CAP_PROP_FRAME_HEIGHT=4,
+            CAP_PROP_BUFFERSIZE=38,
+            CAP_PROP_FPS=5,
+        )
+        return cv2, operations, released
+
+    def test_profile_rate_survives_preview_group_changes_and_background_reads(self):
+        cv2, operations, released = self.pool_fixture()
+        pool = CameraPool()
+        with (
+            patch.dict(sys.modules, cv2=cv2),
+            patch("platform.system", return_value="Linux"),
+            patch("camera.linux_capture_profile", return_value=self.profile),
+        ):
+            pool.read(2, keep_indices=[2, 4])
+            pool.read(4, keep_indices=[2, 4])
+            pool.read(4)
+            pool.read(4, _background=True)
+            self.assertEqual([value for _, prop, value in operations if prop == 5], [10, 10])
+            self.assertEqual(released, [2])
+            self.assertEqual(pool.fixed_rate_handles, {4})
+            pool.close()
+            self.assertFalse(pool.fixed_rate_handles)
+            self.assertEqual(released, [2, 4])
+
+    def test_rejected_or_renegotiated_profile_releases_capture_before_use(self):
+        for rejected, rate in ((5, 10), (None, 30)):
+            with self.subTest(rejected=rejected, rate=rate):
+                cv2, _, released = self.pool_fixture(rejected=rejected, negotiated_rate=rate)
+                pool = CameraPool()
+                with (
+                    patch.dict(sys.modules, cv2=cv2),
+                    patch("platform.system", return_value="Linux"),
+                    patch("camera.linux_capture_profile", return_value=self.profile),
+                ):
+                    with self.assertRaisesRegex(RuntimeError, "capture profile"):
+                        pool.read(2)
+                self.assertEqual(released, [2])
+                self.assertFalse(pool.handles)
+                self.assertFalse(pool.fixed_rate_handles)
+
+
+class ConcurrentCameraTests(unittest.TestCase):
+    @patch.dict(sys.modules, cv2=SimpleNamespace())
+    def test_second_camera_reads_while_first_camera_waits_for_a_frame(self):
+        pool = CameraPool()
+        entered = {i: threading.Event() for i in (2, 4)}
+        finish = threading.Event()
+        failures = []
+
+        def read(index):
+            entered[index].set()
+            if not finish.wait(2):
+                raise TimeoutError("Both independent cameras must be able to capture")
+            return True, object()
+
+        for index in (2, 4):
+            pool.handles[index] = SimpleNamespace(
+                read=lambda i=index: read(i), release=lambda: None
+            )
+            pool.fixed_rate_handles.add(index)
+
+        def consume(index):
+            try:
+                pool.read(index, keep_indices=[2, 4], _background=True)
+            except Exception as error:
+                failures.append(error)
+
+        threads = [threading.Thread(target=consume, args=(i,)) for i in (2, 4)]
+        try:
+            threads[0].start()
+            self.assertTrue(entered[2].wait(1))
+            threads[1].start()
+            self.assertTrue(entered[4].wait(1), "A slow camera blocked the other camera")
+        finally:
+            finish.set()
+            for thread in threads:
+                if thread.ident is not None:
+                    thread.join(2)
+            pool.close()
+        self.assertEqual(failures, [])

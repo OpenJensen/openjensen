@@ -18,6 +18,13 @@ class CaptureRate:
         self.camera = camera
         self.ticks = deque(maxlen=240)
         self.images = deque(maxlen=240)
+        self.camera_indices = (
+            list(camera) if isinstance(camera, (list, tuple)) else ([0] if camera else [])
+        )
+        self.camera_images = {
+            key: (self.images if ordinal == 0 else deque(maxlen=240))
+            for ordinal, key in enumerate(self.camera_indices)
+        }
         self.io_costs = []
         self.io_error = None
         self.io_required = False
@@ -28,17 +35,35 @@ class CaptureRate:
         self.io_required = True
 
         def measure():
-            from image_writer import save_png
+            from image_writer import AsyncImageWriter, image_worker_count, save_png
 
             try:
                 with tempfile.TemporaryDirectory(prefix=".capture-check-", dir=root) as folder:
-                    # Exclude one-time Pillow/plugin initialization from sustained throughput.
-                    save_png(frame[:, :, ::-1].copy(), Path(folder) / "sample.png")
-                    for _ in range(6):
-                        started = time.monotonic()
-                        save_png(frame[:, :, ::-1].copy(), Path(folder) / "sample.png")
-                        (Path(folder) / "sample.json").write_text('{"sample": [0,0,0,0,0,0]}')
-                        self.io_costs.append(time.monotonic() - started)
+                    frames = list(frame.values()) if isinstance(frame, dict) else [frame]
+                    images = [image[:, :, ::-1].copy() for image in frames]
+                    for image in images:
+                        save_png(image, Path(folder) / "sample.png")
+                    batches = image_worker_count(len(images))
+                    writer = AsyncImageWriter(
+                        capacity=max(8, len(images) * 4), workers=batches
+                    )
+                    try:
+                        # Measure sustained batches through the same bounded
+                        # writer used by recording, including copies and files.
+                        for _ in range(6):
+                            started = time.monotonic()
+                            for batch in range(batches):
+                                for index, image in enumerate(images):
+                                    writer.save_image(
+                                        image, Path(folder) / f"{batch}-{index}.png"
+                                    )
+                                (Path(folder) / f"{batch}.json").write_text(
+                                    '{"sample": [0,0,0,0,0,0]}'
+                                )
+                            writer.wait_until_done()
+                            self.io_costs.append((time.monotonic() - started) / batches)
+                    finally:
+                        writer.stop(ignore_error=True)
             except Exception as error:
                 self.io_error = str(error)
 
@@ -50,16 +75,23 @@ class CaptureRate:
     def sample(self, now, image_time=None):
         if not self.ticks or now > self.ticks[-1]:
             self.ticks.append(now)
-        if image_time is not None and image_time >= self.started:
-            if not self.images or image_time > self.images[-1]:
-                self.images.append(image_time)
+        samples = (
+            image_time
+            if isinstance(image_time, dict)
+            else ({self.camera_indices[0]: image_time} if self.camera_indices else {})
+        )
+        for key, captured in samples.items():
+            values = self.camera_images.get(key)
+            if values is not None and captured is not None and captured >= self.started:
+                if not values or captured > values[-1]:
+                    values.append(captured)
 
     def select(self, now):
         if self.io_error:
             raise ValueError("Recording storage check failed: " + self.io_error)
         if self.io_required and len(self.io_costs) < 6:
             return None
-        streams = [self.ticks] + ([self.images] if self.camera else [])
+        streams = [self.ticks, *self.camera_images.values()]
         if now - self.started < 3 or any(len(values) < 6 for values in streams):
             return None
         # Slow-tail intervals include real serial work and USB camera cadence.

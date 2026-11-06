@@ -222,11 +222,17 @@ class SafetyTests(unittest.TestCase):
         with self.assertRaisesRegex(HardwareError, "Invalid encoder reading"):
             self.lab._tick()
 
-    def test_operator_stop_acknowledges_page_lifecycle_stop_without_reopening_hardware(self):
+    def test_operator_stop_acknowledges_previous_fault_without_reopening_hardware(self):
         for reason in (
             "Robot Lab page was hidden; motor torque disabled",
             "Robot Lab page was closed; motor torque disabled",
             "Browser heartbeat timed out; motor torque disabled",
+            "Motor safety check failed: Motor scan cancelled by Stop",
+            (
+                "Motor safety check failed: Motor 3 write Goal_Position=3089 failed: "
+                "Incorrect status packet!"
+            ),
+            "Reposition every joint clear of its stops before identification",
         ):
             with self.subTest(reason=reason):
                 self.start()
@@ -334,7 +340,7 @@ class SafetyTests(unittest.TestCase):
             return bus
 
         self.lab.bus_factory = stopped_bus
-        with self.assertRaisesRegex(HardwareError, "cancelled by Stop"):
+        with self.assertRaisesRegex(RequestError, "cancelled by Stop"):
             self.lab.probe({"port": "/dev/cu.fake", "discover": True})
         self.assertEqual(calls, [0])
         self.assertEqual(self.buses[-1].writes, [])
@@ -482,6 +488,23 @@ class SafetyTests(unittest.TestCase):
         with self.assertRaises(RequestError):
             self.start(robot_id="missing")
         self.assertEqual(self.buses, [])
+
+    def test_startup_hold_uses_sync_packet_and_verifies_before_enabling(self):
+        factory = self.lab.bus_factory
+        packets = []
+
+        def sync_bus(*args):
+            bus = factory(*args)
+            write_positions = bus.write_positions
+            bus.write_positions = lambda values, is_current: (
+                packets.append(dict(values)),
+                write_positions(values, is_current),
+            )[-1]
+            return bus
+
+        self.lab.bus_factory = sync_bus
+        self.start()
+        self.assertEqual(packets, [dict.fromkeys(JOINTS, 2047)])
 
     def test_hold_current_position_before_any_torque_enable(self):
         result = self.start()
@@ -1455,6 +1478,40 @@ class HttpTests(unittest.TestCase):
         value = json.loads(response.read())
         connection.close()
         return response.status, value
+
+    def test_cancelled_scan_response_does_not_fault_or_stop_a_newer_session(self):
+        self.lab.port_provider = lambda: [{"device": "/dev/cu.fake"}]
+        buses = []
+
+        def factory(*args):
+            bus = FakeBus(*args)
+            buses.append(bus)
+
+            def ping(motor_id):
+                self.lab.stop()
+                self.lab.generation += 1
+                self.lab.mode = "manual"
+                return None
+
+            bus.ping = ping
+            return bus
+
+        self.lab.bus_factory = factory
+        connection = http.client.HTTPConnection("127.0.0.1", self.server.server_port)
+        connection.request(
+            "POST",
+            "/v1/probe",
+            json.dumps({"port": "/dev/cu.fake", "discover": True}),
+            {"Authorization": "Bearer " + self.token, "Content-Type": "application/json"},
+        )
+        response = connection.getresponse()
+        self.assertEqual(response.status, 422)
+        self.assertIn("cancelled by Stop", json.loads(response.read())["error"])
+        connection.close()
+        self.assertEqual(self.lab.mode, "manual")
+        self.assertIsNone(self.lab.error)
+        self.assertEqual(buses[0].writes, [])
+        self.assertFalse(buses[0].opened)
 
     def test_token_required(self):
         self.assertEqual(self.get("/v1/status")[0], 401)

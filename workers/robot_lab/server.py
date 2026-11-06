@@ -209,6 +209,7 @@ class RobotLab:
         self.stop_lock = threading.Lock()
         self.lifecycle_lock = threading.RLock()
         self.stopping = False
+        self.stop_cleanup_failed = False
         self.assembled_factory = assembled_factory
         self.movement_detector = movement_detector
         self.observe_timeout = observe_timeout
@@ -227,6 +228,9 @@ class RobotLab:
         self.bus_factory = bus_factory
         self.port_provider = port_provider
         self.camera = camera or CameraPool()
+        if hasattr(self.camera, "set_settings_path"):
+            self.camera.set_settings_path(self.data_dir / "camera-settings.json")
+        self.camera_configuring = False
         self.bus = None
         self.leader = None
         self.pending_bus = None
@@ -286,6 +290,7 @@ class RobotLab:
         self.recording_thread = None
         self.last_recorded_image = None
         self.camera_index = None
+        self.camera_indices = []
         self.next_record = 0.0
         self.finished = threading.Event()
         self.threads = []
@@ -574,6 +579,7 @@ class RobotLab:
             or self.assembled_session is not None
             or self.verification_session is not None
             or self.stopping
+            or self.camera_configuring
         ):
             raise RequestError("Stop the current session before changing hardware setup")
 
@@ -680,6 +686,8 @@ class RobotLab:
                 "lerobot_observation_ranges": True,
                 "background_recording_io": True,
                 "guided_recording": True,
+                "multi_camera_recording": True,
+                "camera_mode_controls": platform.system() == "Linux",
                 "auto_recording_fps": True,
                 "agent_control": hardware,
                 "run_policy": True,
@@ -743,6 +751,7 @@ class RobotLab:
                 "actual_fps": writer.actual_fps if writer else None,
                 "active": writer is not None and not writer.finalized,
                 "dataset_id": writer.id if writer else None,
+                "camera_indices": list(self.camera_indices),
                 "episode_active": writer.episode_active if writer else False,
                 "frames": writer.frames if writer else 0,
                 "episodes": len(writer.episodes) if writer else 0,
@@ -873,6 +882,12 @@ class RobotLab:
                                 profile["error"] = str(error)
                         result["profile"] = profile
                     return result
+            except HardwareError:
+                if generation != self.generation or self.stopping:
+                    # Cancellation is an expected outcome, not a new hardware
+                    # fault. A late scan response must not stop a newer session.
+                    raise RequestError("Motor scan cancelled by Stop") from None
+                raise
             finally:
                 # Probe is read only: closing must never write torque registers.
                 bus.close()
@@ -1503,11 +1518,19 @@ class RobotLab:
                         control.configure()
                         # Sample again after configuration, immediately before holding.
                         raw = self._read_positions(bus, calibration)
+                        # Match the normal control packet path, then verify every
+                        # hold target while torque is still off. Never depend on
+                        # per-motor target ACKs or replay an uncertain motion write.
+                        try:
+                            bus.write_positions(raw, lambda: generation == self.generation)
+                        except HardwareError:
+                            if generation != self.generation:
+                                raise RequestError("Session cancelled by Stop") from None
+                            raise
                         for joint in joints:
                             motor_id = IDS[joint]
                             if generation != self.generation:
                                 raise RequestError("Session cancelled by Stop")
-                            bus.write("Goal_Position", motor_id, raw[joint])
                             if bus.read("Goal_Position", motor_id) != raw[joint]:
                                 raise HardwareError(f"{joint} hold target read-back did not match")
                         control.hold(raw)
@@ -1780,19 +1803,19 @@ class RobotLab:
         except Exception as caught:
             errors.append("Agent evidence flush failed: " + str(caught))
         if errors:
+            self.stop_cleanup_failed = True
             self.error = (
                 ((reason + ". ") if reason else "")
                 + "Stop attempted but motor acknowledgement failed. Cut motor power if needed. "
                 + "; ".join(errors)
             )
-        elif reason is None and self.error in (
-            "Robot Lab page was hidden; motor torque disabled",
-            "Robot Lab page was closed; motor torque disabled",
-            "Browser heartbeat timed out; motor torque disabled",
-        ):
-            # An operator Stop acknowledges an earlier page-lifecycle stop.
-            # Keep real hardware/cleanup faults visible and in diagnostics.
-            self.error = None
+        else:
+            if any(device is not None for device in (bus, leader, verification, assembled)):
+                self.stop_cleanup_failed = False
+            if reason is None and not self.stop_cleanup_failed:
+                # Operator Stop acknowledges the previous session fault. Its
+                # cause remains in Robot logs; unresolved cleanup stays visible.
+                self.error = None
         if self.calibration_state["phase"] in ("center", "ranges"):
             self.calibration_state.update(
                 recoverable=self.calibration_draft.path.exists(),
@@ -1823,6 +1846,21 @@ class RobotLab:
         )
         return self.status()
 
+    def configure_cameras(self, payload):
+        if set(payload) != {"cameras"}:
+            raise RequestError("Choose camera capture settings")
+        with self.lock:
+            self._idle()
+            if self.recording_io or self.writer and not self.writer.finalized:
+                raise RequestError("Finish the current dataset before changing camera modes")
+            self.camera_configuring = True
+        try:
+            self.camera.close()
+            return self.camera.configure(payload["cameras"])
+        finally:
+            with self.lock:
+                self.camera_configuring = False
+
     def recording_start(self, payload):
         with self.lock:
             self._recording_control_ready()
@@ -1839,8 +1877,18 @@ class RobotLab:
         if not isinstance(task, str) or not task.strip() or len(task) > 1000:
             raise RequestError("Describe the task in 1–1000 characters")
         camera_index = payload.get("camera_index", 0)
-        if camera_index is not None:
-            integer(camera_index, 0, MAX_CAMERA_INDEX, "Camera index")
+        camera_indices = payload.get("camera_indices")
+        if camera_indices is None:
+            camera_indices = [] if camera_index is None else [camera_index]
+        if not isinstance(camera_indices, list) or len(camera_indices) > 4:
+            raise RequestError("Choose up to four cameras")
+        for index in camera_indices:
+            integer(index, 0, MAX_CAMERA_INDEX, "Camera index")
+        if len(set(camera_indices)) != len(camera_indices):
+            raise RequestError("Choose each camera only once")
+        if len(camera_indices) > 1 and not hasattr(self.camera, "read_latest_timed"):
+            raise RequestError("Update the camera service for multiple-camera recording")
+        camera_index = camera_indices[0] if camera_indices else None
         with self.lock:
             self._recording_control_ready()
             if self.recording_io:
@@ -1852,11 +1900,25 @@ class RobotLab:
         writer = None
         try:
             image_shape = None
-            if camera_index is not None:
-                initial_image = self.camera.read(camera_index)
-                image_shape = tuple(initial_image.shape)
+            initial_images = {}
+            for ordinal, index in enumerate(camera_indices):
+                frame = (
+                    self.camera.read(index, keep_indices=camera_indices)
+                    if len(camera_indices) > 1
+                    else self.camera.read(index)
+                )
+                key = (
+                    "observation.images.front"
+                    if ordinal == 0
+                    else f"observation.images.camera_{index}"
+                )
+                initial_images[key] = frame
                 if hasattr(self.camera, "start_reader"):
-                    self.camera.start_reader(camera_index)
+                    self.camera.start_reader(index)
+            if len(initial_images) == 1:
+                image_shape = tuple(next(iter(initial_images.values())).shape)
+            elif initial_images:
+                image_shape = {key: tuple(frame.shape) for key, frame in initial_images.items()}
             if shutil.disk_usage(self.datasets_dir).free < 1024**3:
                 raise RequestError(
                     "Less than 1 GiB disk space remains; free space before recording"
@@ -1870,15 +1932,14 @@ class RobotLab:
                 self._recording_control_ready()
                 self.writer = writer
                 self.camera_index = camera_index
+                self.camera_indices = list(camera_indices)
                 self.recording_error = None
                 self.recording_fps_mode = "auto" if requested_fps is None else "manual"
                 self.recording_rate = (
-                    CaptureRate(time.monotonic(), camera_index is not None)
-                    if requested_fps is None
-                    else None
+                    CaptureRate(time.monotonic(), camera_indices) if requested_fps is None else None
                 )
                 if self.recording_rate and camera_index is not None:
-                    self.recording_rate.measure_image_io(initial_image, writer.root)
+                    self.recording_rate.measure_image_io(initial_images, writer.root)
                 self.recording_rate_status = "measuring" if self.recording_rate else "ready"
                 self.recording_rate_message = (
                     "Measuring camera, robot and storage speed…"
@@ -1958,6 +2019,7 @@ class RobotLab:
                 with self.lock, self.lifecycle_lock:
                     self.writer = None
                     self.camera_index = None
+                    self.camera_indices = []
                     self.next_record = 0.0
                     self.recording_error = None
                     self.recording_rate = None
@@ -2078,14 +2140,17 @@ class RobotLab:
         if writer is None or writer.finalized or self.recording_io:
             return
         if self.recording_rate is not None:
-            image_time = None
-            if self.camera_index is not None:
-                if not hasattr(self.camera, "read_latest_timed"):
-                    raise RequestError(
-                        "Camera service cannot measure fresh frames; select a manual frame rate"
-                    )
-                _, image_time = self.camera.read_latest_timed(self.camera_index)
-            self.recording_rate.sample(now, image_time)
+            image_times = {}
+            indices = self.camera_indices or (
+                [] if self.camera_index is None else [self.camera_index]
+            )
+            if indices and not hasattr(self.camera, "read_latest_timed"):
+                raise RequestError(
+                    "Camera service cannot measure fresh frames; select a manual frame rate"
+                )
+            for index in indices:
+                _, image_times[index] = self.camera.read_latest_timed(index)
+            self.recording_rate.sample(now, image_times)
             fps = self.recording_rate.select(now)
             if fps is not None:
                 if writer.frames or writer.episodes or writer.episode_active:
@@ -2315,19 +2380,42 @@ class RobotLab:
         if writer and writer.episode_active and time.monotonic() >= self.next_record:
             try:
                 image = None
-                if self.camera_index is not None:
+                image_times = {}
+                indices = self.camera_indices or (
+                    [] if self.camera_index is None else [self.camera_index]
+                )
+                images = {}
+                for ordinal, index in enumerate(indices):
                     read_image = getattr(self.camera, "read_latest", self.camera.read)
                     if hasattr(self.camera, "read_latest_timed"):
-                        frame, image_time = self.camera.read_latest_timed(self.camera_index)
-                        if (
-                            self.last_recorded_image is not None
-                            and image_time <= self.last_recorded_image
-                        ):
+                        frame, image_time = self.camera.read_latest_timed(index)
+                        previous = (
+                            self.last_recorded_image.get(index)
+                            if isinstance(self.last_recorded_image, dict)
+                            else self.last_recorded_image
+                        )
+                        if previous is not None and image_time <= previous:
                             return
-                        image = frame[:, :, ::-1].copy()
+                        image_times[index] = image_time
                     else:
-                        image_time = None
-                        image = read_image(self.camera_index)[:, :, ::-1].copy()
+                        frame = read_image(index)
+                    key = (
+                        "observation.images.front"
+                        if ordinal == 0
+                        else f"observation.images.camera_{index}"
+                    )
+                    images[key] = frame[:, :, ::-1].copy()
+                if len(image_times) > 1 and max(image_times.values()) - min(
+                    image_times.values()
+                ) > max(0.2, 1 / writer.fps):
+                    raise RequestError(
+                        "Camera frames are too far apart; check USB bandwidth and retry "
+                        "with Automatic frame rate"
+                    )
+                if len(images) == 1:
+                    image = next(iter(images.values()))
+                elif images:
+                    image = images
                 with self.lock:
                     if (
                         generation == self.generation
@@ -2338,8 +2426,10 @@ class RobotLab:
                         writer.add_frame(
                             dict(self.positions), dict(self.action), image, captured_at
                         )
-                        if self.camera_index is not None:
-                            self.last_recorded_image = image_time
+                        if indices:
+                            self.last_recorded_image = (
+                                image_times if len(indices) > 1 else image_times.get(indices[0])
+                            )
                         self.next_record += 1.0 / writer.fps
                         # Never burst backlogged samples after a scheduling delay.
                         if captured_at - self.next_record >= 1.0 / writer.fps:
@@ -2360,13 +2450,29 @@ class RobotLab:
                     context=self._diagnostic_context(),
                 )
 
+    def _close_idle_cameras(self):
+        # Camera ownership spans ready, countdown, reset, pause and file-saving
+        # phases. A quiet recorder is still using its background readers.
+        if self.recording_io:
+            return
+        writer = self.writer
+        indices = (
+            self.camera_indices or ([] if self.camera_index is None else [self.camera_index])
+            if writer and not writer.finalized
+            else []
+        )
+        if indices:
+            self.camera.close_idle(keep_indices=indices)
+        else:
+            self.camera.close_idle()
+
     def _loop(self):
         while not self.finished.is_set():
             cycle_started = time.monotonic()
             generation, mode = self.generation, self.mode
             try:
                 self._tick()
-                self.camera.close_idle()
+                self._close_idle_cameras()
             except Exception as caught:
                 with self.lifecycle_lock:
                     if generation != self.generation or mode != self.mode:
@@ -2490,14 +2596,38 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, lab.policy.catalog())
             if path == "/v1/devices":
                 return self._send(200, lab.devices())
+            if path == "/v1/camera/settings":
+                values = query.get("cameras", ["0"])[0].split(",")
+                if not 1 <= len(values) <= 4:
+                    raise RequestError("Choose one to four cameras")
+                indices = [
+                    integer(int(value), 0, MAX_CAMERA_INDEX, "Camera index") for value in values
+                ]
+                if len(set(indices)) != len(indices):
+                    raise RequestError("Choose distinct cameras")
+                return self._send(200, lab.camera.settings(indices))
             if path == "/v1/camera.jpg":
                 index = integer(
                     int(query.get("index", ["0"])[0]), 0, MAX_CAMERA_INDEX, "Camera index"
                 )
+                keep = [
+                    integer(int(value), 0, MAX_CAMERA_INDEX, "Camera index")
+                    for value in query.get("cameras", [str(index)])[0].split(",")
+                ]
+                if len(keep) > 4 or len(set(keep)) != len(keep) or index not in keep:
+                    raise RequestError(
+                        "Choose up to four distinct preview cameras including this view"
+                    )
                 image = (
                     lab.camera.cached_jpeg(index)
                     if lab.mode == "policy"
-                    or (lab.writer and not lab.writer.finalized and lab.camera_index == index)
+                    or (
+                        lab.writer
+                        and not lab.writer.finalized
+                        and index in (lab.camera_indices or [lab.camera_index])
+                    )
+                    else lab.camera.jpeg(index, keep_indices=keep)
+                    if len(keep) > 1
                     else lab.camera.jpeg(index)
                 )
                 return self._send(200, image, "image/jpeg")
@@ -2607,6 +2737,8 @@ class Handler(BaseHTTPRequestHandler):
                 result = lab.assembled_action(path.rsplit("/", 1)[-1], payload)
             elif path == "/v1/setup/assembled/cancel":
                 result = lab.stop()
+            elif path == "/v1/camera/configure":
+                result = lab.configure_cameras(payload)
             elif path == "/v1/devices/configure":
                 result = lab.configure_device(payload)
             elif path in ("/v1/devices/remove", "/v1/devices/restore"):

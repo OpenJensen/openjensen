@@ -1,6 +1,6 @@
 """Browser-facing Robot Lab API; credentials remain on the operator's server."""
 
-from typing import Literal
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
@@ -9,6 +9,7 @@ from pydantic import (
     ConfigDict,
     Field,
     StrictBool,
+    StrictFloat,
     StrictInt,
     ValidationError,
     model_validator,
@@ -102,6 +103,31 @@ class CalibrationImportRequest(BaseModel):
     confirm: Literal["IMPORT CALIBRATION"]
 
 
+class CameraModeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    fourcc: str = Field(pattern=r"^[A-Z0-9]{4}$")
+    width: StrictInt = Field(ge=1, le=8192)
+    height: StrictInt = Field(ge=1, le=8192)
+    fps: StrictInt | StrictFloat = Field(ge=1, le=240)
+
+
+class CameraSelectionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    index: StrictInt = Field(ge=0, le=63)
+    mode: CameraModeRequest
+
+
+class CameraConfigurationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    cameras: list[CameraSelectionRequest] = Field(min_length=1, max_length=4)
+
+    @model_validator(mode="after")
+    def distinct(self):
+        if len({camera.index for camera in self.cameras}) != len(self.cameras):
+            raise ValueError("Choose each camera only once")
+        return self
+
+
 class RecordingCollectionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     episode_time_s: StrictInt = Field(default=30, ge=1, le=300)
@@ -116,7 +142,18 @@ class RecordingStartRequest(BaseModel):
     task: str = Field(min_length=1, max_length=1000)
     fps: StrictInt | None = Field(default=None, ge=1, le=40)
     camera_index: StrictInt | None = Field(default=0, ge=0, le=63)
+    camera_indices: list[Annotated[StrictInt, Field(ge=0, le=63)]] | None = Field(
+        default=None, max_length=4
+    )
     collection: RecordingCollectionRequest | None = None
+
+    @model_validator(mode="after")
+    def distinct_cameras(self):
+        if self.camera_indices is not None and len(set(self.camera_indices)) != len(
+            self.camera_indices
+        ):
+            raise ValueError("Choose each camera only once")
+        return self
 
 
 class RecordingCollectionActionRequest(BaseModel):
@@ -184,6 +221,11 @@ async def proxy(path: str, request: Request):
                 raise HTTPException(
                     422, "Choose valid policy settings and confirm attended operation"
                 ) from None
+        if path == "camera/configure":
+            try:
+                CameraConfigurationRequest.model_validate(payload)
+            except ValidationError:
+                raise HTTPException(422, "Choose valid camera capture settings") from None
         if path == "devices/configure":
             try:
                 DeviceConfigurationRequest.model_validate(payload)
@@ -241,12 +283,14 @@ PROTOCOL = {
         "devices",
         "datasets",
         "camera.jpg",
+        "camera/settings",
         "diagnostics",
         "calibration/export",
         "policy/catalog",
     },
     "POST": {
         *POLICY_REQUESTS,
+        "camera/configure",
         "devices/configure",
         "devices/remove",
         "devices/restore",
@@ -300,6 +344,19 @@ def proxy_endpoint(path):
 
 def request_schema(model):
     schema = model.model_json_schema()
+    if model is CameraConfigurationRequest:
+        definitions = schema.pop("$defs", {})
+
+        def expand(value):
+            if isinstance(value, list):
+                return [expand(item) for item in value]
+            if isinstance(value, dict):
+                if "$ref" in value:
+                    return expand(definitions[value["$ref"].rsplit("/", 1)[-1]])
+                return {key: expand(item) for key, item in value.items()}
+            return value
+
+        schema = expand(schema)
     if model is RecordingStartRequest:
         # Inline nested settings: this schema is embedded in a request body,
         # so Pydantic's root-relative $defs references would not resolve.
@@ -332,6 +389,8 @@ for method, protocol_paths in PROTOCOL.items():
                             "schema": request_schema(
                                 POLICY_REQUESTS[protocol_path]
                                 if protocol_path in POLICY_REQUESTS
+                                else CameraConfigurationRequest
+                                if protocol_path == "camera/configure"
                                 else DeviceConfigurationRequest
                                 if protocol_path == "devices/configure"
                                 else DeviceVisibilityRequest
@@ -351,6 +410,7 @@ for method, protocol_paths in PROTOCOL.items():
             if protocol_path
             in {
                 *POLICY_REQUESTS,
+                "camera/configure",
                 "recording/finish",
                 "recording/start",
                 "recording/collection/start",

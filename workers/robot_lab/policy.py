@@ -486,7 +486,12 @@ class PolicyRunner:
                 raise ValueError("Load a policy before checking the camera and inference rate")
             if self.model["offline_only"]:
                 raise ValueError("Offline inference only: physical control units are unverified")
-            if self.lab.mode != "idle" or self.thread and self.thread.is_alive():
+            if (
+                self.lab.mode != "idle"
+                or self.lab.camera_configuring
+                or self.thread
+                and self.thread.is_alive()
+            ):
                 raise ValueError("Stop motor control before running the policy check")
             self.phase, self.error, self.check = "checking", None, None
             self.operation += 1
