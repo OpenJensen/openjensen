@@ -123,7 +123,12 @@ class CameraPool:
                             raise RuntimeError(
                                 f"Camera /dev/video{index} did not negotiate its capture profile"
                             )
-                        capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                        # V4L2 keeps the dequeued buffer until JPEG decoding is
+                        # complete. A single buffer leaves no queued USB target
+                        # during that work and can drop the next camera frame.
+                        capture.set(
+                            cv2.CAP_PROP_BUFFERSIZE, 4 if platform.system() == "Linux" else 1
+                        )
                     except BaseException:
                         capture.release()
                         raise
