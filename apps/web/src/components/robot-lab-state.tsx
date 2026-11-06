@@ -91,6 +91,7 @@ export function useRobotLab() {
   const jogInFlight = useRef(false);
   const [controlJoints, setControlJoints] = useState<RobotJoint[]>(robotJoints.map((j) => j.name));
   const [cameraIndex, setCameraIndex] = useState(0);
+  const [additionalCameraIndices, setAdditionalCameraIndices] = useState<number[]>([]);
   const [preview, setPreview] = useState(false);
   const [previewStamp, setPreviewStamp] = useState(0);
   const [cameraError, setCameraError] = useState(false);
@@ -348,6 +349,9 @@ export function useRobotLab() {
       ? { ...motorDefinition, label: 'Trigger' }
       : motorDefinition;
   const availableCameras = devices.data?.cameras ?? [];
+  const selectedCameraIndices = Array.from(new Set([cameraIndex, ...additionalCameraIndices])).filter((index) =>
+    availableCameras.some((camera) => camera.index === index),
+  );
   const busy = !!pending;
   const canAct = online && !busy && !reconnecting && !awaitingCalibration;
   const portConnected =
@@ -624,6 +628,7 @@ export function useRobotLab() {
       if (!mounted.current || token !== epoch.current) return;
       if (isStatus(result)) {
         await client.cancelQueries({ queryKey: statusKey });
+        if (!mounted.current || token !== epoch.current) return;
         client.setQueryData(statusKey, result);
       }
       done?.(result);
@@ -1162,6 +1167,9 @@ export function useRobotLab() {
     calibrationSummary,
     cameraError,
     cameraIndex,
+    additionalCameraIndices,
+    selectedCameraIndices,
+    setAdditionalCameraIndices,
     canAct,
     canUseArm,
     capturedRanges,

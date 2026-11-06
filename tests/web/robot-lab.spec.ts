@@ -120,6 +120,14 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin', 
     errors: [] as string[],
     datasetReads: 0,
     cameraFailure: false,
+    cameraConfigureError: null as string | null,
+    cameraModes: [
+      { fourcc: 'MJPG', width: 640, height: 480, fps: 30 },
+      { fourcc: 'MJPG', width: 1280, height: 720, fps: 30 },
+      { fourcc: 'YUYV', width: 800, height: 600, fps: 10 },
+    ],
+    cameraProfiles: {} as Record<number, any>,
+    cameras: [{ index: 0, name: 'Robot camera', width: 640, height: 480 }],
     discoverySupported: true,
     probeIds: [1],
     discoveryIds: [1],
@@ -251,7 +259,7 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin', 
           json: {
             saved_devices: state.catalog,
             ports: state.catalog.filter((d) => d.connected).map((d) => ({ device: d.port })),
-            cameras: [{ index: 0, name: 'Robot camera', width: 640, height: 480 }],
+            cameras: state.cameras,
             camera_error: null,
           },
         });
@@ -286,10 +294,31 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin', 
                   },
                 ]
               : [],
-            cameras: [{ index: 0, name: 'Robot camera', width: 640, height: 480 }],
+            cameras: state.cameras,
             camera_error: null,
           },
         });
+      if (action === '/camera/settings' || action === '/camera/configure') {
+        if (action === '/camera/configure' && state.cameraConfigureError)
+          return route.fulfill({ status: 409, json: { detail: state.cameraConfigureError } });
+        const indices =
+          action === '/camera/settings'
+            ? (new URL(request.url()).searchParams.get('cameras') ?? '0').split(',').map(Number)
+            : body.cameras.map((camera: any) => camera.index);
+        if (action === '/camera/configure')
+          for (const camera of body.cameras) state.cameraProfiles[camera.index] = camera.mode;
+        return route.fulfill({
+          json: {
+            cameras: indices.map((index: number) => ({
+              index,
+              modes: state.cameraModes,
+              configured: state.cameraProfiles[index] ?? state.cameraModes[0],
+              actual: state.cameraProfiles[index] ?? state.cameraModes[0],
+              measured_fps: null,
+            })),
+          },
+        });
+      }
       if (action === '/camera.jpg')
         return state.cameraFailure
           ? route.fulfill({ status: 503, json: { detail: 'Camera disconnected.' } })
@@ -879,21 +908,26 @@ test('calibration transfer explains an older companion instead of calling unsupp
   expect(state.writes).toEqual([]);
 });
 
-test('operator Stop clears the old page-closed warning and confirms completion', async ({ page }, testInfo) => {
-  const state = await fixture(page, true, 'Linux');
-  const reason = 'Robot Lab page was closed; motor torque disabled';
-  state.status.session.error = reason;
-  await page.getByRole('button', { name: 'Refresh devices', exact: true }).click();
-  await expect(page.locator('.robot-lab').getByRole('alert')).toContainText(reason);
-  await page.getByRole('button', { name: 'Stop arm and disable torque', exact: true }).click();
-  await expect(page.getByText('Arm stopped.', { exact: true })).toBeVisible();
-  await expect(page.locator('.robot-lab').getByRole('alert')).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Stop arm and disable torque', exact: true })).toHaveCount(0);
-  expect(writes(state, '/stop')).toHaveLength(1);
-  expect(writes(state, '/control/start')).toHaveLength(0);
-  expect(state.errors).toEqual([]);
-  await page.screenshot({ path: testInfo.outputPath('stop-confirmed.png'), fullPage: true });
-});
+for (const reason of [
+  'Robot Lab page was closed; motor torque disabled',
+  'Motor safety check failed: Motor scan cancelled by Stop',
+  'Motor safety check failed: Motor 3 write Goal_Position=3089 failed: Incorrect status packet!',
+]) {
+  test(`operator Stop acknowledges previous fault: ${reason}`, async ({ page }, testInfo) => {
+    const state = await fixture(page, true, 'Linux');
+    state.status.session.error = reason;
+    await page.getByRole('button', { name: 'Refresh devices', exact: true }).click();
+    await expect(page.locator('.robot-lab').getByRole('alert')).toContainText(reason);
+    await page.getByRole('button', { name: 'Stop arm and disable torque', exact: true }).click();
+    await expect(page.getByText('Arm stopped.', { exact: true })).toBeVisible();
+    await expect(page.locator('.robot-lab').getByRole('alert')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Stop arm and disable torque', exact: true })).toHaveCount(0);
+    expect(writes(state, '/stop')).toHaveLength(1);
+    expect(writes(state, '/control/start')).toHaveLength(0);
+    expect(state.errors).toEqual([]);
+    await page.screenshot({ path: testInfo.outputPath('stop-confirmed.png'), fullPage: true });
+  });
+}
 
 test('range and current faults give recovery steps without stale success or readiness', async ({ page }, testInfo) => {
   const state = await fixture(page, true);
@@ -2819,4 +2853,124 @@ test('Run policy supplies a task only for the language-conditioned offline adapt
   expect(writes(state, '/control/start')).toEqual([]);
   expect(writes(state, '/policy/start')).toEqual([]);
   expect(state.errors).toEqual([]);
+});
+
+test('recording creation explains every missing requirement beside the disabled button', async ({ page }, testInfo) => {
+  const state = await fixture(page, true);
+  state.status.capabilities.guided_recording = true;
+  state.status.datasets = [
+    { id: 'toy-home', episodes: 0, frames: 0, fps: 10, task: 'Pick up the toy.', abandoned: true },
+  ];
+  await page.reload();
+  await openTab(page, 'Record');
+  await page.getByLabel('Dataset name', { exact: true }).fill('toy-home');
+  const requirements = page.getByRole('region', { name: 'Recording requirements', exact: true });
+  const create = page.getByRole('button', { name: 'Create recording dataset', exact: true });
+  await expect(requirements).toContainText('Start teleoperation for the follower arm.');
+  await expect(requirements).toContainText('“toy-home” already exists.');
+  await expect(requirements).toContainText('Enter a task instruction.');
+  await expect(create).toBeDisabled();
+  await expect(create).toHaveAttribute('aria-describedby', 'recording-requirements');
+  await page.screenshot({ path: testInfo.outputPath('recording-requirements.png'), fullPage: true });
+  await requirements.getByRole('button', { name: 'Open teleoperation', exact: true }).click();
+  await startManual(page);
+  await openTab(page, 'Record');
+  await page.getByLabel('Dataset name', { exact: true }).fill('toy-home-2');
+  await page.getByLabel('Task instruction', { exact: true }).fill('Pick up the toy.');
+  await page.getByLabel('Episode length in seconds', { exact: true }).fill('0');
+  await expect(requirements).toContainText('Set the episode length to a whole number from 1 to 300 seconds.');
+  await expect(requirements).not.toContainText('Start teleoperation');
+  await expect(requirements).not.toContainText('already exists');
+  await expect(create).toBeDisabled();
+  await page.getByLabel('Episode length in seconds', { exact: true }).fill('5');
+  await expect(requirements).toHaveCount(0);
+  await expect(create).toBeEnabled();
+  expect(writes(state, '/recording/start')).toEqual([]);
+  expect(state.errors).toEqual([]);
+});
+
+test('selected cameras preview together and both are sent to recording', async ({ page }, testInfo) => {
+  const state = await fixture(page, true);
+  state.status.capabilities.multi_camera_recording = true;
+  state.cameras = [
+    { index: 0, name: 'Front USB', width: 640, height: 480 },
+    { index: 4, name: 'Side USB', width: 640, height: 480 },
+  ];
+  await page.reload();
+  await startManual(page);
+  await openTab(page, 'Record');
+  await page.getByRole('checkbox', { name: 'Also use Side USB', exact: true }).check();
+  await page.getByRole('button', { name: 'Start preview', exact: true }).click();
+  const front = page.getByAltText('Live view from the selected robot camera', { exact: true });
+  const side = page.getByAltText('Live view from camera 4', { exact: true });
+  await expect(front).toBeVisible();
+  await expect(side).toBeVisible();
+  await expect(front).toHaveAttribute('src', /index=0.*cameras=0,4/);
+  await expect(side).toHaveAttribute('src', /index=4.*cameras=0,4/);
+  await page.getByLabel('Dataset name', { exact: true }).fill('two-views');
+  await page.getByLabel('Task instruction', { exact: true }).fill('Pick up the toy.');
+  await expect(
+    page.getByText('Record camera · 2 selected views saved with every frame', { exact: true }),
+  ).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('two-camera-recording.png'), fullPage: true });
+  await page.getByRole('button', { name: 'Create recording dataset', exact: true }).click();
+  expect(writes(state, '/recording/start').at(-1)?.body).toMatchObject({ camera_index: 0, camera_indices: [0, 4] });
+  await expect(page.getByRole('checkbox', { name: 'Also use Side USB', exact: true })).toBeDisabled();
+  expect(state.errors).toEqual([]);
+});
+
+test('native camera resolution and rate settings apply together and persist', async ({ page }, testInfo) => {
+  const state = await fixture(page, true, 'Linux', false);
+  state.status.capabilities.multi_camera_recording = true;
+  state.status.capabilities.camera_mode_controls = true;
+  state.cameras = [
+    { index: 0, name: 'Front USB', width: 640, height: 480 },
+    { index: 4, name: 'Side USB', width: 640, height: 480 },
+  ];
+  await page.reload();
+  await openTab(page, 'Record');
+  await page.getByRole('checkbox', { name: 'Also use Side USB', exact: true }).check();
+  await page.getByText('Resolution and frame rate', { exact: true }).click();
+  await expect(page.getByLabel('Camera 0 resolution', { exact: true })).toBeVisible();
+  await page.getByLabel('Camera 0 format', { exact: true }).selectOption('YUYV');
+  await expect(page.getByLabel('Camera 0 resolution', { exact: true })).toHaveValue('800×600');
+  await expect(page.getByLabel('Camera 0 frame rate', { exact: true })).toContainText('10 fps');
+  await page.getByLabel('Camera 4 resolution', { exact: true }).selectOption('1280×720');
+  await expect(page.getByLabel('Camera 4 frame rate', { exact: true })).toContainText('30 fps');
+  await page.getByRole('button', { name: 'Apply camera settings', exact: true }).click();
+  await expect(
+    page.getByText('Camera settings saved. All selected cameras opened together.', { exact: true }),
+  ).toBeVisible();
+  expect(writes(state, '/camera/configure').at(-1)?.body).toEqual({
+    cameras: [
+      { index: 0, mode: state.cameraModes[2] },
+      { index: 4, mode: state.cameraModes[1] },
+    ],
+  });
+  await page.screenshot({ path: testInfo.outputPath('native-camera-mode-controls.png'), fullPage: true });
+  expect(writes(state, '/control/start')).toEqual([]);
+  expect(writes(state, '/recording/start')).toEqual([]);
+  expect(state.errors).toEqual([]);
+});
+
+test('camera settings report pair failures and lock during control', async ({ page }) => {
+  const state = await fixture(page, true, 'Linux', false);
+  state.status.capabilities.camera_mode_controls = true;
+  state.cameraConfigureError =
+    'Could not start the selected cameras together; previous settings kept. USB bandwidth unavailable.';
+  await page.reload();
+  await openTab(page, 'Record');
+  await page.getByText('Resolution and frame rate', { exact: true }).click();
+  await page.getByRole('button', { name: 'Apply camera settings', exact: true }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'previous settings kept' })).toBeVisible();
+  expect(state.cameraProfiles).toEqual({});
+  state.status.session.mode = 'manual';
+  await expect(page.getByRole('button', { name: 'Apply camera settings', exact: true })).toBeDisabled();
+  await expect(
+    page.getByText(
+      'Stop teleoperation or policy control and finish the current dataset before changing camera modes.',
+      { exact: true },
+    ),
+  ).toBeVisible();
+  expect(writes(state, '/camera/configure')).toHaveLength(1);
 });

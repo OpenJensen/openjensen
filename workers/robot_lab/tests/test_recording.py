@@ -33,6 +33,16 @@ class RateTests(unittest.TestCase):
             rate.sample(index / 40)
         self.assertEqual(rate.select(4), 4)
 
+    def test_rate_is_limited_by_the_slowest_of_both_camera_streams(self):
+        rate = CaptureRate(0, [2, 4])
+        for index in range(161):
+            rate.sample(index / 40, {2: (index // 4) / 10, 4: (index // 8) / 5})
+        self.assertEqual(rate.select(4), 4)
+        rate = CaptureRate(0, [2, 4])
+        for index in range(161):
+            rate.sample(index / 40, {2: (index // 4) / 10, 4: 0})
+        self.assertIsNone(rate.select(4))
+
     def test_invalid_collection_fields_and_bounds(self):
         for config in (
             {"num_episodes": True},
@@ -355,6 +365,93 @@ class CollectionTests(unittest.TestCase):
             self.tick(index / 40 + 1e-8)
         self.wait_io()
         self.assertEqual(writer.episodes, [{"length": 34}])
+
+
+class MultiCameraRecordingTests(unittest.TestCase):
+    setUp = safety.SafetyTests.setUp
+    tearDown = safety.SafetyTests.tearDown
+    start = safety.SafetyTests.start
+
+    def test_recorded_rows_require_a_new_frame_from_each_selected_camera(self):
+        self.start(mode="handguide")
+        times = {2: 0.0, 4: 0.0}
+
+        class Frame:
+            shape = (2, 3, 3)
+
+            def __init__(self, value):
+                self.value = value
+
+            def __getitem__(self, key):
+                return self if isinstance(key[0], slice) else self.value
+
+            def copy(self):
+                return Frame(self.value)
+
+        class Camera:
+            def __init__(self):
+                self.started = []
+
+            def read(self, index, **kwargs):
+                return Frame(index)
+
+            def start_reader(self, index):
+                self.started.append(index)
+
+            def read_latest_timed(self, index):
+                return (Frame(index), times[index])
+
+            def close(self):
+                pass
+
+        class Writer(FakeWriter):
+            def __init__(self, *args):
+                super().__init__(*args)
+                self.image_shapes = args[-1]
+                self.images = []
+
+            def add_frame(self, positions, action, image, captured_at):
+                self.images.append(image)
+                self.frames += 1
+
+        camera = Camera()
+        self.lab.camera = camera
+        clock = [0.0]
+        with (
+            patch("server.time.monotonic", side_effect=lambda: clock[0]),
+            patch("server.DatasetWriter", Writer),
+        ):
+            self.lab.recording_start(
+                dict(dataset_id="two-views", task="Reach", fps=5, camera_indices=[2, 4])
+            )
+            writer = self.lab.writer
+            self.assertEqual(camera.started, [2, 4])
+            self.assertEqual(
+                set(writer.image_shapes),
+                {"observation.images.front", "observation.images.camera_4"},
+            )
+            self.lab.recording_action("start")
+            self.lab._tick()
+            clock[0] = 0.2
+            times[2] = 0.2
+            self.lab._tick()
+            self.assertEqual(writer.frames, 1)
+            clock[0] = 0.4
+            times[2] = times[4] = 0.4
+            self.lab._tick()
+            self.assertEqual(writer.frames, 2)
+            self.assertEqual(set(writer.images[1]), set(writer.image_shapes))
+            self.assertEqual(int(writer.images[1]["observation.images.front"][0, 0, 0]), 2)
+            self.assertEqual(int(writer.images[1]["observation.images.camera_4"][0, 0, 0]), 4)
+            self.assertEqual(self.lab.status()["recording"]["camera_indices"], [2, 4])
+
+    def test_invalid_camera_selections_never_open_devices(self):
+        self.start(mode="handguide")
+        for indices in ([True], [2, 2], [64], [0, 1, 2, 3, 4], "2,4"):
+            with self.subTest(indices=indices), self.assertRaises(RequestError):
+                self.lab.recording_start(
+                    dict(dataset_id="invalid", task="Reach", fps=5, camera_indices=indices)
+                )
 
 
 if __name__ == "__main__":

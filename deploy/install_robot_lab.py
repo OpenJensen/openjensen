@@ -35,6 +35,7 @@ SOURCE_MODULES = (
     "motion.py",
     "rest_position.py",
     "camera.py",
+    "camera_modes.py",
     "calibration_draft.py",
     "dataset.py",
     "image_writer.py",

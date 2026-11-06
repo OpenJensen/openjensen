@@ -77,6 +77,48 @@ class DatasetTests(unittest.TestCase):
             self.assertEqual(hashlib.sha256(file.read_bytes()).hexdigest(), entry["sha256"])
             self.assertEqual(file.stat().st_size, entry["size"])
 
+    def test_two_camera_views_share_frame_rows_and_have_separate_images_and_stats(self):
+        import io
+
+        import numpy as np
+        import pyarrow.parquet as pq
+        from PIL import Image
+
+        keys = ["observation.images.front", "observation.images.camera_4"]
+        writer = DatasetWriter(self.root, "two-views", "Reach", 5, {key: (2, 3, 3) for key in keys})
+        positions = dict.fromkeys(JOINTS, 1.0)
+        writer.start_episode()
+        with self.assertRaisesRegex(ValueError, "Camera image missing"):
+            writer.add_frame(
+                positions, {}, {keys[0]: np.zeros((2, 3, 3), dtype=np.uint8)}, captured_at=0
+            )
+        self.assertEqual(writer.frames, 0)
+        for index in range(3):
+            writer.add_frame(
+                positions,
+                {},
+                {
+                    key: np.full((2, 3, 3), 10 + index + camera * 100, dtype=np.uint8)
+                    for camera, key in enumerate(keys)
+                },
+                captured_at=index / 5,
+            )
+        writer.save_episode()
+        writer.finalize()
+        rows = pq.read_table(writer.root / "data/chunk-000/file-000.parquet").to_pylist()
+        self.assertEqual(len(rows), 3)
+        for index, row in enumerate(rows):
+            for camera, key in enumerate(keys):
+                image = Image.open(io.BytesIO(row[key]["bytes"]))
+                self.assertEqual(image.getpixel((0, 0)), (10 + index + camera * 100,) * 3)
+        stats = json.loads((writer.root / "meta/stats.json").read_text())
+        self.assertEqual(stats[keys[0]]["count"], [3])
+        self.assertEqual(stats[keys[1]]["count"], [3])
+        info = json.loads((writer.root / "meta/info.json").read_text())
+        self.assertTrue(all(info["features"][key]["dtype"] == "image" for key in keys))
+        self.assertFalse(list(writer.pending.rglob("*.png")))
+        self.assertTrue(manifest(self.root, writer.id)["files"])
+
     def test_image_stat_count_is_frames_and_sustained_cadence_checked(self):
         import numpy as np
 

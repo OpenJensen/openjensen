@@ -86,6 +86,40 @@ class ImageWriterTests(unittest.TestCase):
             release.set()
             writer.stop(ignore_error=True)
 
+    def test_parallel_writes_retain_failures_and_wait_for_every_worker(self):
+        entered = {number: threading.Event() for number in (1, 2)}
+        release = threading.Event()
+        failing = [True]
+        saved = []
+
+        def write(image, path):
+            entered[image.value].set()
+            release.wait(2)
+            if image.value == 1 and failing[0]:
+                raise OSError("temporary image error")
+            saved.append(image.value)
+
+        writer = AsyncImageWriter(workers=2, write=write)
+        try:
+            for number in (1, 2):
+                writer.save_image(Image(number), Path(f"{number}.png"))
+            self.assertTrue(all(event.wait(1) for event in entered.values()))
+            with self.assertRaisesRegex(ValueError, "still pending"):
+                writer.wait_until_done(timeout=0.01)
+            release.set()
+            with self.assertRaisesRegex(ValueError, "temporary image error"):
+                writer.wait_until_done()
+            self.assertEqual(saved, [2])
+            self.assertEqual(len(writer.failed), 1)
+            failing[0] = False
+            writer.retry_failed()
+            self.assertEqual(sorted(saved), [1, 2])
+            self.assertEqual(writer.pending, 0)
+        finally:
+            release.set()
+            writer.stop(ignore_error=True)
+        self.assertTrue(all(not thread.is_alive() for thread in writer.threads))
+
     def test_background_disk_error_is_visible_and_discard_can_recover(self):
         write = Mock(side_effect=OSError("disk full"))
         writer = AsyncImageWriter(write=write)
@@ -114,7 +148,56 @@ class LatestCameraTests(unittest.TestCase):
             CAP_PROP_FRAME_WIDTH=3,
             CAP_PROP_FRAME_HEIGHT=4,
             CAP_PROP_BUFFERSIZE=5,
+            CAP_PROP_FOURCC=6,
+            VideoWriter_fourcc=lambda *chars: int.from_bytes("".join(chars).encode(), "little"),
         )
+
+    def test_switching_preview_releases_old_usb_stream_before_opening_next(self):
+        operations = []
+        captures = {
+            index: SimpleNamespace(
+                isOpened=lambda: True,
+                set=lambda *args: True,
+                read=lambda: (True, object()),
+                release=lambda index=index: operations.append(("release", index)),
+            )
+            for index in (2, 4)
+        }
+        cv = self.fake_cv(None)
+        cv.VideoCapture = lambda index, backend: (
+            operations.append(("open", index)),
+            captures[index],
+        )[-1]
+        pool = CameraPool()
+        with patch.dict(sys.modules, cv2=cv):
+            pool.read(2)
+            pool.read(4)
+            self.assertEqual(operations, [("open", 2), ("release", 2), ("open", 4)])
+            self.assertNotIn(2, pool.last_frames)
+            pool.close()
+
+    def test_switching_preview_preserves_a_recording_reader(self):
+        operations = []
+        captures = {
+            index: SimpleNamespace(
+                isOpened=lambda: True,
+                set=lambda *args: True,
+                read=lambda: (True, object()),
+                release=lambda index=index: operations.append(("release", index)),
+            )
+            for index in (2, 4)
+        }
+        cv = self.fake_cv(None)
+        cv.VideoCapture = lambda index, backend: captures[index]
+        pool = CameraPool()
+        with patch.dict(sys.modules, cv2=cv):
+            pool.read(2)
+            pool.readers[2] = (Mock(), threading.Event())
+            pool.read(4)
+            self.assertEqual(operations, [])
+            self.assertIn(2, pool.handles)
+            self.assertIn(2, pool.last_frames)
+            pool.close()
 
     def test_latest_peek_does_not_wait_for_blocked_camera_and_rejects_stale_frames(self):
         entered, release = threading.Event(), threading.Event()
@@ -148,6 +231,21 @@ class LatestCameraTests(unittest.TestCase):
                 release.set()
                 pool.close()
         self.assertFalse(pool.handles or pool.readers or pool.last_frames)
+
+    def test_recording_preview_rejects_stale_reader_frames_without_waiting_for_device(self):
+        pool = CameraPool()
+        pool.readers[2] = (Mock(is_alive=lambda: True), threading.Event())
+        pool.last_frames[2] = object()
+        pool.frame_times[2] = 0
+        cv = SimpleNamespace(
+            imencode=Mock(return_value=(True, SimpleNamespace(tobytes=lambda: b"jpeg"))),
+            IMWRITE_JPEG_QUALITY=1,
+        )
+        with patch.dict(sys.modules, cv2=cv), patch("camera.time.monotonic", return_value=61):
+            with self.assertRaisesRegex(TimeoutError, "stale"):
+                pool.cached_jpeg(2)
+        cv.imencode.assert_not_called()
+        pool.close()
 
     def test_repeated_capture_failures_are_bounded_and_visible(self):
         read = Mock(return_value=(False, None))
@@ -232,6 +330,52 @@ class RecordingIsolationTests(unittest.TestCase):
             episodes=[],
             add_frame=Mock(),
         )
+
+    def test_waiting_recording_keeps_both_readers_beyond_preview_idle_timeout(self):
+        pool = CameraPool()
+        frames = {index: object() for index in (2, 4, 6)}
+        released = []
+        for index, frame in frames.items():
+            pool.handles[index] = SimpleNamespace(release=lambda i=index: released.append(i))
+            pool.last_used[index] = 0
+            pool.last_frames[index] = frame
+            pool.frame_times[index] = 61
+        for index in (2, 4):
+            pool.readers[index] = (Mock(is_alive=lambda: True), threading.Event())
+        self.lab.camera = pool
+        self.lab.camera_index = 2
+        self.lab.camera_indices = [2, 4]
+        self.lab.writer = self.writer()
+        self.lab.writer.episode_active = False
+        original = self.lab.finished
+        self.lab.finished = Mock(is_set=lambda: False, wait=lambda timeout: True)
+        try:
+            with patch.object(self.lab, "_tick"), patch("camera.time.monotonic", return_value=61):
+                self.lab._loop()
+                self.assertEqual(released, [6])
+                for index in (2, 4):
+                    self.assertIs(pool.read_latest(index), frames[index])
+                # Finalization releases ownership; idle cleanup can reclaim both devices.
+                self.lab.writer.finalized = True
+                pool.last_used.update({2: 0, 4: 0})
+                self.lab._loop()
+                self.assertEqual(set(released), {2, 4, 6})
+                self.assertFalse(pool.readers or pool.handles)
+        finally:
+            self.lab.finished = original
+
+    def test_recording_preparation_is_not_interrupted_by_idle_cleanup(self):
+        self.lab.recording_io = True
+        self.lab.camera.close_idle = Mock()
+        original = self.lab.finished
+        self.lab.finished = Mock(is_set=lambda: False, wait=lambda timeout: True)
+        try:
+            with patch.object(self.lab, "_tick"):
+                self.lab._loop()
+            self.lab.camera.close_idle.assert_not_called()
+        finally:
+            self.lab.finished = original
+            self.lab.recording_io = False
 
     def test_capture_failure_pauses_recording_and_keeps_control_until_explicit_stop(self):
         self.start()
