@@ -12,7 +12,8 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import test_robot_lab as fixtures
 from hardware import JOINTS, HardwareError
-from policy import MAX_ACCELERATION, MAX_SPEED, UNITS, admit
+from policy import MAX_ACCELERATION, MAX_SPEED, PREDICTION_TOLERANCE, UNITS, admit
+from motion import control_limits
 from policy_contract import PIPELINES
 
 
@@ -333,6 +334,66 @@ class PolicyTests(unittest.TestCase):
         runner.operator_deadline = time.monotonic() + 10
         runner.run_deadline = time.monotonic() - 1
         self.assertTrue(runner.expired())
+
+    def test_small_prediction_overshoots_keep_motion_inside_original_bounds(self):
+        runner = self.prepare()
+        with patch.object(runner, "_run"):
+            runner.start(self.run_payload())
+            runner.thread.join(timeout=1)
+        ranges = control_limits(self.lab.calibration)
+        calibration = copy.deepcopy(self.lab.calibration)
+        for side, direction in (("min", -1), ("max", 1)):
+            with self.subTest(side=side):
+                measured = {j: ranges[j][side] - direction * 0.1 for j in JOINTS}
+                runner.commanded = dict(measured)
+                runner.velocity = dict.fromkeys(JOINTS, 0.0)
+                predicted = {
+                    j: ranges[j][side] + direction * PREDICTION_TOLERANCE for j in JOINTS
+                }
+                runner.predicted = dict(predicted)
+                now = time.monotonic()
+                runner.last_apply = now
+                previous, velocity = measured, dict.fromkeys(JOINTS, 0.0)
+                for step in range(1, 201):
+                    moment = now + step * 0.025
+                    runner.last_prediction = moment
+                    goals = runner.apply(previous, moment)
+                    for j in JOINTS:
+                        self.assertGreaterEqual(goals[j], ranges[j]["min"])
+                        self.assertLessEqual(goals[j], ranges[j]["max"])
+                        current = (goals[j] - previous[j]) / 0.025
+                        self.assertLessEqual(abs(current), MAX_SPEED + 1e-8)
+                        self.assertLessEqual(
+                            abs(current - velocity[j]), MAX_ACCELERATION * 0.025 + 1e-6
+                        )
+                        velocity[j] = current
+                    previous = goals
+                self.assertEqual(runner.predicted, predicted)
+                self.assertEqual(self.lab.calibration, calibration)
+
+    def test_large_or_nonfinite_prediction_overshoots_still_reject_without_goals(self):
+        runner = self.prepare()
+        with patch.object(runner, "_run"):
+            runner.start(self.run_payload())
+            runner.thread.join(timeout=1)
+        measured = dict(self.lab.positions)
+        ranges = control_limits(self.lab.calibration)
+        for joint in JOINTS:
+            for target in (
+                ranges[joint]["min"] - PREDICTION_TOLERANCE - 0.001,
+                ranges[joint]["max"] + PREDICTION_TOLERANCE + 0.001,
+                float("nan"),
+                float("inf"),
+            ):
+                with self.subTest(joint=joint, target=target):
+                    runner.commanded = dict(measured)
+                    runner.predicted = dict(measured) | {joint: target}
+                    runner.last_prediction = time.monotonic()
+                    before = list(self.buses[-1].writes)
+                    with self.assertRaisesRegex(HardwareError, joint):
+                        runner.apply(measured, time.monotonic())
+                    self.assertEqual(runner.commanded, measured)
+                    self.assertEqual(self.buses[-1].writes, before)
 
     def test_stop_does_not_wait_for_inference_and_old_reply_cannot_stop_new_controller(self):
         runner = self.prepare()
