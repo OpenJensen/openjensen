@@ -86,6 +86,40 @@ class ImageWriterTests(unittest.TestCase):
             release.set()
             writer.stop(ignore_error=True)
 
+    def test_parallel_writes_retain_failures_and_wait_for_every_worker(self):
+        entered = {number: threading.Event() for number in (1, 2)}
+        release = threading.Event()
+        failing = [True]
+        saved = []
+
+        def write(image, path):
+            entered[image.value].set()
+            release.wait(2)
+            if image.value == 1 and failing[0]:
+                raise OSError("temporary image error")
+            saved.append(image.value)
+
+        writer = AsyncImageWriter(workers=2, write=write)
+        try:
+            for number in (1, 2):
+                writer.save_image(Image(number), Path(f"{number}.png"))
+            self.assertTrue(all(event.wait(1) for event in entered.values()))
+            with self.assertRaisesRegex(ValueError, "still pending"):
+                writer.wait_until_done(timeout=0.01)
+            release.set()
+            with self.assertRaisesRegex(ValueError, "temporary image error"):
+                writer.wait_until_done()
+            self.assertEqual(saved, [2])
+            self.assertEqual(len(writer.failed), 1)
+            failing[0] = False
+            writer.retry_failed()
+            self.assertEqual(sorted(saved), [1, 2])
+            self.assertEqual(writer.pending, 0)
+        finally:
+            release.set()
+            writer.stop(ignore_error=True)
+        self.assertTrue(all(not thread.is_alive() for thread in writer.threads))
+
     def test_background_disk_error_is_visible_and_discard_can_recover(self):
         write = Mock(side_effect=OSError("disk full"))
         writer = AsyncImageWriter(write=write)

@@ -35,20 +35,35 @@ class CaptureRate:
         self.io_required = True
 
         def measure():
-            from image_writer import save_png
+            from image_writer import AsyncImageWriter, image_worker_count, save_png
 
             try:
                 with tempfile.TemporaryDirectory(prefix=".capture-check-", dir=root) as folder:
-                    # Exclude one-time Pillow/plugin initialization from sustained throughput.
                     frames = list(frame.values()) if isinstance(frame, dict) else [frame]
-                    for image in frames:
-                        save_png(image[:, :, ::-1].copy(), Path(folder) / "sample.png")
-                    for _ in range(6):
-                        started = time.monotonic()
-                        for image in frames:
-                            save_png(image[:, :, ::-1].copy(), Path(folder) / "sample.png")
-                        (Path(folder) / "sample.json").write_text('{"sample": [0,0,0,0,0,0]}')
-                        self.io_costs.append(time.monotonic() - started)
+                    images = [image[:, :, ::-1].copy() for image in frames]
+                    for image in images:
+                        save_png(image, Path(folder) / "sample.png")
+                    batches = image_worker_count(len(images))
+                    writer = AsyncImageWriter(
+                        capacity=max(8, len(images) * 4), workers=batches
+                    )
+                    try:
+                        # Measure sustained batches through the same bounded
+                        # writer used by recording, including copies and files.
+                        for _ in range(6):
+                            started = time.monotonic()
+                            for batch in range(batches):
+                                for index, image in enumerate(images):
+                                    writer.save_image(
+                                        image, Path(folder) / f"{batch}-{index}.png"
+                                    )
+                                (Path(folder) / f"{batch}.json").write_text(
+                                    '{"sample": [0,0,0,0,0,0]}'
+                                )
+                            writer.wait_until_done()
+                            self.io_costs.append((time.monotonic() - started) / batches)
+                    finally:
+                        writer.stop(ignore_error=True)
             except Exception as error:
                 self.io_error = str(error)
 

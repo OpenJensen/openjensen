@@ -1,7 +1,7 @@
 """Bounded asynchronous PNG saving, following LeRobot's image-writer pattern.
 
 Reference: huggingface/lerobot datasets/image_writer.py at the revision recorded
-in LEROBOT-PROVENANCE.json (Apache-2.0). This companion uses one daemon thread,
+in LEROBOT-PROVENANCE.json (Apache-2.0). This companion uses a bounded group of daemon threads,
 a bounded queue and explicit error propagation instead of importing Torch.
 """
 
@@ -16,12 +16,20 @@ def save_png(image, path):
     from PIL import Image
 
     pending = path.with_suffix(path.suffix + ".tmp")
-    Image.fromarray(image).save(pending, format="PNG", compress_level=1)
+    # Keep lossless PNG encoding off the compression-heavy path so paired
+    # high-rate capture is limited by storage throughput rather than zlib CPU.
+    Image.fromarray(image).save(pending, format="PNG", compress_level=0)
     pending.replace(path)
 
 
+def image_worker_count(camera_count):
+    return min(4, max(1, camera_count * 2))
+
+
 class AsyncImageWriter:
-    def __init__(self, *, capacity=8, write=save_png):
+    def __init__(self, *, capacity=8, write=save_png, workers=1):
+        if type(workers) is not int or not 1 <= workers <= 4:
+            raise ValueError("Choose one to four image writer threads")
         self.queue = queue.Queue(maxsize=capacity)
         self.write = write
         self.lock = threading.Lock()
@@ -32,8 +40,13 @@ class AsyncImageWriter:
         self.failed = []
         self.retrying = False
         self.closed = False
-        self.thread = threading.Thread(target=self._run, name="robot-lab-images", daemon=True)
-        self.thread.start()
+        self.threads = [
+            threading.Thread(target=self._run, name=f"robot-lab-images-{index}", daemon=True)
+            for index in range(workers)
+        ]
+        self.thread = self.threads[0]
+        for thread in self.threads:
+            thread.start()
 
     def save_image(self, image, path: Path):
         # The camera can reuse a buffer after this method returns.
@@ -118,4 +131,5 @@ class AsyncImageWriter:
         try:
             self.wait_until_done(timeout, ignore_error=ignore_error)
         finally:
-            self.thread.join(timeout=0.2)
+            for thread in self.threads:
+                thread.join(timeout=0.2)

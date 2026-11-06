@@ -17,7 +17,7 @@ from collections import deque
 from pathlib import Path, PurePosixPath
 
 from hardware import JOINTS
-from image_writer import AsyncImageWriter
+from image_writer import AsyncImageWriter, image_worker_count
 
 SLUG = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$")
 
@@ -162,7 +162,10 @@ class DatasetWriter:
         if self.image_shapes:
             for key in self.image_shapes:
                 self._image_path(key, 0).parent.mkdir(exist_ok=True)
-            self.image_writer = AsyncImageWriter(capacity=max(8, len(self.image_shapes) * 4))
+            self.image_writer = AsyncImageWriter(
+                capacity=max(8, len(self.image_shapes) * 4),
+                workers=image_worker_count(len(self.image_shapes)),
+            )
 
     def _image_path(self, key, index):
         folder = self.pending if key == "observation.images.front" else self.pending / key
