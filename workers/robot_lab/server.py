@@ -228,6 +228,9 @@ class RobotLab:
         self.bus_factory = bus_factory
         self.port_provider = port_provider
         self.camera = camera or CameraPool()
+        if hasattr(self.camera, "set_settings_path"):
+            self.camera.set_settings_path(self.data_dir / "camera-settings.json")
+        self.camera_configuring = False
         self.bus = None
         self.leader = None
         self.pending_bus = None
@@ -576,6 +579,7 @@ class RobotLab:
             or self.assembled_session is not None
             or self.verification_session is not None
             or self.stopping
+            or self.camera_configuring
         ):
             raise RequestError("Stop the current session before changing hardware setup")
 
@@ -683,6 +687,7 @@ class RobotLab:
                 "background_recording_io": True,
                 "guided_recording": True,
                 "multi_camera_recording": True,
+                "camera_mode_controls": platform.system() == "Linux",
                 "auto_recording_fps": True,
                 "agent_control": hardware,
                 "run_policy": True,
@@ -1841,6 +1846,21 @@ class RobotLab:
         )
         return self.status()
 
+    def configure_cameras(self, payload):
+        if set(payload) != {"cameras"}:
+            raise RequestError("Choose camera capture settings")
+        with self.lock:
+            self._idle()
+            if self.recording_io or self.writer and not self.writer.finalized:
+                raise RequestError("Finish the current dataset before changing camera modes")
+            self.camera_configuring = True
+        try:
+            self.camera.close()
+            return self.camera.configure(payload["cameras"])
+        finally:
+            with self.lock:
+                self.camera_configuring = False
+
     def recording_start(self, payload):
         with self.lock:
             self._recording_control_ready()
@@ -2576,6 +2596,16 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, lab.policy.catalog())
             if path == "/v1/devices":
                 return self._send(200, lab.devices())
+            if path == "/v1/camera/settings":
+                values = query.get("cameras", ["0"])[0].split(",")
+                if not 1 <= len(values) <= 4:
+                    raise RequestError("Choose one to four cameras")
+                indices = [
+                    integer(int(value), 0, MAX_CAMERA_INDEX, "Camera index") for value in values
+                ]
+                if len(set(indices)) != len(indices):
+                    raise RequestError("Choose distinct cameras")
+                return self._send(200, lab.camera.settings(indices))
             if path == "/v1/camera.jpg":
                 index = integer(
                     int(query.get("index", ["0"])[0]), 0, MAX_CAMERA_INDEX, "Camera index"
@@ -2707,6 +2737,8 @@ class Handler(BaseHTTPRequestHandler):
                 result = lab.assembled_action(path.rsplit("/", 1)[-1], payload)
             elif path == "/v1/setup/assembled/cancel":
                 result = lab.stop()
+            elif path == "/v1/camera/configure":
+                result = lab.configure_cameras(payload)
             elif path == "/v1/devices/configure":
                 result = lab.configure_device(payload)
             elif path in ("/v1/devices/remove", "/v1/devices/restore"):

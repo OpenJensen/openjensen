@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { robotApi } from '@/lib/robot-api';
 import { CameraIcon } from './robot-lab-shared';
+import { RobotLabCameraSettings } from './robot-lab-camera-settings';
 import type { RobotLabState } from './robot-lab-state';
 
 export function RobotLabCamera({ lab }: { lab: RobotLabState }) {
@@ -74,6 +75,18 @@ export function RobotLabCamera({ lab }: { lab: RobotLabState }) {
             </div>
           </div>
         ))}
+        {online && state?.capabilities?.camera_mode_controls && availableCameras.length > 0 && (
+          <RobotLabCameraSettings
+            indices={indices}
+            locked={state.session?.mode !== 'idle' || !!recording?.active}
+            preview={preview}
+            setPreview={setPreview}
+            onApplied={() => {
+              resetErrors();
+              setPreviewStamp(Date.now());
+            }}
+          />
+        )}
         <div className="robot-lab-camera-controls">
           <label>
             Camera

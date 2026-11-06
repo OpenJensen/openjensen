@@ -120,6 +120,13 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin', 
     errors: [] as string[],
     datasetReads: 0,
     cameraFailure: false,
+    cameraConfigureError: null as string | null,
+    cameraModes: [
+      { fourcc: 'MJPG', width: 640, height: 480, fps: 30 },
+      { fourcc: 'MJPG', width: 1280, height: 720, fps: 30 },
+      { fourcc: 'YUYV', width: 800, height: 600, fps: 10 },
+    ],
+    cameraProfiles: {} as Record<number, any>,
     cameras: [{ index: 0, name: 'Robot camera', width: 640, height: 480 }],
     discoverySupported: true,
     probeIds: [1],
@@ -291,6 +298,27 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin', 
             camera_error: null,
           },
         });
+      if (action === '/camera/settings' || action === '/camera/configure') {
+        if (action === '/camera/configure' && state.cameraConfigureError)
+          return route.fulfill({ status: 409, json: { detail: state.cameraConfigureError } });
+        const indices =
+          action === '/camera/settings'
+            ? (new URL(request.url()).searchParams.get('cameras') ?? '0').split(',').map(Number)
+            : body.cameras.map((camera: any) => camera.index);
+        if (action === '/camera/configure')
+          for (const camera of body.cameras) state.cameraProfiles[camera.index] = camera.mode;
+        return route.fulfill({
+          json: {
+            cameras: indices.map((index: number) => ({
+              index,
+              modes: state.cameraModes,
+              configured: state.cameraProfiles[index] ?? state.cameraModes[0],
+              actual: state.cameraProfiles[index] ?? state.cameraModes[0],
+              measured_fps: null,
+            })),
+          },
+        });
+      }
       if (action === '/camera.jpg')
         return state.cameraFailure
           ? route.fulfill({ status: 503, json: { detail: 'Camera disconnected.' } })
@@ -2889,4 +2917,60 @@ test('selected cameras preview together and both are sent to recording', async (
   expect(writes(state, '/recording/start').at(-1)?.body).toMatchObject({ camera_index: 0, camera_indices: [0, 4] });
   await expect(page.getByRole('checkbox', { name: 'Also use Side USB', exact: true })).toBeDisabled();
   expect(state.errors).toEqual([]);
+});
+
+test('native camera resolution and rate settings apply together and persist', async ({ page }, testInfo) => {
+  const state = await fixture(page, true, 'Linux', false);
+  state.status.capabilities.multi_camera_recording = true;
+  state.status.capabilities.camera_mode_controls = true;
+  state.cameras = [
+    { index: 0, name: 'Front USB', width: 640, height: 480 },
+    { index: 4, name: 'Side USB', width: 640, height: 480 },
+  ];
+  await page.reload();
+  await openTab(page, 'Record');
+  await page.getByRole('checkbox', { name: 'Also use Side USB', exact: true }).check();
+  await page.getByText('Resolution and frame rate', { exact: true }).click();
+  await expect(page.getByLabel('Camera 0 resolution', { exact: true })).toBeVisible();
+  await page.getByLabel('Camera 0 format', { exact: true }).selectOption('YUYV');
+  await expect(page.getByLabel('Camera 0 resolution', { exact: true })).toHaveValue('800×600');
+  await expect(page.getByLabel('Camera 0 frame rate', { exact: true })).toContainText('10 fps');
+  await page.getByLabel('Camera 4 resolution', { exact: true }).selectOption('1280×720');
+  await expect(page.getByLabel('Camera 4 frame rate', { exact: true })).toContainText('30 fps');
+  await page.getByRole('button', { name: 'Apply camera settings', exact: true }).click();
+  await expect(
+    page.getByText('Camera settings saved. All selected cameras opened together.', { exact: true }),
+  ).toBeVisible();
+  expect(writes(state, '/camera/configure').at(-1)?.body).toEqual({
+    cameras: [
+      { index: 0, mode: state.cameraModes[2] },
+      { index: 4, mode: state.cameraModes[1] },
+    ],
+  });
+  await page.screenshot({ path: testInfo.outputPath('native-camera-mode-controls.png'), fullPage: true });
+  expect(writes(state, '/control/start')).toEqual([]);
+  expect(writes(state, '/recording/start')).toEqual([]);
+  expect(state.errors).toEqual([]);
+});
+
+test('camera settings report pair failures and lock during control', async ({ page }) => {
+  const state = await fixture(page, true, 'Linux', false);
+  state.status.capabilities.camera_mode_controls = true;
+  state.cameraConfigureError =
+    'Could not start the selected cameras together; previous settings kept. USB bandwidth unavailable.';
+  await page.reload();
+  await openTab(page, 'Record');
+  await page.getByText('Resolution and frame rate', { exact: true }).click();
+  await page.getByRole('button', { name: 'Apply camera settings', exact: true }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'previous settings kept' })).toBeVisible();
+  expect(state.cameraProfiles).toEqual({});
+  state.status.session.mode = 'manual';
+  await expect(page.getByRole('button', { name: 'Apply camera settings', exact: true })).toBeDisabled();
+  await expect(
+    page.getByText(
+      'Stop teleoperation or policy control and finish the current dataset before changing camera modes.',
+      { exact: true },
+    ),
+  ).toBeVisible();
+  expect(writes(state, '/camera/configure')).toHaveLength(1);
 });

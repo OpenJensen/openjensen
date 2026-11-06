@@ -160,6 +160,7 @@ export type RobotStatus = {
     auto_recording_fps?: boolean;
     guided_recording?: boolean;
     multi_camera_recording?: boolean;
+    camera_mode_controls?: boolean;
   };
   session?: {
     mode: 'idle' | 'calibration' | 'setup' | 'verification' | 'agent' | 'policy' | ControlMode;
@@ -307,6 +308,14 @@ export type RobotDevice = {
   description: string;
   motor_ids?: boolean;
   calibration?: 'saved' | 'needs_attention' | 'missing';
+};
+export type CameraCaptureMode = { fourcc: string; width: number; height: number; fps: number };
+export type CameraCaptureSettings = {
+  index: number;
+  modes: CameraCaptureMode[];
+  configured: CameraCaptureMode | null;
+  actual: CameraCaptureMode | null;
+  measured_fps: number | null;
 };
 export type RobotDevices = {
   saved_devices?: RobotDevice[];
@@ -521,6 +530,10 @@ export const robotApi = {
       { abandon_empty: true, confirm: 'ABANDON EMPTY RECORDING' },
       { timeoutMs: 90_000 },
     ),
+  cameraSettings: (indices: number[]) =>
+    request<{ cameras: CameraCaptureSettings[] }>(`/camera/settings?cameras=${indices.join(',')}`),
+  configureCameras: (cameras: { index: number; mode: CameraCaptureMode }[]) =>
+    request<{ cameras: CameraCaptureSettings[] }>('/camera/configure', { cameras }, { timeoutMs: 30_000 }),
   cameraUrl: (index: number, stamp: number, cameras?: number[]) =>
     `${apiOrigin}/api/v1/robot-lab/camera.jpg?index=${index}&t=${stamp}${cameras && cameras.length > 1 ? `&cameras=${cameras.join(',')}` : ''}`,
 };

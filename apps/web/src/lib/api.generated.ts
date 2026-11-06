@@ -2162,6 +2162,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/robot-lab/camera/configure": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Robot Lab Post Camera Configure */
+        post: operations["robot_lab_post_camera_configure"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/robot-lab/camera/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Robot Lab Get Camera Settings */
+        get: operations["robot_lab_get_camera_settings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/robot-lab/control/heartbeat": {
         parameters: {
             query?: never;
@@ -11142,6 +11176,67 @@ export interface operations {
         };
     };
     robot_lab_get_camera_jpg: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    robot_lab_post_camera_configure: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** Cameras */
+                    cameras: {
+                        /** Index */
+                        index: number;
+                        /** CameraModeRequest */
+                        mode: {
+                            /** Fourcc */
+                            fourcc: string;
+                            /** Fps */
+                            fps: number;
+                            /** Height */
+                            height: number;
+                            /** Width */
+                            width: number;
+                        };
+                    }[];
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    robot_lab_get_camera_settings: {
         parameters: {
             query?: never;
             header?: never;

@@ -5,6 +5,7 @@ import os
 import struct
 import sys
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -259,3 +260,44 @@ class CaptureProfileTests(unittest.TestCase):
                 self.assertEqual(released, [2])
                 self.assertFalse(pool.handles)
                 self.assertFalse(pool.fixed_rate_handles)
+
+
+class ConcurrentCameraTests(unittest.TestCase):
+    @patch.dict(sys.modules, cv2=SimpleNamespace())
+    def test_second_camera_reads_while_first_camera_waits_for_a_frame(self):
+        pool = CameraPool()
+        entered = {i: threading.Event() for i in (2, 4)}
+        finish = threading.Event()
+        failures = []
+
+        def read(index):
+            entered[index].set()
+            if not finish.wait(2):
+                raise TimeoutError("Both independent cameras must be able to capture")
+            return True, object()
+
+        for index in (2, 4):
+            pool.handles[index] = SimpleNamespace(
+                read=lambda i=index: read(i), release=lambda: None
+            )
+            pool.fixed_rate_handles.add(index)
+
+        def consume(index):
+            try:
+                pool.read(index, keep_indices=[2, 4], _background=True)
+            except Exception as error:
+                failures.append(error)
+
+        threads = [threading.Thread(target=consume, args=(i,)) for i in (2, 4)]
+        try:
+            threads[0].start()
+            self.assertTrue(entered[2].wait(1))
+            threads[1].start()
+            self.assertTrue(entered[4].wait(1), "A slow camera blocked the other camera")
+        finally:
+            finish.set()
+            for thread in threads:
+                if thread.ident is not None:
+                    thread.join(2)
+            pool.close()
+        self.assertEqual(failures, [])

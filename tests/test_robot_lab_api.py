@@ -743,3 +743,40 @@ def test_multiple_recording_cameras_reach_companion(tmp_path):
         assert client.post("/api/v1/robot-lab/recording/start", json=payload).status_code == 200
     assert calls == [payload]
     asyncio.run(companion.close())
+
+
+def test_camera_modes_proxy_and_strict_admission(tmp_path):
+    connection(tmp_path)
+    calls = []
+
+    def handler(request):
+        calls.append((request.method, request.url.path))
+        return httpx.Response(200, json={"cameras": []})
+
+    companion = bridge(tmp_path, handler)
+    mode = {"fourcc": "MJPG", "width": 1280, "height": 720, "fps": 30}
+    with browser(tmp_path, companion) as client:
+        assert client.get("/api/v1/robot-lab/camera/settings?cameras=2,4").status_code == 200
+        assert (
+            client.post(
+                "/api/v1/robot-lab/camera/configure",
+                json={"cameras": [{"index": 2, "mode": mode}, {"index": 4, "mode": mode}]},
+            ).status_code
+            == 200
+        )
+        assert calls == [("GET", "/v1/camera/settings"), ("POST", "/v1/camera/configure")]
+        for cameras in [
+            [],
+            [{"index": True, "mode": mode}],
+            [{"index": 2, "mode": {**mode, "fps": True}}],
+            [{"index": 2, "mode": mode}] * 2,
+            [{"index": 2, "mode": {**mode, "width": 9000}}],
+        ]:
+            assert (
+                client.post(
+                    "/api/v1/robot-lab/camera/configure", json={"cameras": cameras}
+                ).status_code
+                == 422
+            )
+        assert len(calls) == 2
+    asyncio.run(companion.close())
