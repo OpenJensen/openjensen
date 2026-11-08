@@ -22,9 +22,10 @@ export function RobotLabCameraFrame({
   const [frameState, setFrameState] = useState<'loading' | 'live' | 'delayed'>('loading');
   const lastFrame = useRef(0);
   const nextFrame = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const delay = useRef(large ? 100 : 700);
+  const requestedAt = useRef(0);
+  const interval = useRef(large ? 1000 / 30 : 1000 / 15);
   useEffect(() => {
-    delay.current = large ? 100 : 700;
+    interval.current = large ? 1000 / 30 : 1000 / 15;
   }, [large]);
   useEffect(() => {
     const started = Date.now();
@@ -45,7 +46,13 @@ export function RobotLabCameraFrame({
           lastFrame.current = Date.now();
           setFrameState('live');
           if (nextFrame.current) clearTimeout(nextFrame.current);
-          nextFrame.current = setTimeout(() => setSequence((value) => value + 1), delay.current);
+          // One request at a time, paced from its start rather than adding a
+          // fixed pause after every response. Slow responses never build a queue.
+          const wait = Math.max(0, interval.current - (performance.now() - requestedAt.current));
+          nextFrame.current = setTimeout(() => {
+            requestedAt.current = performance.now();
+            setSequence((value) => value + 1);
+          }, wait);
         }}
         onError={() => {
           if (nextFrame.current) clearTimeout(nextFrame.current);

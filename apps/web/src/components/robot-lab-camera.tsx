@@ -51,7 +51,7 @@ export function RobotLabCamera({ lab }: { lab: RobotLabState }) {
               disabled={!online || !availableCameras.length || !state?.capabilities?.camera}
               onClick={() => {
                 resetErrors();
-                setPreviewStamp(Date.now());
+                if (!preview || cameraError || failedCameras.length) setPreviewStamp(Date.now());
                 setPreview(true);
                 lab.setCameraWorkspace(true);
               }}

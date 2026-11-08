@@ -297,6 +297,83 @@ class LatestCameraTests(unittest.TestCase):
         self.assertEqual(opened, [1])
         self.assertFalse(pool.handles or pool.last_frames)
 
+    def test_slow_preview_consumes_latest_frame_instead_of_replaying_device_queue(self):
+        from queue import Empty, Full, Queue
+
+        frames = Queue(maxsize=4)
+        stopped = threading.Event()
+
+        def sensor():
+            while not stopped.is_set():
+                try:
+                    frames.put_nowait(time.monotonic())
+                except Full:
+                    pass  # A full USB buffer retains old frames until dequeued.
+                stopped.wait(0.005)
+
+        def read():
+            try:
+                return True, frames.get(timeout=1)
+            except Empty:
+                return False, None
+
+        capture = SimpleNamespace(
+            isOpened=lambda: True, set=lambda *a: None, read=read, release=lambda: None
+        )
+        cv = self.fake_cv(capture)
+        cv.IMWRITE_JPEG_QUALITY = 1
+        cv.imencode = lambda ext, frame, options: (
+            True,
+            SimpleNamespace(tobytes=lambda: str(frame).encode()),
+        )
+        pool = CameraPool()
+        producer = threading.Thread(target=sensor)
+        producer.start()
+        try:
+            with patch.dict(sys.modules, cv2=cv):
+                pool.jpeg()
+                # A slow or hidden browser must not slow down device capture.
+                time.sleep(0.2)
+                captured = float(pool.jpeg())
+                self.assertLess(time.monotonic() - captured, 0.08)
+                self.assertGreater(len(pool.capture_times[0]), 15)
+        finally:
+            stopped.set()
+            producer.join(timeout=1)
+            pool.close()
+        self.assertFalse(pool.readers or pool.preview_readers or pool.handles)
+
+    def test_preview_switch_closes_unused_reader_but_keeps_recording_owner(self):
+        pool = CameraPool()
+        closed = []
+        for index in (2, 4):
+            pool.handles[index] = SimpleNamespace(release=lambda i=index: closed.append(i))
+            pool.readers[index] = (Mock(is_alive=lambda: True), threading.Event())
+            pool.preview_readers.add(index)
+        # Recording adopts an existing preview reader without opening it again.
+        original = pool.readers[2]
+        pool.start_reader(2)
+        self.assertIs(pool.readers[2], original)
+        with patch.object(pool, "cached_jpeg", return_value=b"jpeg"):
+            self.assertEqual(pool.jpeg(2), b"jpeg")
+        self.assertEqual(closed, [4])
+        self.assertEqual(set(pool.readers), {2})
+        self.assertFalse(pool.preview_readers)
+        pool.close()
+
+    def test_preview_does_not_dequeue_alongside_an_existing_reader(self):
+        pool = CameraPool()
+        pool.readers[2] = (Mock(is_alive=lambda: True), threading.Event())
+        pool.preview_readers.add(2)
+        with (
+            patch.object(pool, "read") as read,
+            patch.object(pool, "cached_jpeg", return_value=b"latest") as latest,
+        ):
+            self.assertEqual(pool.jpeg(2), b"latest")
+        read.assert_not_called()
+        latest.assert_called_once_with(2)
+        pool.close()
+
     def test_ai_timed_capture_still_uses_a_fresh_read_and_reports_host_bounds(self):
         pool = CameraPool()
         image = object()

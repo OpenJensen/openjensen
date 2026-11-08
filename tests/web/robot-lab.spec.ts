@@ -3266,3 +3266,34 @@ test('large camera view marks stalled frames without piling up requests', async 
   await expect.poll(() => writes(state, '/stop').length).toBe(1);
   expect(state.errors).toEqual([]);
 });
+
+test('camera preview refreshes promptly in both layouts without overlapping slow requests', async ({ page }) => {
+  await fixture(page, true);
+  const requests: number[] = [];
+  let outstanding = 0;
+  let maximumOutstanding = 0;
+  await page.route('**/api/v1/robot-lab/camera.jpg?**', async (route) => {
+    requests.push(Date.now());
+    outstanding++;
+    maximumOutstanding = Math.max(maximumOutstanding, outstanding);
+    // Include real response time in the pacing, without queuing another fetch.
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    outstanding--;
+    await route.fulfill({ contentType: 'image/png', body: pixel });
+  });
+  await openTab(page, 'Teleoperate');
+  await page.getByRole('button', { name: 'Start preview', exact: true }).click();
+  // Starting a preview replaces the initial image URL. Measure steady playback
+  // after those cancelled setup requests have settled.
+  await expect.poll(() => requests.length).toBeGreaterThanOrEqual(3);
+  maximumOutstanding = outstanding;
+  const normalStart = requests.length;
+  await expect.poll(() => requests.length).toBeGreaterThanOrEqual(normalStart + 6);
+  expect(requests[normalStart + 5] - requests[normalStart]).toBeLessThan(1800);
+  expect(maximumOutstanding).toBe(1);
+  await page.getByRole('button', { name: 'Large camera view', exact: true }).click();
+  const start = requests.length;
+  await expect.poll(() => requests.length).toBeGreaterThanOrEqual(start + 8);
+  expect(requests[start + 7] - requests[start]).toBeLessThan(1200);
+  expect(maximumOutstanding).toBe(1);
+});

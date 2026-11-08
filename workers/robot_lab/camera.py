@@ -29,6 +29,7 @@ class CameraPool:
         self.frame_lock = threading.RLock()
         self.frame_times = {}
         self.readers = {}
+        self.preview_readers = set()
         self.reader_errors = {}
         self.multi_rate_handles = set()
         self.fixed_rate_handles = set()
@@ -181,15 +182,17 @@ class CameraPool:
                 )
             return frame
 
-    def start_reader(self, index=0):
+    def start_reader(self, index=0, *, preview=False):
         """Keep a recent frame ready, as LeRobot OpenCVCamera.read_latest does."""
         if type(index) is not int or not 0 <= index <= MAX_CAMERA_INDEX:
             raise ValueError("Invalid camera index")
-        with self.frame_lock:
+        with self.configuration_lock, self.frame_lock:
             current = self.readers.get(index)
             if current and current[0].is_alive():
                 if current[1].is_set():
                     raise RuntimeError("Camera is stopping; retry recording")
+                if not preview:
+                    self.preview_readers.discard(index)
                 return
             stop = threading.Event()
             thread = threading.Thread(
@@ -200,6 +203,10 @@ class CameraPool:
             )
             self.reader_errors.pop(index, None)
             self.readers[index] = (thread, stop)
+            if preview:
+                self.preview_readers.add(index)
+            else:
+                self.preview_readers.discard(index)
             thread.start()
 
     def _read_loop(self, index, stop):
@@ -241,17 +248,28 @@ class CameraPool:
             return frame, self.frame_times[index]
 
     def jpeg(self, index=0, keep_indices=None):
-        import cv2
-
-        frame = (
-            self.read(index, keep_indices=keep_indices)
-            if keep_indices is not None
-            else self.read(index)
-        )
-        ok, encoded = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
-        if not ok:
-            raise RuntimeError("Could not encode camera preview")
-        return encoded.tobytes()
+        if type(index) is not int or not 0 <= index <= MAX_CAMERA_INDEX:
+            raise ValueError("Invalid camera index")
+        # Preview must drain the camera at its capture cadence, even when a
+        # browser polls slowly or is hidden. Reading once per HTTP request lets
+        # the device's queued frames become seconds old. Keep only the latest
+        # decoded frame; recording can adopt the same reader without reopening.
+        keep = set(keep_indices) if keep_indices is not None else {index}
+        keep.add(index)
+        with self.configuration_lock:
+            with self.frame_lock:
+                unused = self.preview_readers - keep
+            for previous in unused:
+                self.close(previous)
+            with self.frame_lock:
+                reader = self.readers.get(index)
+                running = reader is not None and reader[0].is_alive()
+            if reader is not None and not running:
+                self.close(index)
+            if not running:
+                self.read(index, keep_indices=keep)
+                self.start_reader(index, preview=True)
+        return self.cached_jpeg(index)
 
     def capture_timed(self, index=0):
         """Read a fresh frame with explicit host interval, never a cached preview.
@@ -336,17 +354,19 @@ class CameraPool:
             selected.append(index)
         with self.configuration_lock, ExitStack() as stack:
             # Exclusive only during a settings change; ordinary capture remains
-            # independent per camera. Readers belong to recording/policy, which
-            # the server must refuse to reconfigure.
+            # independent per camera. Preview-only readers can be stopped;
+            # recording/policy readers retain ownership of their capture modes.
             with self.frame_lock:
-                if self.readers:
+                if set(self.readers) - self.preview_readers:
                     raise RuntimeError(
                         "Finish recording or policy capture before changing camera modes"
                     )
+            # Stop readers before holding device locks so an in-flight capture
+            # can finish. A new preview cannot start during this configuration.
+            self.close()
             for lock in self.capture_locks:
                 stack.enter_context(lock)
             previous = dict(self.configured_modes)
-            self.close()
             try:
                 for camera in cameras:
                     self.configured_modes[camera_identity(camera["index"])] = dict(camera["mode"])
@@ -407,6 +427,7 @@ class CameraPool:
                     self.last_frames.pop(key, None)
                     self.frame_times.pop(key, None)
                     self.reader_errors.pop(key, None)
+                    self.preview_readers.discard(key)
                     self.negotiated_modes.pop(key, None)
                     self.capture_times.pop(key, None)
                 if capture is not None:
