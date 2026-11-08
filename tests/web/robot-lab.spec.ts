@@ -615,6 +615,7 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin', 
         state.status.recording = {
           active: true,
           dataset_id: body.dataset_id,
+          camera_indices: body.camera_indices ?? (body.camera_index == null ? [] : [body.camera_index]),
           episode_active: false,
           frames: 0,
           episodes: 0,
@@ -2945,7 +2946,7 @@ test('selected cameras preview together and both are sent to recording', async (
   await page.reload();
   await startManual(page);
   await openTab(page, 'Record');
-  await page.getByRole('checkbox', { name: 'Also use Side USB', exact: true }).check();
+  await page.getByRole('checkbox', { name: 'Record Side USB', exact: true }).check();
   await page.getByRole('button', { name: 'Start preview', exact: true }).click();
   const front = page.getByAltText('Live view from the selected robot camera', { exact: true });
   const side = page.getByAltText('Live view from camera 4', { exact: true });
@@ -2955,13 +2956,12 @@ test('selected cameras preview together and both are sent to recording', async (
   await expect(side).toHaveAttribute('src', /index=4.*cameras=0,4/);
   await page.getByLabel('Dataset name', { exact: true }).fill('two-views');
   await page.getByLabel('Task instruction', { exact: true }).fill('Pick up the toy.');
-  await expect(
-    page.getByText('Record camera · 2 selected views saved with every frame', { exact: true }),
-  ).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Cameras for this dataset' })).toContainText('2 selected');
   await page.screenshot({ path: testInfo.outputPath('two-camera-recording.png'), fullPage: true });
   await page.getByRole('button', { name: 'Create recording dataset', exact: true }).click();
   expect(writes(state, '/recording/start').at(-1)?.body).toMatchObject({ camera_index: 0, camera_indices: [0, 4] });
-  await expect(page.getByRole('checkbox', { name: 'Also use Side USB', exact: true })).toBeDisabled();
+  await page.getByText('2 cameras in this dataset', { exact: true }).click();
+  await expect(page.getByRole('checkbox', { name: 'Record Side USB', exact: true })).toBeDisabled();
   expect(state.errors).toEqual([]);
 });
 
@@ -2975,7 +2975,7 @@ test('native camera resolution and rate settings apply together and persist', as
   ];
   await page.reload();
   await openTab(page, 'Record');
-  await page.getByRole('checkbox', { name: 'Also use Side USB', exact: true }).check();
+  await page.getByRole('checkbox', { name: 'Record Side USB', exact: true }).check();
   await page.getByText('Resolution and frame rate', { exact: true }).click();
   await expect(page.getByLabel('Camera 0 resolution', { exact: true })).toBeVisible();
   await page.getByLabel('Camera 0 format', { exact: true }).selectOption('YUYV');
@@ -3112,4 +3112,157 @@ test('a saved follower is not requested again when only the leader needs review'
   expect(writes(state, '/calibration/reuse')).toHaveLength(1);
   expect(writes(state, '/calibration/reuse')[0].body.robot_id).toBe('my-so101-leader');
   expect(writes(state, '/control/start')).toHaveLength(0);
+});
+
+test('dataset camera checkboxes exclude the laptop and lock the saved views', async ({ page }, testInfo) => {
+  const state = await fixture(page, true);
+  state.status.capabilities.multi_camera_recording = true;
+  state.cameras = [
+    { index: 0, name: 'Laptop camera', width: 640, height: 480 },
+    { index: 2, name: 'Front USB', width: 1280, height: 720 },
+    { index: 4, name: 'Side USB', width: 1280, height: 720 },
+  ];
+  await page.reload();
+  await startManual(page);
+  await openTab(page, 'Record');
+  const cameras = page.getByRole('region', { name: 'Cameras for this dataset' });
+  await cameras.getByRole('checkbox', { name: 'Record Front USB', exact: true }).check();
+  await cameras.getByRole('checkbox', { name: 'Record Side USB', exact: true }).check();
+  await cameras.getByRole('checkbox', { name: 'Record Laptop camera', exact: true }).uncheck();
+  await expect(cameras).toContainText('2 selected');
+  await page.getByLabel('Dataset name', { exact: true }).fill('usb-views');
+  await page.getByLabel('Task instruction', { exact: true }).fill('Move the block.');
+  await cameras.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: testInfo.outputPath('dataset-camera-choices.png'), fullPage: true });
+  await page.getByRole('button', { name: 'Create recording dataset', exact: true }).click();
+  expect(writes(state, '/recording/start').at(-1)?.body).toMatchObject({ camera_index: 2, camera_indices: [2, 4] });
+  await page.getByText('2 cameras in this dataset', { exact: true }).click();
+  await expect(cameras.getByRole('checkbox', { name: 'Record Laptop camera', exact: true })).not.toBeChecked();
+  await expect(cameras.getByRole('checkbox', { name: 'Record Front USB', exact: true })).toBeDisabled();
+  await expect(cameras.getByRole('checkbox', { name: 'Record Side USB', exact: true })).toBeChecked();
+  expect(state.errors).toEqual([]);
+});
+
+test('unchecking every dataset camera records robot data without images', async ({ page }) => {
+  const state = await fixture(page, true);
+  await startManual(page);
+  await openTab(page, 'Record');
+  await page.getByRole('checkbox', { name: 'Record Robot camera', exact: true }).uncheck();
+  await expect(page.getByRole('region', { name: 'Cameras for this dataset' })).toContainText('0 selected');
+  await page.getByLabel('Dataset name', { exact: true }).fill('robot-only');
+  await page.getByLabel('Task instruction', { exact: true }).fill('Move the block.');
+  await page.getByRole('button', { name: 'Create recording dataset', exact: true }).click();
+  expect(writes(state, '/recording/start').at(-1)?.body.camera_index).toBeNull();
+  expect(state.errors).toEqual([]);
+});
+
+test('large camera view expands either feed and preserves the session and form', async ({ page }, testInfo) => {
+  const state = await fixture(page, true);
+  state.status.capabilities.multi_camera_recording = true;
+  state.cameras = [
+    { index: 0, name: 'Front USB', width: 1280, height: 720 },
+    { index: 4, name: 'Side USB', width: 1280, height: 720 },
+  ];
+  await page.reload();
+  await startManual(page);
+  await openTab(page, 'Record');
+  await page.getByRole('checkbox', { name: 'Record Side USB', exact: true }).check();
+  await page.getByLabel('Dataset name', { exact: true }).fill('screen-demo');
+  await page.getByLabel('Task instruction', { exact: true }).fill('Move the block.');
+  const heartbeats = writes(state, '/control/heartbeat').length;
+  await page.getByRole('button', { name: 'Large camera view', exact: true }).click();
+  const view = page.getByRole('dialog', { name: 'Large camera view' });
+  await expect(view).toBeVisible();
+  await expect(view.getByText('LIVE', { exact: true })).toHaveCount(2);
+  const front = page.getByAltText('Live view from the selected robot camera', { exact: true });
+  const side = page.getByAltText('Live view from camera 4', { exact: true });
+  const first = await front.boundingBox(),
+    second = await side.boundingBox();
+  expect(first).not.toBeNull();
+  expect(second).not.toBeNull();
+  expect(Math.abs(first!.y - second!.y)).toBeLessThan(2);
+  expect(second!.x).toBeGreaterThan(first!.x);
+  const stop = view.getByRole('button', { name: 'Stop arm and disable torque', exact: true });
+  await expect(stop).toBeInViewport();
+  await expect(view.getByRole('button', { name: 'Exit large view', exact: true })).toBeInViewport();
+  await page.screenshot({ path: testInfo.outputPath('large-camera-view.png'), fullPage: true });
+  await view.getByRole('button', { name: 'Enlarge camera 4', exact: true }).click();
+  await expect(front).toBeHidden();
+  await expect(side).toBeVisible();
+  await view.getByRole('button', { name: 'Show all cameras', exact: true }).click();
+  await expect(front).toBeVisible();
+  await view.getByRole('button', { name: 'Enlarge camera 0', exact: true }).click();
+  await expect(side).toBeHidden();
+  await page.keyboard.press('Escape');
+  await expect(view).toHaveCount(0);
+  await expect(page.getByLabel('Dataset name', { exact: true })).toHaveValue('screen-demo');
+  await expect(page.getByLabel('Task instruction', { exact: true })).toHaveValue('Move the block.');
+  expect(writes(state, '/recording/start')).toEqual([]);
+  expect(writes(state, '/stop')).toEqual([]);
+  expect(writes(state, '/control/start')).toHaveLength(1);
+  await expect.poll(() => writes(state, '/control/heartbeat').length).toBeGreaterThan(heartbeats);
+  await page.getByRole('button', { name: 'Large camera view', exact: true }).click();
+  await stop.click();
+  await expect.poll(() => writes(state, '/stop').length).toBe(1);
+  expect(state.errors).toEqual([]);
+});
+
+test('large camera view keeps collection countdown and pause controls available', async ({ page }) => {
+  const state = await fixture(page, true);
+  state.status.capabilities.auto_recording_fps = true;
+  state.status.capabilities.guided_recording = true;
+  await startManual(page);
+  await openTab(page, 'Record');
+  await page.getByLabel('Dataset name', { exact: true }).fill('screen-collection');
+  await page.getByLabel('Task instruction', { exact: true }).fill('Move the block.');
+  await page.getByRole('button', { name: 'Create recording dataset', exact: true }).click();
+  await page.getByRole('button', { name: 'Large camera view', exact: true }).click();
+  await page.getByRole('button', { name: 'Start collection', exact: true }).click();
+  const summary = page.getByLabel('Camera view recording status', { exact: true });
+  await expect(summary).toContainText('Get ready');
+  await expect(page.getByLabel('Camera view time remaining', { exact: true })).toBeVisible();
+  await expect(page.getByRole('checkbox', { name: 'Record view from camera 0', exact: true })).toBeDisabled();
+  state.status.recording.collection.phase = 'recording';
+  state.status.recording.collection.remaining_s = 17;
+  state.status.recording.episode_active = true;
+  state.status.recording.frames = 80;
+  await expect(summary).toContainText('80 frames');
+  await expect(page.getByLabel('Camera view time remaining', { exact: true })).toHaveText('17s');
+  await page.getByRole('button', { name: 'Exit large view', exact: true }).click();
+  expect(writes(state, '/recording/collection/pause')).toEqual([]);
+  expect(writes(state, '/stop')).toEqual([]);
+  await page.getByRole('button', { name: 'Large camera view', exact: true }).click();
+  await page.getByRole('button', { name: 'Pause collection', exact: true }).click();
+  await expect(summary).toContainText('Collection paused');
+  expect(state.errors).toEqual([]);
+});
+
+test('large camera view marks stalled frames without piling up requests', async ({ page }) => {
+  const state = await fixture(page, true);
+  state.status.capabilities.multi_camera_recording = true;
+  state.cameras = [
+    { index: 0, name: 'Front USB', width: 640, height: 480 },
+    { index: 4, name: 'Side USB', width: 640, height: 480 },
+  ];
+  await page.reload();
+  await startManual(page);
+  await openTab(page, 'Record');
+  await page.getByRole('checkbox', { name: 'Record Side USB', exact: true }).check();
+  let sideRequests = 0,
+    frontRequests = 0;
+  await page.route('**/api/v1/robot-lab/camera.jpg?**', async (route) => {
+    if (new URL(route.request().url()).searchParams.get('index') === '4') {
+      sideRequests++;
+      if (sideRequests > 1) return;
+    } else frontRequests++;
+    await route.fulfill({ contentType: 'image/png', body: pixel });
+  });
+  await page.getByRole('button', { name: 'Large camera view', exact: true }).click();
+  await expect(page.getByText('Feed delayed — waiting for a new image', { exact: true })).toBeVisible();
+  expect(sideRequests).toBe(2);
+  expect(frontRequests).toBeGreaterThan(2);
+  await expect(page.getByText('LIVE', { exact: true })).toHaveCount(1);
+  await page.getByRole('button', { name: 'Stop arm and disable torque', exact: true }).click();
+  await expect.poll(() => writes(state, '/stop').length).toBe(1);
+  expect(state.errors).toEqual([]);
 });

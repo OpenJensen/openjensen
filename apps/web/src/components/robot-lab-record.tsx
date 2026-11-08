@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { RobotLabControlDevices } from './robot-lab-devices';
+import { RobotLabRecordingCameras } from './robot-lab-recording-cameras';
 import { Icon } from '@/components/icon';
 import { importRobotDataset, robotApi, robotJoints } from '@/lib/robot-api';
 import { Heading, Notice, JointControl, DatasetRow } from './robot-lab-shared';
@@ -39,7 +40,6 @@ export function RobotLabRecord({ lab }: { lab: RobotLabState }) {
     setDatasetId,
     setFps,
     setImported,
-    setRecordCamera,
     setStep,
     setTask,
     state,
@@ -212,6 +212,13 @@ export function RobotLabRecord({ lab }: { lab: RobotLabState }) {
           </div>
         )}
         {partialControl && <Notice>Dataset recording requires all six joints.</Notice>}
+        {recording?.active && (
+          <details className="robot-lab-recording-camera-details">
+            <summary>{lab.recordingCameraIndices.length} cameras in this dataset</summary>
+            <RobotLabRecordingCameras lab={lab} />
+          </details>
+        )}
+
         {!recording?.active ? (
           <>
             {!controlling && (
@@ -247,22 +254,7 @@ export function RobotLabRecord({ lab }: { lab: RobotLabState }) {
                 maxLength={500}
               />
             </label>
-            <label className="robot-lab-check">
-              <input
-                type="checkbox"
-                checked={recordCamera}
-                disabled={busy || !availableCameras.length}
-                onChange={(event) => setRecordCamera(event.target.checked)}
-              />
-              <span>
-                <strong>Record camera</strong>
-                {availableCameras.length
-                  ? state?.capabilities?.multi_camera_recording && selectedCameraIndices.length > 1
-                    ? ` · ${selectedCameraIndices.length} selected views saved with every frame`
-                    : ''
-                  : 'No camera available; state and actions only.'}
-              </span>
-            </label>
+            <RobotLabRecordingCameras lab={lab} />
             {guidedAvailable && (
               <section className="robot-lab-form" aria-label="Collection plan">
                 <label>

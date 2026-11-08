@@ -93,6 +93,7 @@ export function useRobotLab() {
   const [cameraIndex, setCameraIndex] = useState(0);
   const [additionalCameraIndices, setAdditionalCameraIndices] = useState<number[]>([]);
   const [preview, setPreview] = useState(false);
+  const [cameraWorkspace, setCameraWorkspace] = useState(false);
   const [previewStamp, setPreviewStamp] = useState(0);
   const [cameraError, setCameraError] = useState(false);
   const [datasetId, setDatasetId] = useState('');
@@ -353,6 +354,28 @@ export function useRobotLab() {
     availableCameras.some((camera) => camera.index === index),
   );
   const busy = !!pending;
+  const recordingCameraIndices = recording?.active
+    ? (recording.camera_indices ?? (recordCamera ? selectedCameraIndices : []))
+    : recordCamera
+      ? selectedCameraIndices
+      : [];
+  function toggleRecordingCamera(index: number, checked: boolean) {
+    if (!online || busy || recording?.active || !availableCameras.some((camera) => camera.index === index)) return;
+    const next = checked
+      ? state?.capabilities?.multi_camera_recording
+        ? Array.from(new Set([...recordingCameraIndices, index]))
+        : [index]
+      : recordingCameraIndices.filter((camera) => camera !== index);
+    if (next.length > 4) return;
+    setRecordCamera(next.length > 0);
+    if (next.length) {
+      setCameraIndex(next[0]);
+      setAdditionalCameraIndices(next.slice(1));
+    }
+    setCameraError(false);
+    setPreviewStamp(Date.now());
+  }
+
   const canAct = online && !busy && !reconnecting && !awaitingCalibration;
   const portConnected =
     online &&
@@ -517,8 +540,7 @@ export function useRobotLab() {
     if (!preview || !online) return;
     setCameraError(false);
     setPreviewStamp(Date.now());
-    const timer = setInterval(() => setPreviewStamp(Date.now()), 700);
-    return () => clearInterval(timer);
+    // Each camera requests its next frame only after the previous one loads.
   }, [preview, online, cameraIndex]);
   useEffect(() => {
     if (!ownsSession) return;
@@ -1169,8 +1191,12 @@ export function useRobotLab() {
     calibrationSummary,
     cameraError,
     cameraIndex,
+    cameraWorkspace,
+    setCameraWorkspace,
     additionalCameraIndices,
     selectedCameraIndices,
+    recordingCameraIndices,
+    toggleRecordingCamera,
     setAdditionalCameraIndices,
     canAct,
     canUseArm,
