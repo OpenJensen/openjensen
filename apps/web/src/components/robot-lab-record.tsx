@@ -420,11 +420,13 @@ export function RobotLabRecord({ lab }: { lab: RobotLabState }) {
               <div>
                 <strong>{recording.dataset_id}</strong>
                 <small>
-                  {recording.episode_active
-                    ? 'Recording an episode'
-                    : recording.frames > 0
-                      ? 'Episode has pending frames'
-                      : 'Ready for the next episode'}{' '}
+                  {measuring
+                    ? 'Checking recording speed'
+                    : recording.episode_active
+                      ? 'Recording an episode'
+                      : recording.frames > 0
+                        ? 'Episode has pending frames'
+                        : 'Ready for the next episode'}{' '}
                   · {recording.episodes} saved
                 </small>
               </div>
@@ -443,6 +445,11 @@ export function RobotLabRecord({ lab }: { lab: RobotLabState }) {
                   ? 'Measuring sustainable capture rate…'
                   : `${recording.fps} fps · ${recording.fps_mode === 'auto' ? 'selected automatically' : 'manual'}`}{' '}
                 {recording.rate_message}
+              </p>
+            )}
+            {recording.frames > 1 && recording.actual_fps != null && (
+              <p className="robot-lab-subtle" role="status">
+                Measured capture: {recording.actual_fps.toFixed(1)} fps · Dataset target: {recording.fps} fps
               </p>
             )}
             {collection && (

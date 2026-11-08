@@ -2702,6 +2702,9 @@ test('recording measurement errors keep capture blocked and allow a clean retry'
   await page.getByRole('button', { name: 'Create recording dataset', exact: true }).click();
   state.status.recording.rate_status = 'measuring';
   await expect(page.getByRole('button', { name: 'Start collection', exact: true })).toBeDisabled();
+  state.status.recording.rate_message = 'Testing 23 FPS with cameras, robot samples and image saving together…';
+  await expect(page.getByText('Checking recording speed', { exact: false })).toBeVisible();
+  await expect(page.getByText('Testing 23 FPS', { exact: false })).toBeVisible();
   state.status.recording.rate_status = 'error';
   state.status.recording.rate_message = 'No fresh camera frames received.';
   await expect(page.getByText('No fresh camera frames received.', { exact: false })).toBeVisible();

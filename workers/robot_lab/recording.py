@@ -1,6 +1,7 @@
 """Measured recording cadence and server-owned collection timers; no motor commands."""
 
 import math
+import shutil
 import tempfile
 import threading
 import time
@@ -44,9 +45,7 @@ class CaptureRate:
                     for image in images:
                         save_png(image, Path(folder) / "sample.png")
                     batches = image_worker_count(len(images))
-                    writer = AsyncImageWriter(
-                        capacity=max(8, len(images) * 4), workers=batches
-                    )
+                    writer = AsyncImageWriter(capacity=max(8, len(images) * 4), workers=batches)
                     try:
                         # Measure sustained batches through the same bounded
                         # writer used by recording, including copies and files.
@@ -54,9 +53,7 @@ class CaptureRate:
                             started = time.monotonic()
                             for batch in range(batches):
                                 for index, image in enumerate(images):
-                                    writer.save_image(
-                                        image, Path(folder) / f"{batch}-{index}.png"
-                                    )
+                                    writer.save_image(image, Path(folder) / f"{batch}-{index}.png")
                                 (Path(folder) / f"{batch}.json").write_text(
                                     '{"sample": [0,0,0,0,0,0]}'
                                 )
@@ -107,6 +104,70 @@ class CaptureRate:
                 "Capture is below 1 FPS. Check camera connection or computer load, then retry."
             )
         return min(MAX_RECORDING_FPS, max(1, math.floor(sustainable)))
+
+
+class CaptureProbe:
+    """Temporary recording through the production writer and control-loop sampler.
+
+    Construction and close perform file I/O and must run off the motor thread.
+    No probe frames become user episodes; only a verified rate is published.
+    """
+
+    duration = 12.0
+
+    def __init__(self, owner, fps, attempt=1):
+        shapes = getattr(owner, "image_shapes", {})
+        required = sum(math.prod(shape) for shape in shapes.values()) * fps * self.duration * 1.05
+        if shutil.disk_usage(owner.root).free < required + 512 * 1024**2:
+            raise ValueError("Not enough temporary disk space for the sustained recording check")
+        self.folder = tempfile.TemporaryDirectory(prefix=".capture-check-", dir=owner.root)
+        self.writer = None
+        try:
+            self.writer = type(owner)(
+                Path(self.folder.name), "rate-check", owner.task, fps, owner.image_shape
+            )
+            self.writer.start_episode()
+        except Exception:
+            self.close()
+            raise
+        self.attempt = attempt
+        self.next_record = 0.0
+        self.last_recorded_image = None
+        self.started = None
+        self.samples = deque(maxlen=max(60, fps * 3))
+
+    def captured(self, now):
+        if self.started is None:
+            self.started = now
+        self.samples.append(now)
+
+    @property
+    def measured_fps(self):
+        if len(self.samples) < 2 or self.samples[-1] <= self.samples[0]:
+            return None
+        return (len(self.samples) - 1) / (self.samples[-1] - self.samples[0])
+
+    def complete(self, now):
+        return self.started is not None and now - self.started >= self.duration
+
+    def lower_rate(self):
+        measured = self.measured_fps
+        limit = min(self.writer.fps * 0.8, measured * 0.85) if measured else self.writer.fps * 0.8
+        candidate = math.floor(limit)
+        if self.attempt >= 3 or candidate < 1:
+            raise ValueError(
+                "Recording speed remained unstable during the sustained check. "
+                "Try a smaller camera resolution or close other busy applications. "
+                "No demonstration frames have been recorded."
+            )
+        return candidate
+
+    def close(self):
+        try:
+            if self.writer is not None:
+                self.writer.close()
+        finally:
+            self.folder.cleanup()
 
 
 class Collection:

@@ -29,7 +29,15 @@ from assembled_session import AssembledSession, CalibrationRevisions, empty_asse
 from calibration_draft import CalibrationDraft, file_hash
 from calibration_profiles import CalibrationProfiles
 from camera import MAX_CAMERA_INDEX, CameraPool
-from dataset import DatasetWriter, atomic_json, dataset_file, list_datasets, manifest, safe_slug
+from dataset import (
+    CaptureCadenceError,
+    DatasetWriter,
+    atomic_json,
+    dataset_file,
+    list_datasets,
+    manifest,
+    safe_slug,
+)
 from device_registry import DeviceRegistry
 from diagnostics import Diagnostics
 from dispatch import MainThreadDispatcher
@@ -45,6 +53,7 @@ from hardware import (
     normalized,
     probe_bus,
 )
+from image_writer import ImageQueueFull
 from lerobot_control import (
     PROFILE,
     LeRobotPositionControl,
@@ -54,7 +63,7 @@ from lerobot_control import (
 from motion import MiddleMotion, RestMotion, control_limits, middle_targets, step_target
 from policy import PolicyRunner
 from policy_install import install_archive
-from recording import MAX_RECORDING_FPS, CaptureRate, Collection
+from recording import MAX_RECORDING_FPS, CaptureProbe, CaptureRate, Collection
 from rest_position import RestPositions
 from verification import (
     MappingChecks,
@@ -287,6 +296,7 @@ class RobotLab:
         self.recording_rate_status = "ready"
         self.recording_rate_message = ""
         self.recording_rate = None
+        self.recording_probe = None
         self.collection = None
         self.recording_io = False
         self.recording_thread = None
@@ -1923,6 +1933,7 @@ class RobotLab:
                 self.error = reason
             if self.writer:
                 self.writer.episode_active = False
+            self._cancel_capture_check()
             if self.collection:
                 self.collection.pause(time.monotonic(), "Control stopped. Collection paused")
         # Generation is revoked before waiting on policy state or serial I/O.
@@ -2172,6 +2183,8 @@ class RobotLab:
                     raise RequestError("abandon_empty must be true or false")
                 if abandon_empty:
                     require(payload, "confirm", "ABANDON EMPTY RECORDING")
+            if action == "finish":
+                self._cancel_capture_check()
             self.recording_io = True
             writer.episode_active = False
         # Encoding and disk waits must never hold the motor loop's global lock.
@@ -2300,6 +2313,144 @@ class RobotLab:
         )
         self.recording_thread.start()
 
+    def _cancel_capture_check(self):
+        """Revoke a check immediately; wait for its files only on a cleanup thread."""
+        self.recording_rate = None
+        probe, self.recording_probe = self.recording_probe, None
+        if self.recording_rate_status == "measuring":
+            self.recording_rate_status = "error"
+            self.recording_rate_message = (
+                "Control stopped during the recording check. Create a new dataset to retry."
+            )
+        if probe is not None:
+            probe.writer.episode_active = False
+
+            def cleanup():
+                # Let an already-submitted frame finish, without holding up Stop.
+                with self.lock:
+                    pass
+                try:
+                    probe.close()
+                except Exception as error:
+                    self.diagnostics.emit("recording_check_cleanup_error", reason=str(error))
+
+            thread = threading.Thread(target=cleanup, name="robot-lab-check-cleanup", daemon=True)
+            self.threads.append(thread)
+            thread.start()
+
+    def _prepare_capture_probe(self, fps=None, *, verified=False, error=None):
+        """Create/retire temporary writers and publish timing off the motor thread."""
+        owner, generation = self.writer, self.generation
+        previous, self.recording_probe = self.recording_probe, None
+        attempt = previous.attempt + 1 if previous else 1
+        self.recording_io = True
+        self.recording_rate_message = (
+            "Finishing the sustained recording check…"
+            if verified
+            else f"Testing {fps} FPS with cameras, robot samples and image saving together…"
+        )
+
+        def prepare():
+            probe = None
+            try:
+                if previous is not None:
+                    previous.close()
+                if error is not None:
+                    raise error
+                with self.lock, self.lifecycle_lock:
+                    if generation != self.generation or owner is not self.writer:
+                        return
+                if verified:
+                    owner.fps = fps
+                    owner.write_metadata()
+                else:
+                    probe = CaptureProbe(owner, fps, attempt)
+                with self.lock, self.lifecycle_lock:
+                    if generation != self.generation or owner is not self.writer:
+                        return
+                    if verified:
+                        self.recording_rate_status = "ready"
+                        self.recording_rate_message = (
+                            f"Automatic: {fps} FPS verified by a sustained recording check "
+                            "with all selected cameras"
+                        )
+                    else:
+                        self.recording_probe, probe = probe, None
+            except Exception as caught:
+                with self.lock, self.lifecycle_lock:
+                    if generation == self.generation and owner is self.writer:
+                        self.recording_error = "Frame-rate preparation failed: " + str(caught)
+                        self.recording_rate_status = "error"
+                        self.recording_rate_message = str(caught)
+                        if self.collection:
+                            self.collection.pause(time.monotonic())
+            finally:
+                try:
+                    if probe is not None:
+                        probe.close()
+                finally:
+                    with self.lock:
+                        self.recording_io = False
+                    if self.finished.is_set():
+                        owner.close()
+
+        self.recording_thread = threading.Thread(
+            target=prepare, name="robot-lab-recording-check", daemon=True
+        )
+        self.recording_thread.start()
+
+    def _capture_recording_frame(self, writer, cadence, generation):
+        """Same capture, conversion, copying, files and pacing for trials and episodes."""
+        if time.monotonic() < cadence.next_record:
+            return False
+        image_times, images = {}, {}
+        indices = self.camera_indices or ([] if self.camera_index is None else [self.camera_index])
+        for ordinal, index in enumerate(indices):
+            if hasattr(self.camera, "read_latest_timed"):
+                frame, image_time = self.camera.read_latest_timed(index)
+                previous = (
+                    cadence.last_recorded_image.get(index)
+                    if isinstance(cadence.last_recorded_image, dict)
+                    else cadence.last_recorded_image
+                )
+                if previous is not None and image_time <= previous:
+                    return False
+                image_times[index] = image_time
+            else:
+                frame = getattr(self.camera, "read_latest", self.camera.read)(index)
+            key = (
+                "observation.images.front" if ordinal == 0 else f"observation.images.camera_{index}"
+            )
+            # AsyncImageWriter takes its own owned RGB copy before returning.
+            # Keeping this as a view avoids a second full-resolution copy per camera.
+            images[key] = frame[:, :, ::-1]
+        if len(image_times) > 1 and max(image_times.values()) - min(image_times.values()) > max(
+            0.2, 1 / writer.fps
+        ):
+            raise RequestError("Camera frames are too far apart; check camera timing and USB load")
+        image = next(iter(images.values())) if len(images) == 1 else (images or None)
+        with self.lock:
+            if generation != self.generation or not writer.episode_active:
+                return False
+            if writer is not self.writer and not (
+                self.recording_probe is cadence and cadence.writer is writer
+            ):
+                return False
+            captured_at = time.monotonic()
+            writer.add_frame(dict(self.positions), dict(self.action), image, captured_at)
+            if indices:
+                cadence.last_recorded_image = (
+                    image_times if len(indices) > 1 else image_times.get(indices[0])
+                )
+            if cadence.next_record == 0.0:
+                cadence.next_record = captured_at
+            cadence.next_record += 1.0 / writer.fps
+            if captured_at - cadence.next_record >= 1.0 / writer.fps:
+                cadence.next_record = captured_at + 1.0 / writer.fps
+            if isinstance(cadence, CaptureProbe):
+                cadence.captured(captured_at)
+        return True
+
     def _recording_prepare_tick(self, now):
         """Runs only after a successful motor tick; observes without writing goals."""
         writer = self.writer
@@ -2322,39 +2473,7 @@ class RobotLab:
                 if writer.frames or writer.episodes or writer.episode_active:
                     raise RequestError("Cannot change a dataset frame rate after capture begins")
                 self.recording_rate = None
-                self.recording_io = True
-
-                def publish_rate():
-                    try:
-                        writer.fps = fps
-                        writer.write_metadata()
-                        with self.lock, self.lifecycle_lock:
-                            if writer is self.writer:
-                                self.recording_rate_status = "ready"
-                                self.recording_rate_message = (
-                                    f"Automatic: {fps} FPS from camera, robot and storage "
-                                    f"measurements (up to {MAX_RECORDING_FPS} FPS)"
-                                )
-                    except Exception as error:
-                        with self.lock, self.lifecycle_lock:
-                            if writer is self.writer:
-                                self.recording_error = "Frame-rate preparation failed: " + str(
-                                    error
-                                )
-                                self.recording_rate_status = "error"
-                                self.recording_rate_message = str(error)
-                                if self.collection:
-                                    self.collection.pause(time.monotonic())
-                    finally:
-                        with self.lock:
-                            self.recording_io = False
-                        if self.finished.is_set():
-                            writer.close()
-
-                self.recording_thread = threading.Thread(
-                    target=publish_rate, name="robot-lab-recording-rate", daemon=True
-                )
-                self.recording_thread.start()
+                self._prepare_capture_probe(fps)
                 return
             elif now - self.recording_rate.started > 15:
                 raise RequestError(
@@ -2542,67 +2661,35 @@ class RobotLab:
                     self.recording_rate_message = str(error)
                 self.recording_rate = None
             return
-        writer = self.writer
-        if writer and writer.episode_active and time.monotonic() >= self.next_record:
+        probe = self.recording_probe
+        if probe is not None and not self.recording_io:
             try:
-                image = None
-                image_times = {}
-                indices = self.camera_indices or (
-                    [] if self.camera_index is None else [self.camera_index]
-                )
-                images = {}
-                for ordinal, index in enumerate(indices):
-                    read_image = getattr(self.camera, "read_latest", self.camera.read)
-                    if hasattr(self.camera, "read_latest_timed"):
-                        frame, image_time = self.camera.read_latest_timed(index)
-                        previous = (
-                            self.last_recorded_image.get(index)
-                            if isinstance(self.last_recorded_image, dict)
-                            else self.last_recorded_image
-                        )
-                        if previous is not None and image_time <= previous:
-                            return
-                        image_times[index] = image_time
-                    else:
-                        frame = read_image(index)
-                    key = (
-                        "observation.images.front"
-                        if ordinal == 0
-                        else f"observation.images.camera_{index}"
-                    )
-                    images[key] = frame[:, :, ::-1].copy()
-                if len(image_times) > 1 and max(image_times.values()) - min(
-                    image_times.values()
-                ) > max(0.2, 1 / writer.fps):
-                    raise RequestError(
-                        "Camera frames are too far apart; check USB bandwidth and retry "
-                        "with Automatic frame rate"
-                    )
-                if len(images) == 1:
-                    image = next(iter(images.values()))
-                elif images:
-                    image = images
-                with self.lock:
-                    if (
-                        generation == self.generation
-                        and writer is self.writer
-                        and writer.episode_active
-                    ):
-                        captured_at = time.monotonic()
-                        writer.add_frame(
-                            dict(self.positions), dict(self.action), image, captured_at
-                        )
-                        if indices:
-                            self.last_recorded_image = (
-                                image_times if len(indices) > 1 else image_times.get(indices[0])
-                            )
-                        self.next_record += 1.0 / writer.fps
-                        # Never burst backlogged samples after a scheduling delay.
-                        if captured_at - self.next_record >= 1.0 / writer.fps:
-                            self.next_record = captured_at + 1.0 / writer.fps
+                self._capture_recording_frame(probe.writer, probe, generation)
+                if probe.complete(time.monotonic()):
+                    with self.lock, self.lifecycle_lock:
+                        if generation == self.generation and probe is self.recording_probe:
+                            if (probe.measured_fps or 0) >= probe.writer.fps * 0.97:
+                                self._prepare_capture_probe(probe.writer.fps, verified=True)
+                            else:
+                                self._prepare_capture_probe(probe.lower_rate())
             except Exception as error:
-                # A recorder failure pauses collection, without conflating it
-                # with motor feedback or bypassing the independent Stop/watchdog.
+                with self.lock, self.lifecycle_lock:
+                    if generation != self.generation or probe is not self.recording_probe:
+                        return
+                    if isinstance(error, (CaptureCadenceError, ImageQueueFull)):
+                        try:
+                            self._prepare_capture_probe(probe.lower_rate())
+                        except ValueError as unstable:
+                            self._prepare_capture_probe(error=unstable)
+                    else:
+                        self._prepare_capture_probe(error=error)
+            return
+        writer = self.writer
+        if writer and writer.episode_active:
+            try:
+                self._capture_recording_frame(writer, self, generation)
+            except Exception as error:
+                # Preserve the partial episode and keep Stop/watchdog independent.
                 with self.lifecycle_lock:
                     if generation != self.generation or writer is not self.writer:
                         return

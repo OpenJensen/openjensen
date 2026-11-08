@@ -26,6 +26,10 @@ def image_worker_count(camera_count):
     return min(4, max(1, camera_count * 2))
 
 
+class ImageQueueFull(ValueError):
+    """The bounded writer cannot accept another image without losing a frame."""
+
+
 class AsyncImageWriter:
     def __init__(self, *, capacity=8, write=save_png, workers=1):
         if type(workers) is not int or not 1 <= workers <= 4:
@@ -61,7 +65,7 @@ class AsyncImageWriter:
             try:
                 self.queue.put_nowait((copied, path))
             except queue.Full:
-                raise ValueError(
+                raise ImageQueueFull(
                     "Image writer cannot keep up; save or discard the paused episode"
                 ) from None
             self.pending += 1

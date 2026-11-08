@@ -91,6 +91,10 @@ def aggregate_stats(episodes):
     return output
 
 
+class CaptureCadenceError(ValueError):
+    """Capture cannot sustain the immutable dataset timebase."""
+
+
 class DatasetWriter:
     def __init__(self, root: Path, dataset_id: str, task: str, fps: int, image_shape=None):
         import numpy  # noqa: F401
@@ -283,7 +287,7 @@ class DatasetWriter:
             )
         now = time.monotonic() if captured_at is None else captured_at
         if self.last_frame_at is not None and now - self.last_frame_at >= max(0.5, 3.0 / self.fps):
-            raise ValueError(
+            raise CaptureCadenceError(
                 "Capture fell below requested FPS after an interruption; "
                 "pending frames are preserved. "
                 "Check camera/USB and "
@@ -298,10 +302,11 @@ class DatasetWriter:
             elapsed = self.capture_times[-1] - self.capture_times[0]
             self.actual_fps = (len(self.capture_times) - 1) / elapsed if elapsed > 0 else None
             if elapsed >= 3 and self.actual_fps is not None and self.actual_fps < self.fps * 0.9:
-                raise ValueError(
-                    "Sustained capture cannot maintain this dataset frame rate; "
-                    "pending frames are preserved. "
-                    "Create a new dataset with Automatic frame rate to measure current conditions."
+                raise CaptureCadenceError(
+                    f"Sustained capture is {self.actual_fps:.1f} FPS, below this dataset's "
+                    f"{self.fps} FPS. Pending frames are preserved; save this partial episode. "
+                    "For the next dataset, choose a lower frame rate or rerun the sustained "
+                    "Automatic check. Camera resolution and computer load affect recording speed."
                 )
         state = [float(positions[joint]) for joint in JOINTS]
         target = [float(action.get(joint, positions[joint])) for joint in JOINTS]

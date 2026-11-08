@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import test_robot_lab as safety
+from dataset import CaptureCadenceError
 from recording import CaptureRate, Collection
 from server import RequestError
 
@@ -57,6 +58,7 @@ class RateTests(unittest.TestCase):
 class FakeWriter:
     def __init__(self, root, dataset_id, task, fps, image_shape):
         self.id, self.root, self.fps = dataset_id, root / dataset_id, fps
+        self.task, self.image_shape = task, image_shape
         self.root.mkdir()
         self.frames = self.total_frames = 0
         self.episodes = []
@@ -242,14 +244,108 @@ class CollectionTests(unittest.TestCase):
         for index in range(121):
             self.tick(index / 40)
         self.wait_io()
-        self.assertEqual(writer.fps, 33)  # 15% reserve; binary float conservative floor.
+        self.assertEqual(self.lab.recording_rate_status, "measuring")
+        self.assertIsNotNone(self.lab.recording_probe)
+        self.assertEqual(writer.fps, 40)  # The initial estimate is not published.
+        for index in range(121, 611):
+            self.tick(index / 40)
+            self.wait_io()
+        self.assertEqual(writer.fps, 33)  # 15% reserve plus sustained validation.
         self.assertEqual(writer.frames, 0)
         self.assertEqual(self.lab.recording_rate_status, "ready")
         selected = writer.fps
-        self.tick(4)
-        self.tick(4.03)
+        self.tick(17)
+        self.tick(17.03)
         self.assertGreater(writer.frames, 0)
         self.assertEqual(writer.fps, selected)
+
+    def test_combined_capture_load_reduces_rate_before_user_frames(self):
+        writer = self.create(fps=None)
+        for index in range(121):
+            self.tick(index / 40)
+        self.wait_io()
+        probe = self.lab.recording_probe
+        self.assertEqual(probe.writer.fps, 33)
+        original = probe.writer.add_frame
+
+        def overloaded(*args):
+            if self.clock >= 6:
+                raise CaptureCadenceError("Sustained capture is below the requested rate")
+            original(*args)
+
+        probe.writer.add_frame = overloaded
+        # The real combined control/capture loop only manages 18 ticks/s.
+        for index in range(1, 300):
+            self.tick(3 + index / 18)
+            self.wait_io()
+        self.assertEqual(self.lab.recording_rate_status, "ready")
+        self.assertLessEqual(writer.fps, 15)
+        self.assertGreater(writer.fps, 1)
+        self.assertEqual(writer.frames, 0)
+        self.assertEqual(writer.episodes, [])
+        self.assertEqual(writer.metadata_rates, [40, writer.fps])
+        self.assertFalse(list(writer.root.glob(".capture-check-*")))
+
+    def test_stop_cancels_sustained_check_without_publishing_rate(self):
+        writer = self.create(fps=None)
+        for index in range(121):
+            self.tick(index / 40)
+        self.wait_io()
+        probe = self.lab.recording_probe
+        self.tick(3.1)
+        self.lab.stop()
+        for thread in self.lab.threads:
+            if thread.name == "robot-lab-check-cleanup":
+                thread.join(2)
+                self.assertFalse(thread.is_alive())
+        self.assertIsNone(self.lab.recording_probe)
+        self.assertTrue(probe.writer.closed)
+        self.assertEqual(writer.metadata_rates, [40])
+        self.assertEqual(writer.frames, 0)
+        self.assertEqual(self.lab.recording_rate_status, "error")
+        self.assertFalse(self.lab.torque)
+        self.assertFalse(list(writer.root.glob(".capture-check-*")))
+
+    def test_stop_during_probe_creation_cannot_attach_or_publish_afterwards(self):
+        from recording import CaptureProbe
+
+        writer = self.create(fps=None)
+        entered, release = threading.Event(), threading.Event()
+
+        def slow_create(*args):
+            entered.set()
+            release.wait(2)
+            return CaptureProbe(*args)
+
+        with patch("server.CaptureProbe", side_effect=slow_create):
+            for index in range(121):
+                self.tick(index / 40)
+            self.assertTrue(entered.wait(1))
+            try:
+                self.lab.stop()
+                self.assertFalse(self.lab.torque)
+            finally:
+                release.set()
+            self.wait_io()
+        self.assertIsNone(self.lab.recording_probe)
+        self.assertEqual(self.lab.recording_rate_status, "error")
+        self.assertEqual(writer.metadata_rates, [40])
+        self.assertFalse(list(writer.root.glob(".capture-check-*")))
+
+    def test_probe_storage_failure_is_reported_instead_of_lowering_fps(self):
+        writer = self.create(fps=None)
+        for index in range(121):
+            self.tick(index / 40)
+        self.wait_io()
+        probe = self.lab.recording_probe
+        with patch.object(probe.writer, "add_frame", side_effect=OSError("disk write failed")):
+            self.tick(3.1)
+            self.wait_io()
+        self.assertEqual(self.lab.recording_rate_status, "error")
+        self.assertIn("disk write failed", self.lab.recording_rate_message)
+        self.assertEqual(writer.metadata_rates, [40])
+        self.assertEqual(writer.frames, 0)
+        self.assertFalse(list(writer.root.glob(".capture-check-*")))
 
     def test_single_frame_timed_configuration_fails_before_capture(self):
         writer = self.create(fps=1, duration=1, countdown=0)
@@ -262,9 +358,9 @@ class CollectionTests(unittest.TestCase):
     def test_rate_metadata_failure_reports_error_instead_of_measuring_forever(self):
         writer = self.create(fps=None)
         with patch.object(writer, "write_metadata", side_effect=OSError("disk full")):
-            for index in range(121):
+            for index in range(611):
                 self.tick(index / 40)
-            self.wait_io()
+                self.wait_io()
         self.assertEqual(self.lab.recording_rate_status, "error")
         self.assertIn("disk full", self.lab.recording_rate_message)
         self.assertFalse(writer.episode_active)
