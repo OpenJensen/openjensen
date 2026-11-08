@@ -162,6 +162,52 @@ class CalibrationProfilesTests(unittest.TestCase):
         with self.assertRaisesRegex(RequestError, "changed or is unavailable"):
             self.lab.calibration_reuse({**payload, "profile_key": "../../private"})
 
+    def test_status_and_catalog_use_current_port_and_keep_arms_independent(self):
+        leader_path = self.lab.calibration_path("leader", "leader")
+        leader_path.parent.mkdir(parents=True)
+        leader_path.write_text(json.dumps(CALIBRATION))
+        self.lab.calibration_revisions.acknowledge("old-port", "arm", "follower", self.path)
+        self.lab.calibration_revisions.mark_dirty("leader-port")
+        devices = [
+            dict(
+                id="arm",
+                robot_id="arm",
+                name="Arm",
+                role="follower",
+                profile_role="follower",
+                port="fake",
+                serial_number=None,
+                connected=True,
+            ),
+            dict(
+                id="leader",
+                robot_id="leader",
+                name="Leader",
+                role="leader",
+                profile_role="leader",
+                port="leader-port",
+                serial_number=None,
+                connected=True,
+            ),
+        ]
+        with (
+            patch.object(self.lab.device_registry, "read", return_value=devices),
+            patch.object(self.lab.device_registry, "discover", return_value=devices),
+        ):
+            profiles = self.lab.status()["calibrations"]
+            follower = next(p for p in profiles if p["robot_id"] == "arm")
+            self.assertEqual(follower["setup_port"], "fake")
+            self.assertFalse(follower["setup_fresh"])
+            self.assertEqual(
+                self.lab.devices()["saved_devices"][0]["calibration"], "needs_attention"
+            )
+            self.lab.calibration_reuse(self.payload())
+            profiles = self.lab.status()["calibrations"]
+            self.assertTrue(next(p for p in profiles if p["robot_id"] == "arm")["setup_fresh"])
+            self.assertFalse(next(p for p in profiles if p["robot_id"] == "leader")["setup_fresh"])
+            self.assertEqual(self.lab.devices()["saved_devices"][0]["calibration"], "saved")
+            self.assertEqual(self.bus.writes, [])
+
     def test_role_alias_uses_original_profile_role(self):
         with patch.object(
             self.lab.device_registry,

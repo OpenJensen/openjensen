@@ -634,6 +634,8 @@ export function useRobotLab() {
       done?.(result);
       setNotice(announce && !(isStatus(result) && result.session?.error) ? label : null);
       void client.invalidateQueries({ queryKey: ['robot-lab', 'datasets'] });
+      void client.invalidateQueries({ queryKey: ['robot-lab', 'devices'] });
+      void client.invalidateQueries({ queryKey: ['robot-lab', 'calibration-profiles'] });
       void client.invalidateQueries({ queryKey: statusKey });
     } catch (failure) {
       if (mounted.current && token === epoch.current) {
@@ -907,7 +909,7 @@ export function useRobotLab() {
       : selectedProfile?.valid === false
         ? 'Invalid profile'
         : selectedProfile && !selectedCalibrated
-          ? 'Recalibration needed'
+          ? 'Review needed'
           : profileCheck?.state === 'unavailable' && profileCheck.error
             ? 'Check failed'
             : profileCheck?.state === 'mismatch'

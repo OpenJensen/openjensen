@@ -325,23 +325,27 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin', 
           ? route.fulfill({ status: 503, json: { detail: 'Camera disconnected.' } })
           : route.fulfill({ contentType: 'image/png', body: pixel });
       if (action === '/diagnostics') return route.fulfill({ json: { ...state.status.diagnostics, samples: [] } });
-      if (action === '/calibration/profiles')
+      if (action === '/calibration/profiles') {
+        const query = new URL(request.url()).searchParams;
+        const profile = state.status.calibrations.find(
+          (p: any) => p.robot_id === query.get('robot_id') && p.role === query.get('role'),
+        );
         return route.fulfill({
           json: {
-            needs_review: state.status.calibrations.some((p: any) => p.setup_fresh === false),
+            needs_review: !profile || profile.setup_fresh === false || profile.valid === false,
             profiles: [
               {
                 key: 'a'.repeat(64),
-                robot_id: 'my-so101',
-                role: 'follower',
+                robot_id: query.get('robot_id'),
+                role: query.get('role'),
                 saved_at: 1794000000,
                 source: 'saved profile',
                 current: true,
               },
               {
                 key: 'b'.repeat(64),
-                robot_id: 'my-so101',
-                role: 'follower',
+                robot_id: query.get('robot_id'),
+                role: query.get('role'),
                 saved_at: 1793000000,
                 source: 'backup',
                 current: false,
@@ -349,11 +353,13 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin', 
             ],
           },
         });
+      }
       if (action === '/calibration/reuse') {
         if (state.calibrationImportError)
           return route.fulfill({ status: 422, json: { detail: state.calibrationImportError } });
         state.status.session.error = null;
         state.status.calibrations = [
+          ...state.status.calibrations.filter((p: any) => p.robot_id !== body.robot_id || p.role !== body.role),
           {
             robot_id: body.robot_id,
             role: body.role,
@@ -2197,7 +2203,7 @@ test('readiness never turns an invalid or stale profile green and shows hardware
   state.status.calibrations[0] = { ...state.status.calibrations[0], valid: true, setup_port: port, setup_fresh: false };
   await page.getByRole('button', { name: 'Refresh devices', exact: true }).click();
   await openTab(page, 'Calibrate');
-  await expect(readiness).toContainText('Recalibration needed');
+  await expect(readiness).toContainText('Review needed');
   state.status.calibrations[0].setup_fresh = true;
   await page.getByRole('button', { name: 'Refresh devices', exact: true }).click();
   await page.route('**/api/v1/robot-lab/probe', (route) =>
@@ -3024,14 +3030,14 @@ test('local calibration profiles recover a stale arm without starting motion', a
     .getByRole('navigation', { name: 'Robot Lab tabs' })
     .getByRole('button', { name: 'Teleoperation', exact: true })
     .click();
-  await expect(page.getByRole('region', { name: 'Calibration recovery' })).toBeVisible();
-  await page.getByRole('button', { name: 'Review my-so101 calibration', exact: true }).click();
-  const recovery = page.getByRole('region', { name: 'Reuse saved calibration' });
-  await expect(recovery).toContainText('Calibration needs review');
-  await expect(recovery.getByRole('button', { name: 'Use saved profile', exact: true })).toBeDisabled();
-  await recovery.getByRole('combobox', { name: 'Local calibration profile' }).selectOption('b'.repeat(64));
+  await expect(page.getByRole('region', { name: 'Arm calibration status' })).toBeVisible();
+  await page.getByRole('button', { name: 'Review calibration', exact: true }).click();
+  const recovery = page.getByRole('region', { name: 'Calibration profile' });
+  await expect(recovery).toContainText('This arm needs a calibration check');
+  await expect(recovery.getByRole('button', { name: 'Verify saved calibration', exact: true })).toBeDisabled();
+  await recovery.getByRole('combobox', { name: 'Saved calibration' }).selectOption('b'.repeat(64));
   await recovery.getByRole('checkbox').check();
-  await recovery.getByRole('button', { name: 'Use saved profile', exact: true }).click();
+  await recovery.getByRole('button', { name: 'Use this profile', exact: true }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Calibration saved locally and verified' })).toBeVisible();
   expect(writes(state, '/calibration/reuse')[0].body).toEqual({
     robot_id: 'my-so101',
@@ -3051,15 +3057,59 @@ test('motor calibration recovery retains mismatched-file error until an explicit
   const state = await fixture(page, true);
   state.calibrationImportError = 'Saved profile differs from the motors: gripper. No settings were changed.';
   await openTab(page, 'Calibrate');
-  const recovery = page.getByRole('region', { name: 'Reuse saved calibration' });
+  const recovery = page.getByRole('region', { name: 'Calibration profile' });
+  await recovery.getByRole('button', { name: 'Change profile', exact: true }).click();
   await recovery.getByRole('checkbox').check();
-  await recovery.getByRole('button', { name: 'Use saved profile', exact: true }).click();
+  await recovery.getByRole('button', { name: 'Use this profile', exact: true }).click();
   await expect(page.getByRole('alert').filter({ hasText: 'Saved profile differs' })).toBeVisible();
   expect(writes(state, '/calibration/reuse')).toHaveLength(1);
   state.calibrationImportError = null;
-  await recovery.getByRole('button', { name: 'Use calibration on motors', exact: true }).click();
+  await recovery.getByRole('button', { name: 'Settings on motors', exact: true }).click();
+  await recovery.getByRole('checkbox').check();
+  await recovery.getByRole('button', { name: 'Read and save motor settings', exact: true }).click();
   expect(writes(state, '/calibration/reuse')[1].body.source).toBe('motors');
   expect(writes(state, '/calibration/reuse')[1].body.profile_key).toBeUndefined();
-  await expect(recovery.getByRole('checkbox')).not.toBeChecked();
+  await expect(recovery.getByRole('checkbox')).toHaveCount(0);
+  await expect(recovery).toContainText('Your calibration is saved. You do not need to save it again.');
   expect(writes(state, '/control/start')).toEqual([]);
+});
+
+test('a saved follower is not requested again when only the leader needs review', async ({ page }, testInfo) => {
+  const state = await fixture(page, true);
+  state.status.calibrations[0].setup_fresh = true;
+  state.status.calibrations.push({
+    robot_id: 'my-so101-leader',
+    role: 'leader',
+    path: 'leader.json',
+    valid: true,
+    setup_fresh: false,
+  });
+  state.status.session.error =
+    'Motor setup changed on this port. Review a saved calibration or use the calibration on the motors before control';
+  await openTab(page, 'Teleoperate');
+  await page.getByRole('button', { name: /Leader → follower/ }).click();
+  const readiness = page.getByRole('region', { name: 'Arm calibration status' });
+  const follower = readiness.getByLabel('my-so101', { exact: true });
+  const leader = readiness.getByLabel('my-so101-leader', { exact: true });
+  await expect(follower).toContainText('Saved — no action needed');
+  await expect(follower.getByRole('button', { name: 'Review calibration' })).toHaveCount(0);
+  await expect(leader).toContainText('Needs review');
+  await expect(page.getByRole('alert').filter({ hasText: 'Motor setup changed' })).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath('per-arm-calibration.png'), fullPage: true });
+  await leader.getByRole('button', { name: 'Review calibration' }).click();
+  const profile = page.getByRole('region', { name: 'Calibration profile' });
+  await profile.getByRole('checkbox').check();
+  await profile.getByRole('button', { name: 'Verify saved calibration' }).click();
+  await expect(profile).toContainText('Saved and ready');
+  await expect(profile.getByRole('checkbox')).toHaveCount(0);
+  await profile.getByRole('button', { name: 'Continue to teleoperation' }).click();
+  await expect(readiness.getByText('Saved — no action needed', { exact: true })).toHaveCount(2);
+  await page.reload();
+  await openTab(page, 'Teleoperate');
+  await page.getByRole('button', { name: /Leader → follower/ }).click();
+  await expect(readiness.getByText('Saved — no action needed', { exact: true })).toHaveCount(2);
+  await expect(readiness.getByRole('button', { name: 'Review calibration' })).toHaveCount(0);
+  expect(writes(state, '/calibration/reuse')).toHaveLength(1);
+  expect(writes(state, '/calibration/reuse')[0].body.robot_id).toBe('my-so101-leader');
+  expect(writes(state, '/control/start')).toHaveLength(0);
 });

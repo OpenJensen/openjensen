@@ -11,6 +11,7 @@ import { RobotLabPolicy } from './robot-lab-policy';
 import { RobotLabRecord } from './robot-lab-record';
 import { RobotLabCamera } from './robot-lab-camera';
 import { RobotLabDiagnostics } from './robot-lab-diagnostics';
+import { RobotLabCalibrationReadiness, isCalibrationSetupError } from './robot-lab-calibration-readiness';
 import './robot-lab.css';
 
 export function RobotLab() {
@@ -35,6 +36,9 @@ export function RobotLab() {
     step,
     stop,
   } = lab;
+  const hasCalibrationStatus = online && !!state?.capabilities?.calibration_profiles && step >= 3 && !active;
+  const showError = (message?: string | null) =>
+    !!message && !(hasCalibrationStatus && isCalibrationSetupError(message));
   return (
     <div className="robot-lab">
       <div className="robot-lab-statusbar">
@@ -108,47 +112,20 @@ export function RobotLab() {
           </button>
         ))}
       </nav>
-      {step !== 2 && error && <HardwareNotice label="Latest operation error" message={error} />}
-      {step !== 2 && session?.error && session.error !== error && !previousSessionError && (
-        <HardwareNotice label="Hardware session error" message={session.error} />
-      )}
-      {previousSessionError && (
+      {step !== 2 && showError(error) && error && <HardwareNotice label="Latest operation error" message={error} />}
+      {step !== 2 &&
+        showError(session?.error) &&
+        session?.error &&
+        session.error !== error &&
+        !previousSessionError && <HardwareNotice label="Hardware session error" message={session.error} />}
+      {showError(previousSessionError) && previousSessionError && (
         <HardwareNotice
           label="Previous session error"
           context="Previous hardware session stopped"
           message={previousSessionError}
         />
       )}
-      {step !== 2 &&
-        !active &&
-        /calibration|Motor IDs changed/i.test(
-          [error, session?.error, previousSessionError].filter(Boolean).join(' '),
-        ) && (
-          <div className="robot-lab-event robot-lab-warning" role="region" aria-label="Calibration recovery">
-            <strong>Review calibration before control</strong>
-            <p>
-              Your saved files are still available. Open the affected arm to reuse a local profile or its motor
-              calibration.
-            </p>
-            <div className="robot-lab-actions">
-              {lab.catalog
-                .filter((device) => device.connected)
-                .map((device) => (
-                  <button
-                    key={device.id}
-                    className="secondary-button"
-                    disabled={busy}
-                    onClick={() => {
-                      lab.chooseDevice(device);
-                      lab.openStep(2);
-                    }}
-                  >
-                    Review {device.name || device.robot_id} calibration
-                  </button>
-                ))}
-            </div>
-          </div>
-        )}
+      {hasCalibrationStatus && <RobotLabCalibrationReadiness lab={lab} />}
       {(reconnecting || (!online && localCalibrationRef.current)) && (
         <p className="robot-lab-event robot-lab-warning" role="status">
           {localCalibrationRef.current

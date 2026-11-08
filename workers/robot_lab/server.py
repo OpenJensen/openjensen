@@ -785,12 +785,16 @@ class RobotLab:
                 calibrations.append(self.profile_info(path.stem, role))
         for device in self.device_registry.read():
             for role in ("leader", "follower"):
-                if not any(
-                    p["robot_id"] == device["robot_id"] and p["role"] == role for p in calibrations
-                ):
-                    info = self.profile_info(device["robot_id"], role)
-                    if info["valid"]:
-                        calibrations.append(info)
+                # A saved file may refer to a former USB port. Report freshness
+                # for this device's current port, including already-known profiles.
+                info = self.profile_info(device["robot_id"], role, device.get("port") or None)
+                calibrations = [
+                    p
+                    for p in calibrations
+                    if (p["robot_id"], p["role"]) != (device["robot_id"], role)
+                ]
+                if info["valid"]:
+                    calibrations.append(info)
         writer = self.writer
         with self.lifecycle_lock:
             assembled = json.loads(json.dumps(self.assembled_state))
@@ -949,7 +953,9 @@ class RobotLab:
                 except ValueError, OSError:
                     device["motor_ids"] = False
                 profile = self.profile_info(
-                    device["robot_id"], device["profile_role"] or "follower"
+                    device["robot_id"],
+                    device["profile_role"] or "follower",
+                    device["port"] or None,
                 )
                 device["calibration"] = (
                     "saved"
