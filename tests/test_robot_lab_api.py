@@ -780,3 +780,48 @@ def test_camera_modes_proxy_and_strict_admission(tmp_path):
             )
         assert len(calls) == 2
     asyncio.run(companion.close())
+
+
+def test_local_calibration_recovery_proxy_and_strict_fields(tmp_path):
+    connection(tmp_path)
+    calls = []
+
+    def handler(request):
+        calls.append((request.method, request.url.path, request.url.query))
+        return httpx.Response(200, json={"ok": True})
+
+    companion = bridge(tmp_path, handler)
+    payload = {
+        "robot_id": "arm",
+        "role": "follower",
+        "port": "fake",
+        "source": "saved",
+        "profile_key": "a" * 64,
+        "same_arm": True,
+        "confirm": "REUSE CALIBRATION",
+    }
+    with browser(tmp_path, companion) as client:
+        assert (
+            client.get(
+                "/api/v1/robot-lab/calibration/profiles?robot_id=arm&role=follower"
+            ).status_code
+            == 200
+        )
+        assert client.post("/api/v1/robot-lab/calibration/reuse", json=payload).status_code == 200
+        for invalid in [
+            {"same_arm": "true"},
+            {"source": "arbitrary"},
+            {"profile_key": "../file"},
+            {"confirm": "yes"},
+            {"arbitrary": True},
+        ]:
+            assert (
+                client.post(
+                    "/api/v1/robot-lab/calibration/reuse", json={**payload, **invalid}
+                ).status_code
+                == 422
+            )
+    assert len(calls) == 2
+    assert calls[0] == ("GET", "/v1/calibration/profiles", b"robot_id=arm&role=follower")
+    assert calls[1][:2] == ("POST", "/v1/calibration/reuse")
+    asyncio.run(companion.close())

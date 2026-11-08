@@ -15562,6 +15562,116 @@
         ]
       }
     },
+    "/api/v1/robot-lab/calibration/profiles": {
+      "get": {
+        "operationId": "robot_lab_get_calibration_profiles",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Get Calibration Profiles",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/calibration/reuse": {
+      "post": {
+        "operationId": "robot_lab_post_calibration_reuse",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "confirm": {
+                    "const": "REUSE CALIBRATION",
+                    "title": "Confirm",
+                    "type": "string"
+                  },
+                  "port": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Port",
+                    "type": "string"
+                  },
+                  "profile_key": {
+                    "anyOf": [
+                      {
+                        "pattern": "^[a-f0-9]{64}$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Profile Key"
+                  },
+                  "robot_id": {
+                    "maxLength": 64,
+                    "minLength": 1,
+                    "pattern": "^[A-Za-z0-9_-]+$",
+                    "title": "Robot Id",
+                    "type": "string"
+                  },
+                  "role": {
+                    "enum": [
+                      "follower",
+                      "leader"
+                    ],
+                    "title": "Role",
+                    "type": "string"
+                  },
+                  "same_arm": {
+                    "title": "Same Arm",
+                    "type": "boolean"
+                  },
+                  "source": {
+                    "enum": [
+                      "saved",
+                      "motors"
+                    ],
+                    "title": "Source",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "robot_id",
+                  "role",
+                  "port",
+                  "source",
+                  "same_arm",
+                  "confirm"
+                ],
+                "title": "CalibrationReuseRequest",
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Calibration Reuse",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
     "/api/v1/robot-lab/calibration/start": {
       "post": {
         "operationId": "robot_lab_post_calibration_start",

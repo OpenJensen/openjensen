@@ -2128,6 +2128,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/robot-lab/calibration/profiles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Robot Lab Get Calibration Profiles */
+        get: operations["robot_lab_get_calibration_profiles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/robot-lab/calibration/reuse": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Robot Lab Post Calibration Reuse */
+        post: operations["robot_lab_post_calibration_reuse"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/robot-lab/calibration/start": {
         parameters: {
             query?: never;
@@ -11140,6 +11174,74 @@ export interface operations {
                      * @enum {string}
                      */
                     role: "follower" | "leader";
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    robot_lab_get_calibration_profiles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    robot_lab_post_calibration_reuse: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /**
+                     * Confirm
+                     * @constant
+                     */
+                    confirm: "REUSE CALIBRATION";
+                    /** Port */
+                    port: string;
+                    /** Profile Key */
+                    profile_key?: string | null;
+                    /** Robot Id */
+                    robot_id: string;
+                    /**
+                     * Role
+                     * @enum {string}
+                     */
+                    role: "follower" | "leader";
+                    /** Same Arm */
+                    same_arm: boolean;
+                    /**
+                     * Source
+                     * @enum {string}
+                     */
+                    source: "saved" | "motors";
                 };
             };
         };

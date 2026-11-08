@@ -103,6 +103,17 @@ class CalibrationImportRequest(BaseModel):
     confirm: Literal["IMPORT CALIBRATION"]
 
 
+class CalibrationReuseRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    robot_id: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
+    role: Literal["follower", "leader"]
+    port: str = Field(min_length=1, max_length=200)
+    source: Literal["saved", "motors"]
+    profile_key: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
+    same_arm: StrictBool
+    confirm: Literal["REUSE CALIBRATION"]
+
+
 class CameraModeRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     fourcc: str = Field(pattern=r"^[A-Z0-9]{4}$")
@@ -236,6 +247,13 @@ async def proxy(path: str, request: Request):
                 DeviceVisibilityRequest.model_validate(payload)
             except ValidationError:
                 raise HTTPException(422, "Choose a saved device") from None
+        if path == "calibration/reuse":
+            try:
+                CalibrationReuseRequest.model_validate(payload)
+            except ValidationError:
+                raise HTTPException(
+                    422, "Choose a calibration source and confirm the same arm"
+                ) from None
         if path == "calibration/import":
             try:
                 CalibrationImportRequest.model_validate(payload)
@@ -286,6 +304,7 @@ PROTOCOL = {
         "camera/settings",
         "diagnostics",
         "calibration/export",
+        "calibration/profiles",
         "policy/catalog",
     },
     "POST": {
@@ -305,6 +324,7 @@ PROTOCOL = {
         "setup/assembled/finish",
         "setup/assembled/cancel",
         "calibration/start",
+        "calibration/reuse",
         "calibration/import",
         "calibration/center",
         "calibration/finish",
@@ -395,6 +415,8 @@ for method, protocol_paths in PROTOCOL.items():
                                 if protocol_path == "devices/configure"
                                 else DeviceVisibilityRequest
                                 if protocol_path in {"devices/remove", "devices/restore"}
+                                else CalibrationReuseRequest
+                                if protocol_path == "calibration/reuse"
                                 else CalibrationImportRequest
                                 if protocol_path == "calibration/import"
                                 else RecordingStartRequest
@@ -419,6 +441,7 @@ for method, protocol_paths in PROTOCOL.items():
                 "recording/collection/next",
                 "recording/collection/rerecord",
                 "calibration/import",
+                "calibration/reuse",
                 "devices/configure",
                 "devices/remove",
                 "devices/restore",

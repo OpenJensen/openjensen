@@ -119,6 +119,36 @@ export function RobotLab() {
           message={previousSessionError}
         />
       )}
+      {step !== 2 &&
+        !active &&
+        /calibration|Motor IDs changed/i.test(
+          [error, session?.error, previousSessionError].filter(Boolean).join(' '),
+        ) && (
+          <div className="robot-lab-event robot-lab-warning" role="region" aria-label="Calibration recovery">
+            <strong>Review calibration before control</strong>
+            <p>
+              Your saved files are still available. Open the affected arm to reuse a local profile or its motor
+              calibration.
+            </p>
+            <div className="robot-lab-actions">
+              {lab.catalog
+                .filter((device) => device.connected)
+                .map((device) => (
+                  <button
+                    key={device.id}
+                    className="secondary-button"
+                    disabled={busy}
+                    onClick={() => {
+                      lab.chooseDevice(device);
+                      lab.openStep(2);
+                    }}
+                  >
+                    Review {device.name || device.robot_id} calibration
+                  </button>
+                ))}
+            </div>
+          </div>
+        )}
       {(reconnecting || (!online && localCalibrationRef.current)) && (
         <p className="robot-lab-event robot-lab-warning" role="status">
           {localCalibrationRef.current

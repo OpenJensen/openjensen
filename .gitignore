@@ -48,3 +48,6 @@ sim-rollout-runner*.json
 /workers/isaac_sim/scenes/so101-pickup/preview.png
 /workers/isaac_sim/scenes/so101-pickup/evidence/calibration/report.json
 /workers/vla_cpp/configs/cuda-inputs.json
+
+# Private calibration history belongs to the robot computer.
+calibration-profiles/

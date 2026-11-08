@@ -37,6 +37,7 @@ function initialStatus(calibrated = false): any {
       joint_sliders: true,
       calibration_persistence: true,
       calibration_transfer: true,
+      calibration_profiles: true,
       device_registry: true,
       device_removal: true,
       run_policy: true,
@@ -324,6 +325,45 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin', 
           ? route.fulfill({ status: 503, json: { detail: 'Camera disconnected.' } })
           : route.fulfill({ contentType: 'image/png', body: pixel });
       if (action === '/diagnostics') return route.fulfill({ json: { ...state.status.diagnostics, samples: [] } });
+      if (action === '/calibration/profiles')
+        return route.fulfill({
+          json: {
+            needs_review: state.status.calibrations.some((p: any) => p.setup_fresh === false),
+            profiles: [
+              {
+                key: 'a'.repeat(64),
+                robot_id: 'my-so101',
+                role: 'follower',
+                saved_at: 1794000000,
+                source: 'saved profile',
+                current: true,
+              },
+              {
+                key: 'b'.repeat(64),
+                robot_id: 'my-so101',
+                role: 'follower',
+                saved_at: 1793000000,
+                source: 'backup',
+                current: false,
+              },
+            ],
+          },
+        });
+      if (action === '/calibration/reuse') {
+        if (state.calibrationImportError)
+          return route.fulfill({ status: 422, json: { detail: state.calibrationImportError } });
+        state.status.session.error = null;
+        state.status.calibrations = [
+          {
+            robot_id: body.robot_id,
+            role: body.role,
+            path: 'private-calibration.json',
+            valid: true,
+            setup_fresh: true,
+          },
+        ];
+        return route.fulfill({ json: state.status });
+      }
       if (action === '/calibration/export')
         return route.fulfill({
           json: {
@@ -2973,4 +3013,53 @@ test('camera settings report pair failures and lock during control', async ({ pa
     ),
   ).toBeVisible();
   expect(writes(state, '/camera/configure')).toHaveLength(1);
+});
+
+test('local calibration profiles recover a stale arm without starting motion', async ({ page }, testInfo) => {
+  const state = await fixture(page, true);
+  state.status.calibrations[0].setup_fresh = false;
+  state.status.session.error =
+    'Motor setup changed on this port. Review a saved calibration or use the calibration on the motors before control';
+  await page
+    .getByRole('navigation', { name: 'Robot Lab tabs' })
+    .getByRole('button', { name: 'Teleoperation', exact: true })
+    .click();
+  await expect(page.getByRole('region', { name: 'Calibration recovery' })).toBeVisible();
+  await page.getByRole('button', { name: 'Review my-so101 calibration', exact: true }).click();
+  const recovery = page.getByRole('region', { name: 'Reuse saved calibration' });
+  await expect(recovery).toContainText('Calibration needs review');
+  await expect(recovery.getByRole('button', { name: 'Use saved profile', exact: true })).toBeDisabled();
+  await recovery.getByRole('combobox', { name: 'Local calibration profile' }).selectOption('b'.repeat(64));
+  await recovery.getByRole('checkbox').check();
+  await recovery.getByRole('button', { name: 'Use saved profile', exact: true }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Calibration saved locally and verified' })).toBeVisible();
+  expect(writes(state, '/calibration/reuse')[0].body).toEqual({
+    robot_id: 'my-so101',
+    role: 'follower',
+    port,
+    source: 'saved',
+    profile_key: 'b'.repeat(64),
+    same_arm: true,
+    confirm: 'REUSE CALIBRATION',
+  });
+  expect(writes(state, '/calibration/start')).toEqual([]);
+  expect(writes(state, '/control/start')).toEqual([]);
+  await page.screenshot({ path: testInfo.outputPath('local-calibration-profiles.png'), fullPage: true });
+});
+
+test('motor calibration recovery retains mismatched-file error until an explicit choice', async ({ page }) => {
+  const state = await fixture(page, true);
+  state.calibrationImportError = 'Saved profile differs from the motors: gripper. No settings were changed.';
+  await openTab(page, 'Calibrate');
+  const recovery = page.getByRole('region', { name: 'Reuse saved calibration' });
+  await recovery.getByRole('checkbox').check();
+  await recovery.getByRole('button', { name: 'Use saved profile', exact: true }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'Saved profile differs' })).toBeVisible();
+  expect(writes(state, '/calibration/reuse')).toHaveLength(1);
+  state.calibrationImportError = null;
+  await recovery.getByRole('button', { name: 'Use calibration on motors', exact: true }).click();
+  expect(writes(state, '/calibration/reuse')[1].body.source).toBe('motors');
+  expect(writes(state, '/calibration/reuse')[1].body.profile_key).toBeUndefined();
+  await expect(recovery.getByRole('checkbox')).not.toBeChecked();
+  expect(writes(state, '/control/start')).toEqual([]);
 });

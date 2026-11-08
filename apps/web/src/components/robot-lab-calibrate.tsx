@@ -2,6 +2,7 @@
 
 import { Icon } from '@/components/icon';
 import { robotApi } from '@/lib/robot-api';
+import { RobotLabCalibrationProfiles } from './robot-lab-calibration-profiles';
 import { RobotLabCalibrationTransfer } from './robot-lab-calibration-transfer';
 import { Heading, Notice, HardwareNotice, RangeTable } from './robot-lab-shared';
 import type { RobotLabState } from './robot-lab-state';
@@ -46,6 +47,7 @@ export function RobotLabCalibrate({ lab }: { lab: RobotLabState }) {
           </p>
         )}
         {identity}
+        <RobotLabCalibrationProfiles key={`profiles/${role}/${robotId}/${port}`} lab={lab} />
         <RobotLabCalibrationTransfer key={`${role}/${robotId}`} lab={lab} />
         {jointGuide}
         <div className="robot-lab-calibration-steps">
@@ -217,7 +219,7 @@ export function RobotLabCalibrate({ lab }: { lab: RobotLabState }) {
                 : profileCheck?.state === 'matched'
                   ? 'Saved offsets and limits match all six connected motors.'
                   : profileCheck?.state === 'mismatch'
-                    ? 'Motor offsets or limits differ from the saved profile. Import the matching calibration file or recalibrate before control.'
+                    ? 'Motor offsets or limits differ from the saved profile. Choose a matching local profile, use the calibration on the motors, or calibrate manually.'
                     : !selectedCalibrated
                       ? 'Motor setup changed after this calibration was saved.'
                       : 'Middle and ranges are saved. Scan the arm to compare its current settings.'}

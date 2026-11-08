@@ -27,6 +27,7 @@ from agent_control import AgentExecutor
 from agent_control import strict_json as agent_json
 from assembled_session import AssembledSession, CalibrationRevisions, empty_assembled_state
 from calibration_draft import CalibrationDraft, file_hash
+from calibration_profiles import CalibrationProfiles
 from camera import MAX_CAMERA_INDEX, CameraPool
 from dataset import DatasetWriter, atomic_json, dataset_file, list_datasets, manifest, safe_slug
 from device_registry import DeviceRegistry
@@ -215,6 +216,7 @@ class RobotLab:
         self.observe_timeout = observe_timeout
         self.device_registry = DeviceRegistry(self.data_dir)
         self.calibration_revisions = CalibrationRevisions(self.data_dir)
+        self.calibration_profiles = CalibrationProfiles(self.data_dir, valid_calibration)
         self.assembled_session = None
         self.assembled_state = empty_assembled_state()
         saved = latest_saved_mapping(self.data_dir)
@@ -438,9 +440,160 @@ class RobotLab:
         calibration = valid_calibration(json.loads(path.read_text()))
         if port and not self.calibration_revisions.fresh(port, robot_id, role, path):
             raise RequestError(
-                "Motor IDs changed on this port; save a new calibration before control"
+                "Motor setup changed on this port. Review a saved calibration or use the "
+                "calibration on the motors before control"
             )
         return calibration
+
+    def calibration_library(self, robot_id, role, port=None):
+        path = self.calibration_path(robot_id, role)
+        effective_role = "leader" if path.parent.name == "so_leader" else "follower"
+        entries = self.calibration_profiles.entries(self.calibration_root, effective_role)
+        current = self.profile_info(robot_id, role, port)
+        calibration = self.load_calibration(robot_id, role) if current["valid"] else None
+        return {
+            "profiles": [
+                {key: value for key, value in entry.items() if key != "calibration"}
+                | {
+                    "current": entry["robot_id"] == path.stem
+                    and entry["calibration"] == calibration
+                }
+                for entry in entries
+            ],
+            "needs_review": not current["valid"] or not current["setup_fresh"],
+        }
+
+    def _archive_calibration(self, robot_id, role, path, source):
+        effective_role = "leader" if path.parent.name == "so_leader" else "follower"
+        if path.is_file() and not path.is_symlink():
+            try:
+                calibration = valid_calibration(self.calibration_profiles.read(path))
+            except ValueError, TypeError, KeyError:
+                return  # Invalid older files are still retained by the file backup.
+            self.calibration_profiles.save(path.stem, effective_role, calibration, source)
+
+    def calibration_reuse(self, payload):
+        require(payload, "confirm", "REUSE CALIBRATION")
+        if set(payload) - {
+            "confirm",
+            "robot_id",
+            "role",
+            "port",
+            "source",
+            "profile_key",
+            "same_arm",
+        }:
+            raise RequestError("Invalid calibration recovery request")
+        if payload.get("same_arm") is not True:
+            raise RequestError("Confirm the same physical arm and unchanged joint-to-motor IDs")
+        source = payload.get("source")
+        if source not in {"saved", "motors"}:
+            raise RequestError("Choose a saved profile or calibration on the motors")
+        robot_id, role = payload.get("robot_id"), payload.get("role")
+        path = self.calibration_path(robot_id, role)
+        effective_role = "leader" if path.parent.name == "so_leader" else "follower"
+        with self.lock:
+            self._idle()
+            generation = self.generation
+            if self.calibration_state.get("recoverable"):
+                raise RequestError(
+                    "Finish or cancel the captured calibration before reusing a profile"
+                )
+            port = self._port(payload.get("port"))
+            if path.is_symlink() or (path.exists() and not path.is_file()):
+                raise RequestError("Calibration destination must be a regular file")
+            selected = None
+            if source == "saved":
+                selected = next(
+                    (
+                        entry
+                        for entry in self.calibration_profiles.entries(
+                            self.calibration_root, effective_role
+                        )
+                        if entry["key"] == payload.get("profile_key")
+                    ),
+                    None,
+                )
+                if selected is None:
+                    raise RequestError("Saved profile changed or is unavailable; refresh the list")
+            elif payload.get("profile_key") is not None:
+                raise RequestError("Do not choose a file when reading calibration from motors")
+            bus = self.bus_factory(port)
+            try:
+                with bus.lock:
+                    bus.check_six()
+                    if any(bus.read("Torque_Enable", IDS[joint]) != 0 for joint in JOINTS):
+                        raise RequestError(
+                            "Stop the arm before reusing calibration; torque must be off"
+                        )
+                    actual = valid_calibration(bus.read_calibration())
+                    if actual != bus.read_calibration():
+                        raise RequestError("Motor calibration changed while reading; retry")
+                    if all(
+                        entry["homing_offset"] == 0
+                        and entry["range_min"] == 0
+                        and entry["range_max"] == 4095
+                        for entry in actual.values()
+                    ):
+                        raise RequestError(
+                            "Motors have default full-range settings. "
+                            "Complete manual calibration first"
+                        )
+                    calibration = selected["calibration"] if selected else actual
+                    different = [
+                        joint.replace("_", " ")
+                        for joint in JOINTS
+                        if calibration[joint] != actual[joint]
+                    ]
+                    if different:
+                        raise RequestError(
+                            "Saved profile differs from the motors: "
+                            + ", ".join(different)
+                            + ". Choose a matching profile, use the calibration on the motors "
+                            "if this arm is already calibrated, or calibrate manually. "
+                            "No settings were changed."
+                        )
+            finally:
+                # Recovery never writes motor settings, goals, or torque.
+                bus.close()
+            with self.stop_lock:
+                if generation != self.generation or self.stopping:
+                    raise RequestError("Calibration recovery cancelled by Stop")
+                self._archive_calibration(robot_id, role, path, "previous profile")
+                self.calibration_profiles.save(path.stem, effective_role, calibration, source)
+                backup = None
+                if path.exists():
+                    backup = path.with_name(path.stem + f".backup-{time.time_ns()}.json")
+                    shutil.copy2(path, backup)
+                    backup.chmod(0o600)
+                try:
+                    atomic_json(path, calibration)
+                    path.chmod(0o600)
+                    self.calibration_revisions.acknowledge(port, robot_id, role, path)
+                except Exception:
+                    if backup is not None:
+                        shutil.copy2(backup, path)
+                    else:
+                        path.unlink(missing_ok=True)
+                    raise
+                if self.error and self.error.startswith(
+                    (
+                        "Motor setup changed on this port",
+                        "Motor IDs changed on this port",
+                        "Motor calibration differs from the saved profile",
+                        "Leader calibration differs from its saved profile",
+                        "No saved calibration for ",
+                    )
+                ):
+                    self.error = None
+                self.diagnostics.emit(
+                    "calibration_reused",
+                    robot_id=robot_id,
+                    role=role,
+                    source=source,
+                    previous_profile_backed_up=backup is not None,
+                )
+            return self.status()
 
     def calibration_export(self, robot_id, role):
         with self.lock:
@@ -520,6 +673,7 @@ class RobotLab:
             with self.stop_lock:
                 if generation != self.generation or self.stopping:
                     raise RequestError("Calibration import cancelled by Stop")
+                self._archive_calibration(robot_id, role, path, "previous profile")
                 backup = None
                 if path.exists():
                     backup = path.with_name(path.stem + f".backup-{time.time_ns()}.json")
@@ -528,6 +682,7 @@ class RobotLab:
                 try:
                     atomic_json(path, calibration)
                     path.chmod(0o600)
+                    self._archive_calibration(robot_id, role, path, "imported")
                     if verified:
                         self.calibration_revisions.acknowledge(port, robot_id, role, path)
                 except Exception:
@@ -676,6 +831,7 @@ class RobotLab:
                 "calibration": hardware,
                 "calibration_persistence": hardware,
                 "calibration_transfer": True,
+                "calibration_profiles": True,
                 "device_registry": True,
                 "device_removal": True,
                 "control": hardware,
@@ -1396,10 +1552,14 @@ class RobotLab:
                         raise HardwareError(
                             "Calibration read-back did not match; cancel and inspect wiring"
                         )
+                    self._archive_calibration(self.robot_id, self.role, path, "previous profile")
                     if path.exists():
                         backup = path.with_name(path.stem + f".backup-{time.time_ns()}.json")
                         backup.write_bytes(path.read_bytes())
+                        backup.chmod(0o600)
                     atomic_json(path, calibration)
+                    path.chmod(0o600)
+                    self._archive_calibration(self.robot_id, self.role, path, "manual calibration")
                     self.calibration_revisions.acknowledge(
                         self.port, self.robot_id, self.role, path
                     )
@@ -2586,6 +2746,19 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, lab.diagnostics.snapshot(full=True))
             if path == "/v1/status":
                 return self._send(200, lab.status())
+            if path == "/v1/calibration/profiles":
+                if (
+                    not {"robot_id", "role"} <= set(query)
+                    or set(query) - {"robot_id", "role", "port"}
+                    or any(len(v) != 1 for v in query.values())
+                ):
+                    raise RequestError("Choose one arm and role")
+                return self._send(
+                    200,
+                    lab.calibration_library(
+                        query["robot_id"][0], query["role"][0], query.get("port", [None])[0]
+                    ),
+                )
             if path == "/v1/calibration/export":
                 if set(query) != {"robot_id", "role"} or any(len(v) != 1 for v in query.values()):
                     raise RequestError("Choose one calibration profile and arm role")
@@ -2743,6 +2916,8 @@ class Handler(BaseHTTPRequestHandler):
                 result = lab.configure_device(payload)
             elif path in ("/v1/devices/remove", "/v1/devices/restore"):
                 result = lab.change_device_visibility(payload, restore=path.endswith("/restore"))
+            elif path == "/v1/calibration/reuse":
+                result = lab.calibration_reuse(payload)
             elif path == "/v1/calibration/import":
                 result = lab.calibration_import(payload)
             elif path == "/v1/calibration/start":

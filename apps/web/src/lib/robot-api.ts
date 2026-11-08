@@ -143,6 +143,7 @@ export type RobotStatus = {
     joint_sliders?: boolean;
     calibration_persistence?: boolean;
     calibration_transfer?: boolean;
+    calibration_profiles?: boolean;
     device_registry?: boolean;
     device_removal?: boolean;
     partial_control?: boolean;
@@ -453,6 +454,26 @@ export const robotApi = {
     request<RobotStatus>('/setup/assembled/accept', { joint, motor_id }),
   finishAssembled: () => request<RobotStatus>('/setup/assembled/finish', { confirm: 'SAVE MOTOR IDS' }),
   cancelAssembled: () => request<RobotStatus>('/setup/assembled/cancel', {}),
+  calibrationProfiles: (robot_id: string, role: RobotRole, port: string) =>
+    request<{
+      profiles: {
+        key: string;
+        robot_id: string;
+        role: RobotRole;
+        saved_at: number;
+        source: string;
+        current: boolean;
+      }[];
+      needs_review: boolean;
+    }>(`/calibration/profiles?${new URLSearchParams({ robot_id, role, port })}`),
+  reuseCalibration: (input: {
+    robot_id: string;
+    role: RobotRole;
+    port: string;
+    source: 'saved' | 'motors';
+    profile_key?: string;
+    same_arm: boolean;
+  }) => request<RobotStatus>('/calibration/reuse', { ...input, confirm: 'REUSE CALIBRATION' }),
   exportCalibration: (robot_id: string, role: RobotRole) =>
     request<CalibrationDocument>(`/calibration/export?${new URLSearchParams({ robot_id, role })}`),
   importCalibration: (input: {
