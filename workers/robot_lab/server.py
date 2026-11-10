@@ -23,6 +23,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
 
+from agent_collection import AgentCollection
 from agent_control import AgentExecutor
 from agent_control import strict_json as agent_json
 from assembled_session import AssembledSession, CalibrationRevisions, empty_assembled_state
@@ -308,6 +309,7 @@ class RobotLab:
         self.threads = []
         self.agent = AgentExecutor(self)
         self.policy = PolicyRunner(self)
+        self.agent_collection = AgentCollection(self)
         self.last_raw = {}
         self.last_fault = None
         self.motor_alarms = {}
@@ -2522,7 +2524,20 @@ class RobotLab:
                 self.positions = {
                     j: normalized(j, value, self.calibration) for j, value in raw.items()
                 }
+                measured_ns = time.monotonic_ns()
+                active_command = self.agent.active_id
                 completed = self.agent.tick(raw)
+                self.agent_collection.sample(
+                    {
+                        "sample_id": str(measured_ns),
+                        "command_id": active_command,
+                        "state_read_monotonic_ns": measured_ns,
+                        "write_returned_monotonic_ns": time.monotonic_ns(),
+                        "measured": dict(self.positions),
+                        "sent": dict(self.action),
+                        "sent_raw": dict(self.commanded_raw),
+                    }
+                )
             if completed is not None:
                 # Disk acknowledgement cannot delay the independent Stop path's
                 # serial torque-off command.
@@ -2776,6 +2791,8 @@ class RobotLab:
         self.finished.set()
         self.stop("Companion shutting down")
         self.policy.close()
+        if self.agent_collection.thread:
+            self.agent_collection.finish({"run_id": self.agent_collection.state.get("run_id")})
         self.camera.close()
         if self.recording_thread:
             self.recording_thread.join(timeout=5)
@@ -2835,6 +2852,8 @@ class Handler(BaseHTTPRequestHandler):
             path, query, lab = unquote(parsed.path), parse_qs(parsed.query), self.server.lab
             if path.startswith("/v1/agent/executions/"):
                 return self._send(200, lab.agent.receipt(path.rsplit("/", 1)[-1]))
+            if path == "/v1/collection/status":
+                return self._send(200, lab.agent_collection.status())
             if path == "/v1/diagnostics":
                 return self._send(200, lab.diagnostics.snapshot(full=True))
             if path == "/v1/status":
@@ -2887,6 +2906,10 @@ class Handler(BaseHTTPRequestHandler):
                 image = (
                     lab.camera.cached_jpeg(index)
                     if lab.mode == "policy"
+                    or (
+                        lab.agent_collection.state.get("status") == "recording"
+                        and index in lab.agent_collection.indices
+                    )
                     or (
                         lab.writer
                         and not lab.writer.finalized
@@ -2953,6 +2976,8 @@ class Handler(BaseHTTPRequestHandler):
                 )
             length = int(self.headers.get("Content-Length", "0"))
             maximum = 4 * 1024**2 if urlsplit(self.path).path == "/v1/policy/preview" else 16_384
+            if urlsplit(self.path).path == "/v1/collection/observation":
+                maximum = 6 * 1024**2
             if not 0 <= length <= maximum:
                 raise RequestError("Request body too large")
             raw = self.rfile.read(length) or b"{}"
@@ -2972,6 +2997,14 @@ class Handler(BaseHTTPRequestHandler):
                 "release",
             }:
                 result = lab.agent.command(path.rsplit("/", 1)[-1], payload)
+            elif path in {
+                "/v1/collection/start",
+                "/v1/collection/finish",
+                "/v1/collection/event",
+                "/v1/collection/stop",
+                "/v1/collection/observation",
+            }:
+                result = getattr(lab.agent_collection, path.rsplit("/", 1)[-1])(payload)
             elif path == "/v1/policy/load":
                 result = lab.policy.load(payload)
             elif path == "/v1/policy/preview":

@@ -1,5 +1,6 @@
 'use client';
 
+import { RobotLabCollection } from './robot-lab-collection';
 import { HardwareNotice } from './robot-lab-shared';
 import { useRobotLab } from './robot-lab-state';
 import { RobotLabDevices, RobotLabDeviceDetail } from './robot-lab-devices';
@@ -109,6 +110,7 @@ export function RobotLab() {
           { title: 'Teleoperation', step: 3 },
           { title: 'Record', step: 4 },
           { title: 'Run policy', step: 5 },
+          { title: 'Astra collection', step: 6 },
         ].map((item) => (
           <button
             key={item.title}
@@ -182,6 +184,7 @@ export function RobotLab() {
             {step === 3 && <RobotLabTeleoperate lab={lab} />}
             {step === 4 && <RobotLabRecord lab={lab} />}
             {step === 5 && <RobotLabPolicy lab={lab} />}
+            {step === 6 && <RobotLabCollection lab={lab} />}
             {busy && (
               <p className="robot-lab-subtle" role="status" style={{ marginTop: 16 }}>
                 {pending === 'Arm stopped.'

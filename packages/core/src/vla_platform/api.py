@@ -30,6 +30,8 @@ from vla_platform.capabilities import registry
 from vla_platform.cloud_api import router as cloud_connections_router
 from vla_platform.cloud_connections import CloudConnections
 from vla_platform.cloud_runs import CloudRunsFeed, read_cloud_runs
+from vla_platform.collection_api import CollectionRuns
+from vla_platform.collection_api import router as collection_router
 from vla_platform.compute_api import router as compute_settings_router
 from vla_platform.compute_targets_api import router as compute_targets_router
 from vla_platform.contracts import (
@@ -171,6 +173,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 source_commit=app.state.application_updates.installed.commit,
             )
             await app.state.agent_control.reconcile()
+            app.state.collection_runs = CollectionRuns(app, settings.data_dir)
             try:
                 await asyncio.to_thread(
                     lambda: initialize_modules(
@@ -199,6 +202,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     if hasattr(app.state, "scenes"):
                         await app.state.scenes.close()
                     try:
+                        if hasattr(app.state, "collection_runs"):
+                            await app.state.collection_runs.close()
                         if hasattr(app.state, "agent_control"):
                             await app.state.agent_control.close()
                         if hasattr(app.state, "module_installations"):
@@ -248,6 +253,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return JSONResponse({"detail": str(exc)}, status_code=503)
 
     app.include_router(agent_control_router)
+    app.include_router(collection_router)
     app.include_router(api_connections_router)
     app.include_router(cloud_connections_router)
     app.include_router(compute_settings_router)

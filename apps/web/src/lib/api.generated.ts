@@ -1593,6 +1593,75 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects/{project_id}/robot-lab/collection-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Runs */
+        get: operations["runs_api_v1_projects__project_id__robot_lab_collection_runs_get"];
+        put?: never;
+        /** Start */
+        post: operations["start_api_v1_projects__project_id__robot_lab_collection_runs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/robot-lab/collection-runs/{ident}/image/{role}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Image */
+        get: operations["image_api_v1_projects__project_id__robot_lab_collection_runs__ident__image__role__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/robot-lab/collection-runs/{ident}/trace": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Trace */
+        get: operations["trace_api_v1_projects__project_id__robot_lab_collection_runs__ident__trace_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/robot-lab/collection-runs/{ident}/{action}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Action */
+        post: operations["action_api_v1_projects__project_id__robot_lab_collection_runs__ident___action__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects/{project_id}/robot-lab/datasets/{dataset_id}/import": {
         parameters: {
             query?: never;
@@ -3939,6 +4008,74 @@ export interface components {
              * @default 90
              */
             stale_after_seconds: number;
+        };
+        /** CollectionInput */
+        CollectionInput: {
+            /**
+             * Camera Indices
+             * @default [
+             *       0,
+             *       1
+             *     ]
+             */
+            camera_indices: number[];
+            /**
+             * Confirm
+             * @default
+             */
+            confirm: string;
+            /**
+             * Expected Generation
+             * @default 0
+             */
+            expected_generation: number;
+            /**
+             * Fps
+             * @default 10
+             */
+            fps: number;
+            /**
+             * Max Seconds
+             * @default 120
+             */
+            max_seconds: number;
+            /**
+             * Max Steps
+             * @default 16
+             */
+            max_steps: number;
+            /**
+             * Max Tokens
+             * @default 16000
+             */
+            max_tokens: number;
+            /**
+             * Mode
+             * @default mock
+             * @enum {string}
+             */
+            mode: "mock" | "physical";
+            /**
+             * Model
+             * @default gpt-6-astra
+             * @constant
+             */
+            model: "gpt-6-astra";
+            /**
+             * Operator Present
+             * @default false
+             */
+            operator_present: boolean;
+            /**
+             * Task
+             * @default Place one object into the tray
+             */
+            task: string;
+            /**
+             * Workspace Clear
+             * @default false
+             */
+            workspace_clear: boolean;
         };
         /** CompanionUpdateStatus */
         CompanionUpdateStatus: {
@@ -10144,6 +10281,170 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RecordingOptions"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    runs_api_v1_projects__project_id__robot_lab_collection_runs_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_api_v1_projects__project_id__robot_lab_collection_runs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CollectionInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    image_api_v1_projects__project_id__robot_lab_collection_runs__ident__image__role__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                ident: string;
+                role: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    trace_api_v1_projects__project_id__robot_lab_collection_runs__ident__trace_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                ident: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    action_api_v1_projects__project_id__robot_lab_collection_runs__ident___action__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                ident: string;
+                action: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
