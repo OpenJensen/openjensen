@@ -1,7 +1,7 @@
 {
   "base_commit": "8278d58",
   "source_sha256": {
-    "packages/core/src/vla_platform/collection_api.py": "4bfe240f891cd91fac474decbd0c7891f997c5c5d290db20a308700f7d2c0c4f",
+    "packages/core/src/vla_platform/collection_api.py": "e9812031f6a1f88c9afd6fae6a4162afa1151b9758891e9b0178ddf7fbb3ddee",
     "workers/robot_lab/agent_collection.py": "a5f943e98fcb9ea712b9d2f205a5d3135cad17c5d8f87ba93d11871e64500b55",
     "workers/robot_lab/server.py": "a8e3f284247d0f962ca71c83a571ac7afe70ab440b35b5ad294724428cf91b7f",
     "workers/robot_lab/agent_control.py": "b06491e8e8bc437166e768b245b63981e128580ebfe5dd8b3d184e30b5252db9",
@@ -39,5 +39,5 @@
     "OpenAI API account access/model behavior",
     "Official LeRobot loader acceptance for this new two-view fixture"
   ],
-  "logs": "/home/aayrapetyan/ollamaforvlas/run/astra-*-tests.log"
+  "logs": "Deployment verification directory: astra-*-tests.log"
 }

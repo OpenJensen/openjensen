@@ -785,10 +785,11 @@ test('motor IDs require a fresh isolation acknowledgement for every motor', asyn
   expect(writes(state, '/control/start')).toEqual([]);
 });
 
-test('device library has four main tabs and saves names independently of roles', async ({ page }, testInfo) => {
+test('device library has five main tabs and saves names independently of roles', async ({ page }, testInfo) => {
   const state = await fixture(page, false, 'Darwin', false);
   const tabs = page.getByRole('navigation', { name: 'Robot Lab tabs' });
-  await expect(tabs.getByRole('button')).toHaveCount(4);
+  await expect(tabs.getByRole('button')).toHaveCount(5);
+  await expect(tabs.getByRole('button', { name: 'Astra collection' })).toBeVisible();
   await expect(page.getByRole('combobox', { name: 'Devices', exact: true })).toHaveCount(0);
   await expect(page.getByTestId('device-arm-a')).toContainText('Motor IDs');
   await page.getByTestId('device-arm-a').click();

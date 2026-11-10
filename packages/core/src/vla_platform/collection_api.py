@@ -10,7 +10,6 @@ import json
 import os
 import re
 import secrets
-import sys
 import time
 from pathlib import Path
 from typing import Literal
@@ -22,6 +21,7 @@ from pydantic import BaseModel, ConfigDict, Field, StrictInt
 
 from vla_platform.agent_control.robot_target import RobotTarget
 from vla_platform.agent_control.settings import Profiles
+from vla_platform.datasets.local_preview import reader_python
 from vla_platform.robot_lab_bridge import RobotLabBridge
 
 router = APIRouter(prefix="/api/v1", tags=["Agent collection"])
@@ -190,7 +190,7 @@ class CollectionRuns:
                 python = (
                     os.environ.get("JENSEN_COLLECTION_PYTHON")
                     or os.environ.get("FIREBIRD_CPU_READER_PYTHON")
-                    or sys.executable
+                    or str(reader_python(self.root.parent))
                 )
                 mock = await asyncio.create_subprocess_exec(
                     python,

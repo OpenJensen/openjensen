@@ -8,7 +8,7 @@ import zipfile
 from pathlib import Path
 from types import SimpleNamespace
 
-from vla_platform.collection_api import CollectionInput, CollectionRuns
+from vla_platform.collection_api import ROOT, CollectionInput, CollectionRuns
 from vla_platform.datasets.library import DatasetLibrary
 
 
@@ -25,6 +25,10 @@ class PiCollectionTests(unittest.IsolatedAsyncioTestCase):
         await self.service.close()
         self.temp.cleanup()
 
+    @unittest.skipUnless(
+        (ROOT / "workers/pi_collection/node_modules/@earendil-works/pi-agent-core").is_dir(),
+        "Full Pi lane requires Node 24 and npm ci in workers/pi_collection",
+    )
     async def test_complete_pi_episode_and_reload_export(self):
         run = await self.service.start("test-project", CollectionInput())
         await asyncio.wait_for(self.service.tasks[run["id"]], 60)
@@ -66,6 +70,10 @@ class PiCollectionTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(any(f["command_id"] == commands[0]["command_id"] for f in frames))
         archive.unlink()
 
+    @unittest.skipUnless(
+        (ROOT / "workers/pi_collection/node_modules/@earendil-works/pi-agent-core").is_dir(),
+        "Full Pi lane requires Node 24 and npm ci in workers/pi_collection",
+    )
     async def test_stop_preserves_partial(self):
         run = await self.service.start("test-project", CollectionInput())
         for _ in range(100):
