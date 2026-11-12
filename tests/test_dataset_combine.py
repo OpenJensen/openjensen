@@ -43,6 +43,9 @@ for run in range(count):
             for key, shape in shapes.items()
         }
         writer.add_frame(positions, positions, images, captured_at=100 + index / fps)
+        # A camera paces a real recording. This loop does not, so let the image queue
+        # drain instead of overrunning it on a slow machine.
+        writer.image_writer.wait_until_done(timeout=30)
     writer.save_episode()
     writer.finalize()
 """
