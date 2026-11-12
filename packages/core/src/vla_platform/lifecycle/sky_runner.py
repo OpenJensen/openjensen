@@ -34,6 +34,12 @@ MAX_ARTIFACT_FILES = 10000
 MAX_PART_BYTES = 32 * 1024**2
 MAX_LOG_BYTES = 5 * 1024**2
 CHECKPOINT_POLL_SECONDS = 15
+# ``sky logs --status`` exits with this code only while the job has not finished. Every
+# other code (succeeded, failed, cancelled, not found, or the request itself failing)
+# is handled by the caller exactly as before.
+JOB_NOT_FINISHED = 101
+LOG_RECONNECT_LIMIT = 20
+LOG_RECONNECT_PAUSE_SECONDS = 30
 STATE_NAME = "sky-state.json"
 RECOVERY_BUDGET_SECONDS = 10
 RECOVERY_RECORD_LIMIT = 256
@@ -848,6 +854,38 @@ async def sync_checkpoints(sky: str, stage_dir: Path, state: dict, on_event: Eve
 
 
 async def follow_training(sky: str, stage_dir: Path, state: dict, timeout: int, on_event: Event):
+    """Follow the job's log until the job itself ends, not until the log stream does.
+
+    ``sky logs --follow`` returns when its connection to the cloud machine drops, which
+    can happen while training is running normally. Taking that for the end of the job
+    stopped a healthy machine in the middle of a run. After the stream ends, ask for the
+    job's status and follow again only when the answer is that it has not finished. Many
+    quick drops in a row, or the job's own time limit, give up; the caller then reports
+    what it finds.
+    """
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout
+    lines, drops = "2000", 0
+    while True:
+        started = loop.time()
+        await _follow_log(sky, stage_dir, state, max(1, int(deadline - started)), on_event, lines)
+        status, _ = await _command(
+            [sky, "logs", state["cluster"], "1", "--status", *_args(state)], stage_dir, timeout=60
+        )
+        if status != JOB_NOT_FINISHED:
+            return
+        # A stream that lasted was a working connection: count only quick repeated drops.
+        drops = 1 if loop.time() - started > 120 else drops + 1
+        if drops > LOG_RECONNECT_LIMIT or loop.time() >= deadline:
+            return
+        await on_event("Reconnecting to the cloud machine's log; the job is still running")
+        await asyncio.sleep(min(LOG_RECONNECT_PAUSE_SECONDS, 2 * drops))
+        lines = "20"  # Earlier lines were already read; do not replay their progress.
+
+
+async def _follow_log(
+    sky: str, stage_dir: Path, state: dict, timeout: int, on_event: Event, lines: str
+):
     wake = asyncio.Event()
 
     async def progress(message):
@@ -858,7 +896,7 @@ async def follow_training(sky: str, stage_dir: Path, state: dict, timeout: int, 
 
     tail = asyncio.create_task(
         _command(
-            [sky, "logs", state["cluster"], "1", "--follow", "--tail", "2000", *_args(state)],
+            [sky, "logs", state["cluster"], "1", "--follow", "--tail", lines, *_args(state)],
             stage_dir,
             timeout=timeout,
             on_event=progress,

@@ -899,6 +899,8 @@ def test_live_sync_runs_while_training_log_tail_is_still_running(tmp_path, monke
 
         async def command(argv, directory, **kwargs):
             assert argv[1:4] == ["logs", "cluster", "1"]
+            if "--status" in argv:
+                return 0, ""
             await kwargs["on_event"]("_checkpoint_ready:5")
             await finished.wait()
             return 0, ""
@@ -959,6 +961,65 @@ def test_acknowledgement_is_cpu_only_and_contains_verified_receipts(
     monkeypatch.setattr(sky_runner, "_command", command)
     asyncio.run(sky_runner.sync_checkpoints("/fixture/sky", stage, state, event))
     assert len(commands) == 2
+
+
+def follow(monkeypatch, tmp_path, script, *, timeout=30):
+    """Run follow_training against a scripted ``sky logs``: each entry is the exit code of
+    one log stream followed by the exit code of the status request made after it."""
+    calls, events, pauses = [], [], []
+    replies = iter(script)
+
+    async def command(argv, directory, **kwargs):
+        assert argv[1:4] == ["logs", "cluster", "1"]
+        calls.append(
+            "status" if "--status" in argv else "follow --tail " + argv[argv.index("--tail") + 1]
+        )
+        return next(replies), ""
+
+    async def event(message):
+        events.append(message)
+
+    async def pause(seconds):
+        pauses.append(seconds)
+
+    async def sync(*args, **kwargs):
+        pass
+
+    monkeypatch.setattr(sky_runner, "_command", command)
+    monkeypatch.setattr(sky_runner, "sync_checkpoints", sync)
+    monkeypatch.setattr(sky_runner.asyncio, "sleep", pause)
+    state = {"cluster": "cluster", "config_path": "/fixture/config"}
+    asyncio.run(sky_runner.follow_training("/fixture/sky", tmp_path, state, timeout, event))
+    return calls, events, pauses
+
+
+def test_a_dropped_log_stream_does_not_end_a_job_that_is_still_running(tmp_path, monkeypatch):
+    """The regression: the stream ended at step 3,338 of 8,000 and the machine was stopped."""
+    calls, events, pauses = follow(monkeypatch, tmp_path, [0, 101, 255, 101, 0, 0])
+    assert calls == [
+        "follow --tail 2000",
+        "status",  # 101: not finished, so this was a dropped connection
+        "follow --tail 20",
+        "status",
+        "follow --tail 20",
+        "status",  # 0: the job succeeded; only now is following over
+    ]
+    assert events == ["Reconnecting to the cloud machine's log; the job is still running"] * 2
+    assert pauses == [2, 4]
+
+
+@pytest.mark.parametrize("ended", [0, 100, 102, 103, 1])
+def test_any_other_status_ends_following_as_before(tmp_path, monkeypatch, ended):
+    # Succeeded, failed, missing, cancelled, or the status request itself failing.
+    calls, events, _ = follow(monkeypatch, tmp_path, [0, ended])
+    assert calls == ["follow --tail 2000", "status"] and events == []
+
+
+def test_reconnecting_gives_up_after_many_quick_drops_in_a_row(tmp_path, monkeypatch):
+    limit = sky_runner.LOG_RECONNECT_LIMIT
+    calls, events, pauses = follow(monkeypatch, tmp_path, [0, 101] * (limit + 5))
+    assert calls.count("status") == limit + 1
+    assert len(events) == limit and max(pauses) == sky_runner.LOG_RECONNECT_PAUSE_SECONDS
 
 
 def test_too_many_checkpoints_rejected_before_provisioning(payload, target, tmp_path):
