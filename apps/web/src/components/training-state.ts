@@ -24,7 +24,13 @@ import {
 } from '@/lib/training-temporal';
 import { useTrainingBatch } from '@/lib/training-batch';
 import { combinationCameraMapping, datasetCombinationIssue } from '@/lib/dataset-combination';
-import { defaultRecipe, type Recipe } from '@/lib/training-recipe';
+import {
+  defaultBatchSize,
+  defaultRecipe,
+  evaluationInterval,
+  learningRateFor,
+  type Recipe,
+} from '@/lib/training-recipe';
 import {
   cameras,
   datasetIssue,
@@ -381,9 +387,7 @@ export function useTrainingPanel({
         ? options.data!.default_training_method
         : item.methods[0];
   const batchFor = (item: TrainingModel) =>
-    item.id === model?.id
-      ? recipe.batchSize
-      : (modelBatchSizes[item.id] ?? (item.id === 'smolvla' ? 64 : item.id === 'psi0' ? 2 : 4));
+    item.id === model?.id ? recipe.batchSize : (modelBatchSizes[item.id] ?? defaultBatchSize(item.id));
   const timingFamily = temporalFamily(model?.id);
   const timing = timingFamily ? (temporalDrafts[timingFamily] ?? defaultTemporal(timingFamily)) : null;
   const timingIssue = !resumeId && timing ? temporalIssue(timing) : null;
@@ -608,11 +612,11 @@ export function useTrainingPanel({
           steps: recipe.trainingSteps,
           warmup_steps: Math.min(50, recipe.trainingSteps - 1),
           batch_size: recipe.batchSize,
-          learning_rate: recipe.learningRate,
+          learning_rate: learningRateFor(model.id, recipe),
           gradient_accumulation_steps: recipe.gradientAccumulation,
           seed: recipe.seed,
           validation_fraction: recipe.validationFraction,
-          eval_every: recipe.evalEvery,
+          eval_every: evaluationInterval(recipe),
           save_every: checkpointInterval,
           ...temporalRecipe(timingFamily, timing),
         };
@@ -646,6 +650,7 @@ export function useTrainingPanel({
             model_revision: item.model_revision,
             ...(item.checkpoint_subdirectory ? { checkpoint_subdirectory: item.checkpoint_subdirectory } : {}),
             batch_size: batchFor(item),
+            learning_rate: learningRateFor(item.id, recipe),
             ...temporalRecipe(
               temporalFamily(item.id),
               temporalFamily(item.id)

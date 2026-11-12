@@ -464,7 +464,13 @@ test('training cannot submit using cached project data after a failed project re
   await expect(fixture.start).toBeEnabled();
   await fixture.start.click();
   await expect.poll(() => fixture.state.submitted.length).toBe(1);
-  expect(fixture.state.submitted[0].training).toMatchObject({ model_id: 'code://lerobot/act', batch_size: 4 });
+  // ACT's own recommended settings, not the shared form defaults (which are SmolVLA's):
+  // a learning rate of 0.0001 is ten times what ACT is meant to train at.
+  expect(fixture.state.submitted[0].training).toMatchObject({
+    model_id: 'code://lerobot/act',
+    batch_size: 8,
+    learning_rate: 0.00001,
+  });
 });
 
 test('GR00T rejects vectors exceeding its architecture bound before any submission', async ({ page }) => {

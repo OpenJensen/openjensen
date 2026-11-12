@@ -279,6 +279,11 @@ class DatasetProfile(Record):
     )
 
     snapshot: DatasetSnapshot | None = Field(default=None, exclude_if=lambda value: value is None)
+    # Why a requested training copy was not made. The inspection itself still succeeded:
+    # looking at a dataset never depends on it being ready to train on.
+    training_blocker: str | None = Field(
+        default=None, min_length=1, max_length=1000, exclude_if=lambda value: value is None
+    )
     recording_preparation: RecordingSummary | None = Field(
         default=None, exclude_if=lambda value: value is None
     )
@@ -286,6 +291,8 @@ class DatasetProfile(Record):
     @model_validator(mode="after")
     def validate_provenance(self) -> DatasetProfile:
         """Require pinned HF identity or the matching local metadata identity."""
+        if self.training_blocker is not None and self.snapshot is not None:
+            raise ValueError("A dataset with a training copy has no training blocker")
         if self.recording_preparation is not None and (
             self.snapshot is None or self.inspection_scope != "complete_snapshot"
         ):

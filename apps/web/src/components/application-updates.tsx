@@ -58,6 +58,8 @@ export function ApplicationUpdates() {
     retry: false,
   });
   const value = status.data;
+  // Older servers report no label; treat only an explicit "not released" as development.
+  const development = value?.installed.released === false && Boolean(value.installed.label);
   const operation = value?.operation;
   const busy = confirming || active.has(operation?.phase ?? '') || Boolean(pending);
   const available = value?.state === 'available';
@@ -140,8 +142,9 @@ export function ApplicationUpdates() {
     <>
       <button
         type="button"
-        className={`application-version${available ? ' has-update' : ''}`}
+        className={`application-version${available ? ' has-update' : ''}${development ? ' development' : ''}`}
         aria-label="Version and updates"
+        title={development ? 'Development build: not the published release with this number' : undefined}
         onClick={() => setOpen(true)}
       >
         {busy
@@ -150,7 +153,7 @@ export function ApplicationUpdates() {
             : 'Updating…'
           : available
             ? 'Update available'
-            : `v${value?.installed.version ?? '…'}`}
+            : `v${value?.installed.label ?? value?.installed.version ?? '…'}`}
       </button>
       <dialog
         ref={dialog}
@@ -169,7 +172,8 @@ export function ApplicationUpdates() {
           <div>
             <dt>Installed</dt>
             <dd>
-              v{value?.installed.version} · <code>{short(value?.installed.commit)}</code>
+              v{value?.installed.label ?? value?.installed.version} · <code>{short(value?.installed.commit)}</code>
+              {value?.installed.branch && !value.installed.released ? ` · ${value.installed.branch}` : ''}
             </dd>
           </div>
           <div>
@@ -209,6 +213,13 @@ export function ApplicationUpdates() {
             </dd>
           </div>
         </dl>
+        {development && (
+          <p className="application-development-note">
+            Development build{value?.installed.dirty ? ' with uncommitted changes' : ''}. This is not the published
+            release v{value?.installed.version}: another machine showing that number can be running different code. Two
+            machines match only when the full name above is identical.
+          </p>
+        )}
         <p role="status">
           {busy && status.isError
             ? 'Server restarting or disconnected. Reconnecting…'

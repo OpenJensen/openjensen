@@ -1,7 +1,7 @@
 import { groupedTrainingModels } from '@/lib/training-models';
 import { Icon } from '@/components/icon';
 import { WorkflowChoiceGrid } from '@/components/workflow-choice-grid';
-import { defaultRecipe } from '@/lib/training-recipe';
+import { defaultBatchSize } from '@/lib/training-recipe';
 import { modelStatusLabel, number } from './training-shared';
 import type { TrainingPanelState } from './training-state';
 
@@ -82,9 +82,7 @@ export function TrainingModelStep({ panel }: { panel: TrainingPanelState }) {
                         const editId = next.includes(item.id) ? item.id : (next[0] ?? '');
                         setRecipe((previous) => ({
                           ...previous,
-                          batchSize:
-                            modelBatchSizes[editId] ??
-                            (editId === 'smolvla' ? defaultRecipe.batchSize : editId === 'psi0' ? 2 : 4),
+                          batchSize: modelBatchSizes[editId] ?? defaultBatchSize(editId),
                         }));
                         setModelIds(next);
                         setModelId(next.includes(item.id) ? item.id : (next[0] ?? ''));

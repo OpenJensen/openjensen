@@ -15,7 +15,7 @@ from typing import Literal
 import httpx
 from pydantic import BaseModel, ConfigDict, Field
 
-from vla_platform import __version__, native_launch, update_runner
+from vla_platform import __version__, build, native_launch, update_runner
 
 UPSTREAM = "https://api.github.com/repos/OpenJensen/openjensen"
 ROOT = Path(__file__).resolve().parents[4]
@@ -47,6 +47,11 @@ class ApplicationVersion(BaseModel):
     version: str
     commit: str | None
     host: str
+    # The one name that identifies this code: equal labels mean equal code.
+    label: str
+    branch: str | None = None
+    dirty: bool = False
+    released: bool = False
 
 
 class CompanionUpdateStatus(BaseModel):
@@ -91,8 +96,20 @@ def installed_commit(root: Path = ROOT) -> str | None:
 class ApplicationUpdates:
     def __init__(self, *, config_path: Path | None = None, client=None, commit=None, data_dir=None):
         # Capture this at process startup; a checkout moving later cannot relabel running code.
+        revision = commit or installed_commit()
+        identity = build.current()
+        if identity.commit != revision:
+            # A launcher-recorded or injected revision describes itself, never the
+            # source tree that happens to sit beside this process.
+            identity = build.Build(__version__, revision, None, dirty=False, released=False)
         self.installed = ApplicationVersion(
-            version=__version__, commit=commit or installed_commit(), host=platform.node()
+            version=__version__,
+            commit=revision,
+            host=platform.node(),
+            label=identity.label,
+            branch=identity.branch,
+            dirty=identity.dirty,
+            released=identity.released,
         )
         configured = os.environ.get("JENSEN_UPDATE_CONFIG")
         self.config_path = config_path or (Path(configured) if configured else None)

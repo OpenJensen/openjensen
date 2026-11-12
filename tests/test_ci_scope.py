@@ -147,6 +147,41 @@ def test_uncertain_pull_request_history_runs_pr_lane_not_everything(tmp_path, mo
     assert all(out[name] == "false" for name in ci_scope.SCOPES[1:])
 
 
+def test_version_preparation_dispatch_runs_the_pull_request_lane_not_everything(
+    tmp_path, monkeypatch
+):
+    """Each prepared pull request used to get a second, complete CI run."""
+    document = {"inputs": {"windows_browser": "false", "version_pr": "293"}}
+    out = run_scope(
+        tmp_path,
+        monkeypatch,
+        "workflow_dispatch",
+        document,
+        ref="refs/heads/feature",
+        paths=["tests/test_tui.py"],
+    )
+    assert out["application"] == "true" and out["full"] == "false"
+    assert out["web_lane"] == "false" and out["mobile_lane"] == "false"
+    assert all(out[name] == "false" for name in ci_scope.SCOPES[1:])
+    # A person pressing "Run workflow" still gets complete verification.
+    manual = run_scope(
+        tmp_path, monkeypatch, "workflow_dispatch", {"inputs": {"version_pr": ""}}, paths=[]
+    )
+    assert manual["full"] == "true" and manual["mobile_lane"] == "true"
+
+
+def test_version_preparation_dispatch_without_history_falls_back_to_the_pull_request_lane(
+    tmp_path, monkeypatch
+):
+    def unavailable(name):
+        raise subprocess.CalledProcessError(1, "git")
+
+    monkeypatch.setattr(ci_scope, "resolve_commit", unavailable)
+    out = run_scope(tmp_path, monkeypatch, "workflow_dispatch", {"inputs": {"version_pr": "293"}})
+    assert out["application"] == "true" and out["desktop_lane"] == "true"
+    assert out["mobile_lane"] == "false" and out["full"] == "false"
+
+
 def test_output_names_are_preserved_and_extended(tmp_path, monkeypatch):
     out = run_scope(tmp_path, monkeypatch, "workflow_dispatch", {})
     assert list(out)[: len(ci_scope.SCOPES)] == list(ci_scope.SCOPES)

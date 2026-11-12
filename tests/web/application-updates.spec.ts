@@ -35,6 +35,55 @@ test('current app still reports a robot control service requiring an update', as
   await expect(page.getByRole('dialog').getByRole('alert')).toContainText('robot control service needs an update');
 });
 
+test('a branch build never passes for the release that shares its number', async ({ page }) => {
+  const branch = '6'.repeat(40);
+  await page.route('**/api/v1/updates**', (route) =>
+    route.fulfill({
+      json: {
+        ...initial,
+        installed: {
+          version: '0.1.31',
+          commit: branch,
+          host: 'Recording laptop',
+          label: '0.1.31-dev+6666666',
+          branch: 'feature/camera',
+          dirty: false,
+          released: false,
+        },
+        state: 'diverged',
+        message: 'This development build differs from upstream main; update manually.',
+        automatic_update: false,
+      },
+    }),
+  );
+  await page.goto('/dashboard/');
+  const chip = page.getByRole('button', { name: 'Version and updates' });
+  await expect(chip).toHaveText('v0.1.31-dev+6666666');
+  await chip.click();
+  const dialog = page.getByRole('dialog', { name: 'OpenJensen updates' });
+  await expect(dialog).toContainText('v0.1.31-dev+6666666');
+  await expect(dialog).toContainText('feature/camera');
+  await expect(dialog).toContainText('not the published release v0.1.31');
+});
+
+test('a released build shows its plain number and no development note', async ({ page }) => {
+  await page.route('**/api/v1/updates**', (route) =>
+    route.fulfill({
+      json: {
+        ...initial,
+        installed: { ...initial.installed, version: '0.1.30', label: '0.1.30', branch: 'main', released: true },
+        state: 'current',
+        message: 'Up to date with upstream main.',
+      },
+    }),
+  );
+  await page.goto('/dashboard/');
+  const chip = page.getByRole('button', { name: 'Version and updates' });
+  await expect(chip).toHaveText('v0.1.30');
+  await chip.click();
+  await expect(page.getByRole('dialog', { name: 'OpenJensen updates' })).not.toContainText('Development build');
+});
+
 test('update discovery is read only and confirmation identifies the server and exact commit', async ({ page }) => {
   const writes: unknown[] = [];
   await page.route('**/api/v1/updates**', (route) => {

@@ -278,6 +278,17 @@ def read_recipe(path: Path) -> dict:
         raise typer.BadParameter(f"Cannot read recipe: {exc}") from exc
 
 
+@app.command("build")
+def show_build(
+    as_json: Annotated[bool, typer.Option("--json", help="Print every field as JSON.")] = False,
+):
+    """Print the exact code this installation runs. Equal output means equal code."""
+    from vla_platform import build
+
+    identity = build.current()
+    typer.echo(json.dumps(identity.public(), sort_keys=True) if as_json else identity.label)
+
+
 def show_version(value: bool):
     if value:
         typer.echo(__version__)

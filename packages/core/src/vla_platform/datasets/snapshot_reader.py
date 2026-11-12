@@ -324,7 +324,7 @@ def validate(root, limits):
 
     require(
         pyarrow.__version__ == "25.0.1",
-        "Complete validation requires the pinned PyArrow25.0.1 reader",
+        "Complete validation requires the pinned PyArrow 25.0.1 reader",
     )
     info = read_json(root, "meta/info.json")
     require(
@@ -336,16 +336,23 @@ def validate(root, limits):
         "Local training requires the standard v3 Parquet and optional video layout",
     )
     episodes_count, frames_count = info.get("total_episodes"), info.get("total_frames")
+    require(integer(episodes_count), "Dataset metadata has no whole-number episode count")
     require(
-        integer(episodes_count, 2) and episodes_count <= limits["max_episodes"],
-        "Need2+ finalized episodes within budget",
+        episodes_count >= 2,
+        f"Training needs at least 2 finalized episodes for a held-out split; "
+        f"this dataset has {episodes_count}. Record or import more, then inspect it again.",
+    )
+    require(
+        episodes_count <= limits["max_episodes"],
+        f"Dataset has {episodes_count} episodes; one training copy holds at most "
+        f"{limits['max_episodes']}",
     )
     require(
         integer(frames_count, episodes_count) and frames_count <= limits["max_rows"],
         "Invalid or oversized frame count",
     )
     fps = info.get("fps")
-    require(integer(fps, 1) and fps <= 240, "Supported integer camera/control fps is1..240")
+    require(integer(fps, 1) and fps <= 240, "Supported integer camera/control fps is 1..240")
     features = info.get("features", {})
     require(isinstance(features, dict), "Invalid feature metadata")
     cameras = {
@@ -353,7 +360,7 @@ def validate(root, limits):
     }
     videos = {key: value for key, value in cameras.items() if value["dtype"] == "video"}
     images = {key: value for key, value in cameras.items() if value["dtype"] == "image"}
-    require(1 <= len(cameras) <= 8, "Need1..8 finalized image or video cameras")
+    require(1 <= len(cameras) <= 8, "Need 1..8 finalized image or video cameras")
     require(not videos or info.get("video_path") == VIDEO, "Video camera layout is missing")
     if (root / "openjensen.json").exists():
         recording = read_json(root, "openjensen.json")

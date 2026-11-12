@@ -1454,6 +1454,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects/{project_id}/datasets/combine": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Combine Datasets
+         * @description Join datasets that share cameras and frame rate into one new, trainable dataset.
+         */
+        post: operations["combine_datasets_api_v1_projects__project_id__datasets_combine_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects/{project_id}/datasets/example": {
         parameters: {
             query?: never;
@@ -3371,10 +3391,24 @@ export interface components {
         };
         /** ApplicationVersion */
         ApplicationVersion: {
+            /** Branch */
+            branch?: string | null;
             /** Commit */
             commit: string | null;
+            /**
+             * Dirty
+             * @default false
+             */
+            dirty: boolean;
             /** Host */
             host: string;
+            /** Label */
+            label: string;
+            /**
+             * Released
+             * @default false
+             */
+            released: boolean;
             /** Version */
             version: string;
         };
@@ -3940,6 +3974,13 @@ export interface components {
              */
             stale_after_seconds: number;
         };
+        /** Combination */
+        Combination: {
+            /** Dataset Ids */
+            dataset_ids: string[];
+            /** Name */
+            name: string;
+        };
         /** CompanionUpdateStatus */
         CompanionUpdateStatus: {
             /**
@@ -4117,6 +4158,8 @@ export interface components {
             total_episodes: number;
             /** Total Frames */
             total_frames: number;
+            /** Training Blocker */
+            training_blocker?: string | null;
             /** Warnings */
             warnings: string[];
         };
@@ -9837,6 +9880,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["UploadCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    combine_datasets_api_v1_projects__project_id__datasets_combine_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Combination"];
             };
         };
         responses: {

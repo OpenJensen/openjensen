@@ -9,7 +9,8 @@ Outputs (all single-line, written to GITHUB_OUTPUT):
 * the seven scope flags in ``SCOPES`` (``application`` = Python job);
 * ``desktop_lane`` / ``mobile_lane`` / ``web_lane``: which Playwright projects run;
 * ``docs_only``: a valid diff that needs no job at all;
-* ``full``: true for main pushes, tags, manual dispatch and schedule;
+* ``full``: true for main pushes, tags, manual dispatch and schedule (the dispatch that
+  version preparation makes for a pull request is scoped like that pull request);
 * ``py_shards`` / ``web_matrix``: JSON matrices consumed by ``application.yml``.
 """
 
@@ -129,11 +130,31 @@ def select(paths, adapters=False):
     return selected
 
 
+def prepared_pull_request(event, document):
+    """True for the run that automatic version preparation dispatches for a pull request."""
+    inputs = document.get("inputs") if isinstance(document, dict) else None
+    number = inputs.get("version_pr") if isinstance(inputs, dict) else None
+    return event == "workflow_dispatch" and isinstance(number, str) and number.isdigit()
+
+
+def resolve_commit(name):
+    return subprocess.run(
+        ["git", "rev-parse", "--verify", "--quiet", name + "^{commit}"],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    ).stdout.strip()
+
+
 def changed_paths(event, document):
     if event == "pull_request":
         base = document["pull_request"]["base"]["sha"]
         head = document["pull_request"]["head"]["sha"]
         separator = "..."
+    elif prepared_pull_request(event, document):
+        # The dispatched branch head against main: the same diff its pull request has.
+        base, head, separator = resolve_commit("origin/main"), resolve_commit("HEAD"), "..."
     elif event == "push":
         base, head, separator = document["before"], document["after"], ".."
     else:
@@ -154,14 +175,18 @@ def changed_paths(event, document):
 
 def classify(event, ref, document):
     """Return (selected, full, docs_only) for one workflow event."""
-    if event in {"workflow_dispatch", "schedule"} or (
-        event == "push" and ref.startswith("refs/tags/")
+    # Version preparation re-dispatches CI for a pull request's new head. That run is
+    # still the pull request, so it gets the pull-request lane: not every lane again.
+    prepared = prepared_pull_request(event, document)
+    if not prepared and (
+        event in {"workflow_dispatch", "schedule"}
+        or (event == "push" and ref.startswith("refs/tags/"))
     ):
         return set(ALL), True, False
     try:
         paths = changed_paths(event, document)
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
-        if event == "pull_request":
+        if event == "pull_request" or prepared:
             print("Change detection unavailable: running the pull-request lane.")
             return set(PR_LANE), False, False
         print("Change detection unavailable or unknown event: running everything.")

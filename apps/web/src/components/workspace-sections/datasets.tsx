@@ -1,13 +1,13 @@
 'use client';
 
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { api, isActive, type DatasetJob, type DatasetProfile, type Job, type Project } from '@/lib/api';
 import { isAugmentationSource } from '@/lib/augmentation-source';
 import { Icon } from '@/components/icon';
 import { DatasetExplorer, FeatureChips } from '@/components/dataset-explorer';
 import { DatasetLibrary, DatasetLabeling, LocalDatasetImport } from '@/components/dataset-library';
-import type { LibraryDataset } from '@/lib/dataset-library';
+import { datasetLibrary, type LibraryDataset } from '@/lib/dataset-library';
 import { useDurableSubmission } from '@/lib/durable-submission';
 import { intakeAcknowledgement, validatedProjectHistory } from '@/lib/dataset-submission';
 import { DatasetSubmissionRecovery } from '@/components/dataset-submission-recovery';
@@ -38,6 +38,11 @@ function DatasetResult({ profile, history }: { profile: DatasetProfile; history?
           {profile.snapshot.lineage_validated
             ? 'Source history retained'
             : 'Source history unknown; use separate data for evaluation'}
+        </p>
+      )}
+      {profile.training_blocker && (
+        <p className="warning-box training-blocker" role="status">
+          <strong>Not ready for training yet.</strong> {profile.training_blocker}
         </p>
       )}
       <div className="result-heading">
@@ -318,7 +323,10 @@ function IntakeForm({
                   Copies and verifies the dataset in the app host’s <code>dataset-snapshots/</code> folder, so later
                   edits to the source can’t change saved training runs. Your original files stay unchanged.
                 </p>
-                <p>Needs at least two complete episodes. Leave this off to inspect only.</p>
+                <p>
+                  Training needs at least two complete episodes. A smaller dataset still opens, with a note saying what
+                  is missing.
+                </p>
               </TrainingHelp>
             </div>
           </>
@@ -363,6 +371,136 @@ function IntakeForm({
           <Icon name="arrow" size={17} />
         </button>
       </form>
+    </section>
+  );
+}
+
+/**
+ * Everything needed to train on a saved dataset, on the dataset's own page: prepare the
+ * verified training copy with one button, see why it is not ready, or start training.
+ * It replaces the detour back through the import form.
+ */
+function TrainingReadiness({
+  entry,
+  jobs,
+  onTrain,
+  onDetails,
+}: {
+  entry: LibraryDataset;
+  jobs: DatasetJob[];
+  onTrain: (jobId: string) => void;
+  onDetails: (jobId: string) => void;
+}) {
+  const queryClient = useQueryClient();
+  const submission = useDurableSubmission({ project: entry.project_id, operation: 'dataset.inspect' });
+  const validate = (value: unknown, body: unknown) => intakeAcknowledgement(value, entry.project_id, body);
+  // Newest first. A dataset is ready once any inspection of it produced a training copy.
+  const mine = jobs.filter((job) => job.request.library_id === entry.id);
+  const ready = mine.find((job) => job.status === 'succeeded' && job.result?.snapshot);
+  const active = mine.find(isActive);
+  const latest = mine[0];
+  const blocker = !ready && latest?.status === 'succeeded' ? latest.result?.training_blocker : undefined;
+  const failure = !ready && !active && latest && latest.status !== 'succeeded' ? latest.error : undefined;
+  const prepare = useMutation({
+    mutationFn: () =>
+      submission.submit(
+        { source: 'local', library_id: entry.id, revision: 'main', snapshot_for_training: true },
+        validate,
+      ),
+  });
+  const waiting = !submission.hydrated || !submission.available || !!submission.attempt || submission.busy;
+  const busy = prepare.isPending || !!active;
+  // The card that opened this page can be minutes old; read the dataset itself. The
+  // labeling tools below share this query, so it costs no extra request.
+  const saved = useQuery({
+    queryKey: ['dataset-import', entry.id],
+    queryFn: ({ signal }) => datasetLibrary.get(entry.id, signal),
+    retry: false,
+    refetchInterval: (query) => (query.state.data?.status === 'converting' ? 1000 : false),
+  });
+  const current = saved.data ?? entry;
+  const converting = current.status !== 'ready';
+  // The inspection counted every frame; before one exists, use what the import reported.
+  const inspected = (ready ?? (latest?.status === 'succeeded' ? latest : undefined))?.result;
+  const detected = current.detection;
+  const size = inspected
+    ? { episodes: inspected.total_episodes, frames: inspected.total_frames, fps: inspected.fps }
+    : (current.converted ??
+      (detected?.episodes && detected.frames && detected.fps
+        ? { episodes: detected.episodes, frames: detected.frames, fps: detected.fps }
+        : undefined));
+  const facts = size
+    ? `${formatNumber(size.episodes)} ${size.episodes === 1 ? 'episode' : 'episodes'} · ${formatNumber(size.frames)} frames · ${size.fps} fps`
+    : null;
+  return (
+    <section className={`panel dataset-readiness${ready ? ' ready' : ''}`} aria-label="Training readiness">
+      <div className="dataset-readiness-copy">
+        <h3>
+          {ready
+            ? 'Ready to train'
+            : busy
+              ? 'Preparing this dataset for training…'
+              : blocker
+                ? 'Not ready for training yet'
+                : failure
+                  ? 'This dataset could not be prepared'
+                  : 'Train on this dataset'}
+        </h3>
+        <p role="status">
+          {ready
+            ? (facts ?? 'A verified training copy is saved.')
+            : busy
+              ? 'Copying and checking every episode. You can leave this page.'
+              : (blocker ??
+                failure ??
+                (converting
+                  ? 'Wait for the conversion to finish.'
+                  : `${facts ? facts + '. ' : ''}Preparing makes a verified copy, so later edits cannot change a training run.`))}
+        </p>
+      </div>
+      <div className="dataset-readiness-actions">
+        {ready ? (
+          <>
+            <button type="button" className="text-link" onClick={() => onDetails(ready.id)}>
+              Episodes and details
+            </button>
+            <button type="button" className="primary-button" onClick={() => onTrain(ready.id)}>
+              Train on this dataset <Icon name="arrow" size={16} />
+            </button>
+          </>
+        ) : (
+          <>
+            {latest?.status === 'succeeded' && (
+              <button type="button" className="text-link" onClick={() => onDetails(latest.id)}>
+                Episodes and details
+              </button>
+            )}
+            <button
+              type="button"
+              className="primary-button"
+              disabled={busy || waiting || converting}
+              onClick={() => prepare.mutate()}
+            >
+              {busy ? 'Preparing…' : blocker ? 'Check again' : failure ? 'Try again' : 'Prepare for training'}
+            </button>
+          </>
+        )}
+      </div>
+      <ErrorNotice error={prepare.error} />
+      <DatasetSubmissionRecovery
+        submission={submission}
+        onReconcile={async () => {
+          await submission.reconcile(validate);
+        }}
+        onRetry={async () => {
+          await submission.retry(validate);
+        }}
+        onReviewHistory={async () => {
+          const fresh = validatedProjectHistory(await api.jobs(entry.project_id), entry.project_id);
+          queryClient.setQueryData(['jobs', entry.project_id], fresh);
+          return fresh;
+        }}
+      />
     </section>
   );
 }
@@ -424,8 +562,6 @@ export default function DatasetsSection() {
     setSelectedJobId,
     openDataset,
     selectedLibrary,
-    setImportLibrary,
-    setIntakeSelection,
     jobs,
     navigateStage,
     setModuleJobView,
@@ -477,15 +613,17 @@ export default function DatasetsSection() {
                 ← Back to datasets
               </button>
             </div>
-            <DatasetLabeling
-              key={selectedLibrary.id}
+            <TrainingReadiness
+              key={`readiness-${selectedLibrary.id}`}
               entry={selectedLibrary}
-              onInspect={() => {
-                setImportLibrary(selectedLibrary);
-                setIntakeSelection((value) => value + 1);
-                setDatasetView('sources');
+              jobs={sortedJobs}
+              onTrain={startTrainingOnDataset}
+              onDetails={(jobId) => {
+                setSelectedJobId(jobId);
+                setDatasetView('inspection');
               }}
             />
+            <DatasetLabeling key={selectedLibrary.id} entry={selectedLibrary} />
           </>
         )}
         <div className="inspection-view" hidden={datasetView !== 'inspection'}>

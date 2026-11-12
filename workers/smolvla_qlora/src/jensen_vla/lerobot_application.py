@@ -7,6 +7,7 @@ optimizer metrics and complete checkpoints into Firebird's existing protocol.
 
 import json
 import math
+import os
 import shutil
 import subprocess
 import sys
@@ -46,6 +47,24 @@ SHARED_FIELDS = TEMPORAL_FIELDS | {
 }
 
 
+def loader_workers(cpus=None):
+    """How many processes decode camera frames while the GPU trains.
+
+    With none, every image in a batch is decoded on the training thread and the GPU
+    waits for it: a 64-sample, two-camera batch is 128 decodes per step. Leave two
+    cores for the trainer and the system; more than eight workers stops helping.
+    """
+    return max(0, min(8, (cpus if cpus is not None else os.cpu_count() or 1) - 2))
+
+
+def evaluation_interval(steps):
+    """Held-out validation twenty times per run, never more often than every 100 steps.
+
+    Validating every 100 steps cost a fifth of the run before any training benefit.
+    """
+    return min(steps, max(100, steps // 20))
+
+
 def resolve_recipe(job):
     parameters = job["parameters"]
     recipe = dict(parameters.get("training") or {})
@@ -71,10 +90,10 @@ def resolve_recipe(job):
     for name, default in {
         "batch_size": 4,
         "save_every": max(1, math.ceil(steps / 5)),
-        "eval_every": min(100, steps),
-        "eval_batches": 20,
+        "eval_every": evaluation_interval(steps),
+        "eval_batches": 8,
         "log_every": 10,
-        "num_workers": 0,
+        "num_workers": loader_workers(),
         "seed": 42,
         "validation_fraction": 0.2,
     }.items():
@@ -140,7 +159,9 @@ def cli_arguments(
         "num_workers": recipe["num_workers"],
         "seed": recipe["seed"],
         "wandb.enable": False,
-        "cudnn_deterministic": True,
+        # Let cuDNN pick its fastest kernels, as upstream does by default. Runs stay
+        # seeded; bit-identical convolutions are not worth the slower training.
+        "cudnn_deterministic": False,
         "accelerator.gradient_accumulation.steps": 1,
     }
     values.update(native_loop_values(recipe, profile["policy_type"]))

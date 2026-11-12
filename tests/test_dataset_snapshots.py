@@ -23,9 +23,8 @@ pytestmark = pytest.mark.skipif(os.name == "nt", reason="Secure local snapshot o
 CAMERA = "observation.images.front"
 
 
-@pytest.fixture
-def dataset(tmp_path):
-    root = tmp_path / "source"
+def build_dataset(root, episodes=4):
+    """Write a finalized LeRobot v3 dataset: real Parquet, real MP4, three frames each."""
     root.mkdir()
     script = r"""
 import json, sys
@@ -34,6 +33,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 root = Path(sys.argv[1])
+count = int(sys.argv[2])
 camera = "observation.images.front"
 for name in (
     "meta/episodes/chunk-000",
@@ -62,14 +62,14 @@ features[camera] = {
 info = {
     "codebase_version": "v3.0",
     "robot_type": "synthetic_fixture",
-    "total_episodes": 4,
-    "total_frames": 12,
+    "total_episodes": count,
+    "total_frames": count * 3,
     "total_tasks": 1,
     "fps": 10,
     "chunks_size": 1000,
     "data_files_size_in_mb": 100,
     "video_files_size_in_mb": 200,
-    "splits": {"train": "0:4"},
+    "splits": {"train": "0:" + str(count)},
     "data_path": "data/chunk-{chunk_index:03d}/file-{file_index:03d}.parquet",
     "video_path": "videos/{video_key}/chunk-{chunk_index:03d}/file-{file_index:03d}.mp4",
     "features": features,
@@ -79,7 +79,7 @@ stats = {}
 for key in ("action", "observation.state", camera):
     vector = [0.0, 0.0] if key != camera else [[[0.0]], [[0.0]], [[0.0]]]
     one = [1.0, 1.0] if key != camera else [[[1.0]], [[1.0]], [[1.0]]]
-    stats[key] = {"min": vector, "max": one, "mean": vector, "std": one, "count": [12]}
+    stats[key] = {"min": vector, "max": one, "mean": vector, "std": one, "count": [count * 3]}
 (root / "meta/stats.json").write_text(json.dumps(stats))
 pq.write_table(
     pa.Table.from_pylist([{"task_index": 0, "task": "Synthetic fixture only"}]),
@@ -87,7 +87,7 @@ pq.write_table(
 )
 episodes = []
 rows = []
-for ep in range(4):
+for ep in range(count):
     episodes.append(
         {
             "episode_index": ep,
@@ -124,7 +124,11 @@ schema = pa.schema([
 ])
 pq.write_table(pa.Table.from_pylist(rows, schema=schema), root / "data/chunk-000/file-000.parquet")
 """
-    subprocess.run([str(reader_python()), "-I", "-c", script, str(root)], check=True, timeout=20)
+    subprocess.run(
+        [str(reader_python()), "-I", "-c", script, str(root), str(episodes)],
+        check=True,
+        timeout=20,
+    )
     subprocess.run(
         [
             "ffmpeg",
@@ -136,7 +140,7 @@ pq.write_table(pa.Table.from_pylist(rows, schema=schema), root / "data/chunk-000
             "-i",
             "color=c=blue:s=16x16:r=10",
             "-frames:v",
-            "12",
+            str(episodes * 3),
             "-c:v",
             "libx264",
             "-pix_fmt",
@@ -148,6 +152,11 @@ pq.write_table(pa.Table.from_pylist(rows, schema=schema), root / "data/chunk-000
         capture_output=True,
     )
     return root
+
+
+@pytest.fixture
+def dataset(tmp_path):
+    return build_dataset(tmp_path / "source")
 
 
 def hashes(root):

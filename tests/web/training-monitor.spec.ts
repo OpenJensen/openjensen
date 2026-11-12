@@ -665,7 +665,9 @@ test('local training copies open the jobs-first wizard and retain native model a
   const setup = page.getByRole('navigation', { name: 'Training setup' });
   await setup.getByRole('button', { name: 'Model', exact: true }).click();
   await chooseOnlyModel(page, 'SmolVLA');
-  await expect(page.getByText('Local snapshots currently support native LeRobot models, including ACT.')).toBeVisible();
+  await expect(
+    page.getByText(/SmolVLA LoRA and QLoRA train from a Hugging Face dataset, not from one saved/),
+  ).toBeVisible();
   await chooseOnlyModel(page, 'ACT');
   await setup.getByRole('button', { name: 'Compute', exact: true }).click();
   await page.getByRole('button', { name: 'Start fine-tuning', exact: true }).click();
