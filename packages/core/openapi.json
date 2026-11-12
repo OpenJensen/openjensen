@@ -16419,6 +16419,26 @@
                     "title": "Camera Index",
                     "type": "integer"
                   },
+                  "cameras": {
+                    "anyOf": [
+                      {
+                        "maxProperties": 3,
+                        "minProperties": 1,
+                        "patternProperties": {
+                          "^observation\\.(?:images\\.[a-zA-Z0-9_.-]{1,64}|image[0-9]*)$": {
+                            "maximum": 63.0,
+                            "minimum": 0.0,
+                            "type": "integer"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Cameras"
+                  },
                   "task": {
                     "default": "",
                     "maxLength": 1000,
@@ -16473,6 +16493,26 @@
                       }
                     ],
                     "title": "Camera Index"
+                  },
+                  "cameras": {
+                    "anyOf": [
+                      {
+                        "maxProperties": 3,
+                        "minProperties": 1,
+                        "patternProperties": {
+                          "^observation\\.(?:images\\.[a-zA-Z0-9_.-]{1,64}|image[0-9]*)$": {
+                            "maximum": 63.0,
+                            "minimum": 0.0,
+                            "type": "integer"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Cameras"
                   },
                   "jpeg": {
                     "anyOf": [
@@ -16551,6 +16591,26 @@
                     "minimum": 0.0,
                     "title": "Camera Index",
                     "type": "integer"
+                  },
+                  "cameras": {
+                    "anyOf": [
+                      {
+                        "maxProperties": 3,
+                        "minProperties": 1,
+                        "patternProperties": {
+                          "^observation\\.(?:images\\.[a-zA-Z0-9_.-]{1,64}|image[0-9]*)$": {
+                            "maximum": 63.0,
+                            "minimum": 0.0,
+                            "type": "integer"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Cameras"
                   },
                   "confirm": {
                     "const": "RUN POLICY",

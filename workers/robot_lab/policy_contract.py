@@ -188,23 +188,24 @@ def validate_act_config(checkpoint):
         raise ValueError("ACT feature metadata must contain bounded shape records")
     images = {k: v for k, v in inputs.items() if k.startswith("observation.images.")}
     if (
-        len(images) != 1
+        not 1 <= len(images) <= 3
         or set(inputs) != {"observation.state", *images}
         or inputs["observation.state"].get("shape") != [6]
         or outputs.get("action", {}).get("shape") != [6]
     ):
-        raise ValueError("ACT requires one RGB camera and six state/action values")
-    shape = next(iter(images.values())).get("shape")
-    if (
-        not isinstance(shape, list)
-        or len(shape) != 3
-        or shape[0] != 3
-        or any(type(n) is not int or n < 1 for n in shape)
-        or shape[1] > 1024
-        or shape[2] > 1280
-        or shape[1] * shape[2] > 921600
-    ):
-        raise ValueError("ACT camera dimensions exceed the supported local image budget")
+        raise ValueError("ACT requires one to three RGB cameras and six state/action values")
+    for feature in images.values():
+        shape = feature.get("shape")
+        if (
+            not isinstance(shape, list)
+            or len(shape) != 3
+            or shape[0] != 3
+            or any(type(n) is not int or n < 1 for n in shape)
+            or shape[1] > 1024
+            or shape[2] > 1280
+            or shape[1] * shape[2] > 921600
+        ):
+            raise ValueError("ACT camera dimensions exceed the supported local image budget")
     return config
 
 

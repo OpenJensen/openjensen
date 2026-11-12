@@ -114,6 +114,7 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin', 
     ] as any[],
     policyOffline: false,
     policyKind: 'act',
+    policyViews: ['observation.images.front'],
     projectModels: [] as any[],
     removedDevices: [] as any[],
     removeDeviceError: null as string | null,
@@ -177,6 +178,7 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin', 
                 message: 'Native checkpoint',
                 fps: 13,
                 camera_key: 'observation.images.front',
+                camera_keys: state.policyViews,
                 image_shape: [3, 480, 640],
               },
             ],
@@ -217,6 +219,7 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin', 
         state.status.policy.preflight = {
           passed: true,
           camera_index: body.camera_index,
+          ...(body.cameras ? { cameras: body.cameras } : {}),
           measured_fps: 13,
           mean_latency_ms: 20,
           message: 'Camera and inference meet the frame rate',
@@ -2818,6 +2821,64 @@ test('Run policy requires a native preflight and attended start, then renews onl
   await expect.poll(() => state.status.session.mode).toBe('idle');
   await expect(run).toBeDisabled();
   expect(state.errors).toEqual([]);
+});
+
+test('a policy trained on two views is checked and run with a camera for each', async ({ page }, testInfo) => {
+  const state = await fixture(page, true, 'Darwin', false);
+  const front = 'observation.images.front',
+    side = 'observation.images.camera_4';
+  state.policyViews = [front, side];
+  state.cameras = [
+    { index: 0, name: 'Laptop camera', width: 640, height: 480 },
+    { index: 1, name: 'Front USB', width: 640, height: 480 },
+    { index: 2, name: 'Side USB', width: 640, height: 480 },
+  ];
+  await page.reload();
+  await openTab(page, 'Run policy');
+  const cameras = page.getByRole('group', { name: 'Policy cameras' });
+  await expect(cameras).toContainText('trained on 2 camera views');
+  const frontCamera = cameras.getByLabel('Camera for front', { exact: true });
+  const sideCamera = cameras.getByLabel('Camera for camera_4', { exact: true });
+  // Camera 4 does not exist here, so the second view starts on the next free camera.
+  await expect(frontCamera).toHaveValue('0');
+  await expect(sideCamera).toHaveValue('1');
+  // One camera cannot feed both views.
+  await expect(sideCamera.locator('option[value="0"]')).toHaveAttribute('disabled', '');
+  await frontCamera.selectOption('1');
+  await expect(sideCamera).toHaveValue('0');
+  await sideCamera.selectOption('2');
+  await page.getByRole('button', { name: 'Load and check policy', exact: true }).click();
+  await page.getByRole('button', { name: 'Check camera and inference rate', exact: true }).click();
+  expect(writes(state, '/policy/preflight').at(-1)?.body).toEqual({
+    camera_index: 1,
+    cameras: { [front]: 1, [side]: 2 },
+  });
+  await page.getByRole('checkbox', { name: /I am present; the arm is secured/ }).check();
+  await page.getByRole('button', { name: 'Enable policy control', exact: true }).click();
+  const run = page.getByRole('button', { name: 'Run policy', exact: true }).last();
+  await expect(run).toBeEnabled();
+  await page.screenshot({ path: testInfo.outputPath('run-policy-two-cameras.png'), fullPage: true });
+  await run.click();
+  await expect.poll(() => writes(state, '/policy/start').length).toBe(1);
+  expect(writes(state, '/policy/start').at(-1)?.body).toMatchObject({
+    camera_index: 1,
+    cameras: { [front]: 1, [side]: 2 },
+  });
+  await page.getByRole('button', { name: 'Stop arm and disable torque' }).click();
+  expect(state.errors).toEqual([]);
+});
+
+test('a two-view policy on a computer with one camera says what is missing', async ({ page }) => {
+  const state = await fixture(page, true, 'Darwin', false);
+  state.policyViews = ['observation.images.front', 'observation.images.camera_4'];
+  await page.reload();
+  await openTab(page, 'Run policy');
+  await expect(page.getByRole('group', { name: 'Policy cameras' })).toContainText(
+    'This policy needs 2 cameras and this computer shows 1.',
+  );
+  await page.getByRole('button', { name: 'Load and check policy', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Check camera and inference rate', exact: true })).toBeDisabled();
+  expect(writes(state, '/policy/preflight')).toEqual([]);
 });
 
 test('Run policy installs a project model without loading or starting hardware', async ({ page }) => {

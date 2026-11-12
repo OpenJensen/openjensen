@@ -81,6 +81,7 @@ export type RobotPolicyState = {
   preflight: {
     passed: boolean;
     camera_index: number;
+    cameras?: Record<string, number>;
     checked_at: number;
     fps: number;
     measured_fps: number;
@@ -104,6 +105,7 @@ export type RobotPolicyCatalog = {
     task_required?: boolean;
     offline_only?: boolean;
     camera_key?: string;
+    camera_keys?: string[];
     image_shape?: number[];
   }[];
   runtime: { configured: boolean; device: string | null; message: string };
@@ -398,15 +400,21 @@ export const robotApi = {
     state?: number[];
     jpeg?: string;
     camera_index?: number;
+    cameras?: Record<string, number>;
     task?: string;
   }) => request<RobotStatus>('/policy/preview', input, { timeoutMs: 90_000 }),
-  preflightPolicy: (camera_index: number, task?: string) =>
+  preflightPolicy: (camera_index: number, task?: string, cameras?: Record<string, number>) =>
     request<RobotStatus>(
       '/policy/preflight',
-      { camera_index, ...(task === undefined ? {} : { task }) },
+      { camera_index, ...(cameras ? { cameras } : {}), ...(task === undefined ? {} : { task }) },
       { timeoutMs: 30_000 },
     ),
-  startPolicy: (input: { expected_generation: number; camera_index: number; duration_seconds: number }) =>
+  startPolicy: (input: {
+    expected_generation: number;
+    camera_index: number;
+    cameras?: Record<string, number>;
+    duration_seconds: number;
+  }) =>
     request<RobotStatus>('/policy/start', {
       ...input,
       confirm: 'RUN POLICY',

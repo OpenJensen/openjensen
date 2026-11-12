@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { robotApi, robotJoints } from '@/lib/robot-api';
+import { policyCameras, sameCameras, viewName } from '@/lib/policy-cameras';
 import { RobotLabPolicyPreview } from './robot-lab-policy-preview';
 import { RobotLabPolicyInstall } from './robot-lab-policy-install';
 import { Heading, Notice } from './robot-lab-shared';
@@ -12,6 +13,7 @@ export function RobotLabPolicy({ lab }: { lab: RobotLabState }) {
   const [selected, setSelected] = useState('');
   const [duration, setDuration] = useState(10);
   const [attending, setAttending] = useState(false);
+  const [viewCameras, setViewCameras] = useState<Record<string, number>>({});
   const catalog = useQuery({
     queryKey: ['robot-lab', 'policy-catalog'],
     queryFn: robotApi.policyCatalog,
@@ -35,6 +37,21 @@ export function RobotLabPolicy({ lab }: { lab: RobotLabState }) {
   const generation = lab.session?.generation;
   const offline = choice?.offline_only ?? policy?.offline_only ?? false;
   const requiresTask = choice?.task_required ?? policy?.task_required ?? false;
+  // A policy trained on several views needs a camera of this computer for each of them.
+  const views = choice?.camera_keys ?? (choice?.camera_key ? [choice.camera_key] : []);
+  const cameras =
+    views.length > 1
+      ? policyCameras(
+          views,
+          choice?.camera_key ?? views[0],
+          lab.cameraIndex,
+          lab.availableCameras.map((camera) => camera.index),
+          viewCameras,
+        )
+      : undefined;
+  const camerasReady = cameras !== null;
+  const checkedTheseCameras =
+    policy?.preflight?.camera_index === lab.cameraIndex && (!cameras || sameCameras(policy.preflight.cameras, cameras));
   return (
     <>
       <Heading title="Run policy" />
@@ -102,7 +119,7 @@ export function RobotLabPolicy({ lab }: { lab: RobotLabState }) {
                   {item.name}: {item.message}
                 </Notice>
               ))}
-            {choice && (
+            {choice && views.length < 2 && (
               <p className="robot-lab-subtle">
                 {choice.policy_type === 'smolvla' ? 'SmolVLA' : 'ACT'} ·{' '}
                 {choice.fps ? choice.fps + ' FPS' : 'FPS not declared'} · {choice.camera_key} ·{' '}
@@ -110,6 +127,51 @@ export function RobotLabPolicy({ lab }: { lab: RobotLabState }) {
                 {lab.availableCameras.find((camera) => camera.index === lab.cameraIndex)?.name ?? lab.cameraIndex}.
                 Select and inspect its preview before running.
               </p>
+            )}
+            {choice && views.length > 1 && (
+              <div className="robot-lab-form" role="group" aria-label="Policy cameras">
+                <p className="robot-lab-subtle">
+                  {choice.policy_type === 'smolvla' ? 'SmolVLA' : 'ACT'} ·{' '}
+                  {choice.fps ? choice.fps + ' FPS' : 'FPS not declared'} · trained on {views.length} camera views. Give
+                  each view the camera that sees what it saw while recording.
+                </p>
+                <div className="robot-lab-fields">
+                  {views.map((view) => (
+                    <label key={view}>
+                      Camera for {viewName(view)}
+                      <select
+                        aria-label={'Camera for ' + viewName(view)}
+                        value={cameras?.[view] ?? ''}
+                        disabled={lab.busy || running || lab.active}
+                        onChange={(event) => {
+                          const index = Number(event.target.value);
+                          if (view === (choice.camera_key ?? views[0])) lab.setCameraIndex(index);
+                          else setViewCameras((current) => ({ ...current, [view]: index }));
+                        }}
+                      >
+                        {!cameras && <option value="">Choose a camera</option>}
+                        {lab.availableCameras.map((camera) => (
+                          <option
+                            key={camera.index}
+                            value={camera.index}
+                            disabled={
+                              !!cameras && Object.entries(cameras).some(([k, v]) => k !== view && v === camera.index)
+                            }
+                          >
+                            {camera.name || 'Camera ' + camera.index}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ))}
+                </div>
+                {!camerasReady && (
+                  <Notice kind="warning">
+                    This policy needs {views.length} cameras and this computer shows {lab.availableCameras.length}.
+                    Connect the cameras used for recording, then refresh devices.
+                  </Notice>
+                )}
+              </div>
             )}
             {catalog.data?.runtime && !catalog.data.runtime.configured && (
               <Notice kind="warning">{catalog.data.runtime.message}</Notice>
@@ -132,7 +194,12 @@ export function RobotLabPolicy({ lab }: { lab: RobotLabState }) {
                 {policy.fps ? ' · ' + policy.fps + ' FPS' : ''}. Loading does not enable motor torque.
               </Notice>
             )}
-            <RobotLabPolicyPreview lab={lab} selectedId={selectedId} requiresTask={requiresTask} />
+            <RobotLabPolicyPreview
+              lab={lab}
+              selectedId={selectedId}
+              requiresTask={requiresTask}
+              cameras={cameras ?? undefined}
+            />
             {offline ? (
               <Notice>
                 Offline inference only. Physical control units and timing must be verified before an arm session.
@@ -145,11 +212,16 @@ export function RobotLabPolicy({ lab }: { lab: RobotLabState }) {
                     lab.active ||
                     policy?.phase !== 'ready' ||
                     policy.policy_id !== selectedId ||
-                    !lab.availableCameras.length
+                    !lab.availableCameras.length ||
+                    !camerasReady
                   }
                   onClick={() =>
                     void lab.perform('Policy camera and inference check completed.', () =>
-                      robotApi.preflightPolicy(lab.cameraIndex, requiresTask ? lab.task : undefined),
+                      robotApi.preflightPolicy(
+                        lab.cameraIndex,
+                        requiresTask ? lab.task : undefined,
+                        cameras ?? undefined,
+                      ),
                     )
                   }
                 >
@@ -194,7 +266,7 @@ export function RobotLabPolicy({ lab }: { lab: RobotLabState }) {
                       !attending ||
                       policy?.phase !== 'ready' ||
                       !policy.preflight?.passed ||
-                      policy.preflight.camera_index !== lab.cameraIndex ||
+                      !checkedTheseCameras ||
                       !!lab.recording?.active
                     }
                     onClick={() =>
@@ -227,7 +299,7 @@ export function RobotLabPolicy({ lab }: { lab: RobotLabState }) {
                       !attending ||
                       policy?.phase !== 'ready' ||
                       !policy.preflight?.passed ||
-                      policy.preflight.camera_index !== lab.cameraIndex ||
+                      !checkedTheseCameras ||
                       policy.policy_id !== selectedId ||
                       generation === undefined ||
                       !Number.isInteger(duration) ||
@@ -243,6 +315,7 @@ export function RobotLabPolicy({ lab }: { lab: RobotLabState }) {
                           robotApi.startPolicy({
                             expected_generation: generation,
                             camera_index: lab.cameraIndex,
+                            ...(cameras ? { cameras } : {}),
                             duration_seconds: duration,
                             ...(requiresTask ? { task: lab.task } : {}),
                           }),
