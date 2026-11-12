@@ -50,6 +50,8 @@ class PolicyStartRequest(BaseModel):
     workspace_clear: Literal[True]
     camera_index: StrictInt = Field(ge=0, le=63)
     cameras: PolicyCameras | None = None
+    # The operator's choice to let this run pause while the policy plans its actions.
+    allow_planning_pause: StrictBool = False
     duration_seconds: StrictInt = Field(ge=1, le=120)
     expected_generation: StrictInt
 
@@ -59,6 +61,7 @@ class PolicyPreflightRequest(BaseModel):
     task: str = Field(default="", max_length=1000)
     camera_index: StrictInt = Field(ge=0, le=63)
     cameras: PolicyCameras | None = None
+    allow_planning_pause: StrictBool = False
 
 
 class PolicyPreviewRequest(BaseModel):

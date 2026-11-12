@@ -627,6 +627,8 @@ def test_invalid_guided_recording_settings_never_contact_hardware(tmp_path, chan
         ("policy/load", {"policy_id": "pen", "python": "/tmp/untrusted"}),
         ("policy/preflight", {"camera_index": True}),
         ("policy/preflight", {"camera_index": 0, "cameras": {}}),
+        ("policy/preflight", {"camera_index": 0, "allow_planning_pause": "yes"}),
+        ("policy/preflight", {"camera_index": 0, "allow_planning_pause": 1}),
         ("policy/preflight", {"camera_index": 0, "cameras": {"front": 0}}),
         ("policy/preflight", {"camera_index": 0, "cameras": {"observation.images.front": 64}}),
         ("policy/preflight", {"camera_index": 0, "cameras": {"observation.images.front": "0"}}),
@@ -707,6 +709,13 @@ def test_policy_catalog_load_and_explicit_start_are_finite_proxy_routes(tmp_path
         ):
             assert client.post("/api/v1/robot-lab/" + path, json=body).status_code == 200
             assert json.loads(calls[-1].content)["cameras"] == views
+        # The operator's choice to allow planning pauses reaches the arm unchanged.
+        for path, body in (
+            ("policy/preflight", {"camera_index": 0, "allow_planning_pause": True}),
+            ("policy/start", payload | {"allow_planning_pause": True}),
+        ):
+            assert client.post("/api/v1/robot-lab/" + path, json=body).status_code == 200
+            assert json.loads(calls[-1].content)["allow_planning_pause"] is True
         assert client.post("/api/v1/robot-lab/policy/arbitrary", json={}).status_code == 404
     asyncio.run(companion.close())
 
