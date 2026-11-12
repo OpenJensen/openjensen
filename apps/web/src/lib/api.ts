@@ -336,8 +336,8 @@ export const api = {
     request<{ installed_policy_id: string }>(
       `/projects/${encodeURIComponent(projectId)}/robot-lab/policies/${encodeURIComponent(artifactId)}/install`,
       { method: 'POST', body: JSON.stringify(settings) },
-      // A model kept in cloud storage is fetched first; the server allows 30 minutes for that.
-      2_160_000,
+      // A model kept in cloud storage is fetched first; the server allows an hour for that.
+      3_960_000,
     ),
   artifacts: (id: string) => request<PolicyArtifact[]>(`/projects/${encodeURIComponent(id)}/artifacts`),
   renameModelRun: (projectId: string, jobId: string, name: string) =>
