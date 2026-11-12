@@ -18,9 +18,9 @@ from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, field_
 from vla_platform.robot_lab_bridge import MAX_JSON, RobotLabError, strict_json
 
 MAX_ARCHIVE = 2 * 1024**3
-# Fetching a checkpoint from cloud storage depends on the connection: 2 GiB needs twenty
-# minutes at 1.7 MB/s. Handing it to the robot service happens on this network and is quick.
-DOWNLOAD_SECONDS = 1800
+# Fetching a checkpoint from cloud storage depends on the connection: 2 GiB needs forty-five
+# minutes at 0.8 MB/s. Handing it to the robot service happens on this network and is quick.
+DOWNLOAD_SECONDS = 3600
 INSTALL_SECONDS = 300
 HEADROOM = 10 * 1024**3
 JOINTS = ["shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll", "gripper"]
