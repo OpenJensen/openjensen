@@ -10,6 +10,7 @@ import unittest
 
 import test_policy as fixtures
 from policy_install import install_archive
+from test_smolvla_contract import SmolVLAContractTests
 
 
 class InstallTests(unittest.TestCase):
@@ -74,6 +75,113 @@ class InstallTests(unittest.TestCase):
         )
         self.assertTrue((self.lab.policy.root / "pen").is_dir())
         self.assertFalse(list(self.lab.data_dir.glob(".policy-install-*")))
+
+    def with_files(self, extra, artifact=None):
+        """The same artifact with more checkpoint files, listed in its manifest."""
+        descriptor, entries = artifact or self.artifact()
+        descriptor, entries = dict(descriptor), list(entries)
+        manifest = json.loads(entries[0][1])
+        for name, data in extra.items():
+            path = "checkpoint/pretrained_model/" + name
+            manifest["files"][path] = hashlib.sha256(data).hexdigest()
+            entries.append(("policy/" + path, data, tarfile.REGTYPE))
+        document = json.dumps(manifest).encode()
+        entries[0] = ("policy/manifest.json", document, tarfile.REGTYPE)
+        descriptor["source_manifest_sha256"] = hashlib.sha256(document).hexdigest()
+        return descriptor, entries
+
+    def smolvla_artifact(self):
+        """A SmolVLA checkpoint as current LeRobot saves it: its tokenizer in a folder,
+        named as an artifact of the tokenizer step, beside the backbone's data files."""
+        source = SmolVLAContractTests("test_closed_dispatch_and_exact_native_processors")
+        source.setUp()
+        self.addCleanup(source.tearDown)
+        pipeline = json.loads((source.checkpoint / "policy_preprocessor.json").read_text())
+        pipeline["steps"][3]["config"]["tokenizer_name"] = "tokenizer"
+        pipeline["steps"][3]["artifacts"] = {"tokenizer_name": "tokenizer"}
+        (source.checkpoint / "policy_preprocessor.json").write_text(json.dumps(pipeline))
+        folder = source.checkpoint / "tokenizer"
+        folder.mkdir()
+        (folder / "tokenizer.json").write_text("{}")
+        (folder / "tokenizer_config.json").write_text("{}")
+        (folder / "chat_template.jinja").write_text("template")
+        files = {
+            "checkpoint/pretrained_model/" + path.relative_to(source.checkpoint).as_posix(): (
+                path.read_bytes()
+            )
+            for path in sorted(source.checkpoint.rglob("*"))
+            if path.is_file()
+        }
+        manifest = json.dumps(
+            {
+                "schema_version": 1,
+                "metadata": {},
+                "files": {name: hashlib.sha256(data).hexdigest() for name, data in files.items()},
+            }
+        ).encode()
+        descriptor = {
+            "schema_version": 1,
+            "id": "installed-duck",
+            "name": "Duck",
+            "policy_type": "smolvla",
+            "fps": 23,
+            "camera_key": None,
+            "joint_names": list(fixtures.JOINTS),
+            "state_units": fixtures.UNITS,
+            "action_units": fixtures.UNITS,
+            "checkpoint": "pretrained_model",
+            "source_manifest_sha256": hashlib.sha256(manifest).hexdigest(),
+        }
+        entries = [("policy/manifest.json", manifest, tarfile.REGTYPE)]
+        entries.extend(("policy/" + name, data, tarfile.REGTYPE) for name, data in files.items())
+        return descriptor, entries
+
+    def test_a_smolvla_checkpoint_installs_with_the_tokenizer_folder_it_was_saved_with(self):
+        """LeRobot saves ``tokenizer/`` beside the weights; that used to refuse the install."""
+        descriptor, entries = self.smolvla_artifact()
+        archive = self.tar(entries)
+        result = install_archive(self.lab, io.BytesIO(archive), len(archive), descriptor)
+        self.assertEqual(result["installed_policy_id"], "installed-duck")
+        installed = self.lab.policy.root / "installed-duck/pretrained_model"
+        self.assertEqual((installed / "tokenizer/chat_template.jinja").read_text(), "template")
+        self.assertTrue((installed / "assets/smolvlm/tokenizer.json").is_file())
+        listed = self.lab.policy.catalog()["policies"]
+        self.assertTrue(
+            next(item for item in listed if item["id"] == "installed-duck")["compatible"]
+        )
+        self.assertIsNone(self.lab.policy.runtime)
+        # Its bytes are covered by the manifest: a changed copy refuses the install.
+        changed = [
+            (name, data + b" " if name.endswith("tokenizer/tokenizer.json") else data, kind)
+            for name, data, kind in entries
+        ]
+        archive = self.tar(changed)
+        with self.assertRaises(ValueError):
+            install_archive(
+                self.lab, io.BytesIO(archive), len(archive), descriptor | {"id": "second"}
+            )
+        self.assertFalse((self.lab.policy.root / "second").exists())
+
+    def test_a_tokenizer_folder_is_not_accepted_for_a_policy_that_has_no_tokenizer(self):
+        descriptor, entries = self.with_files({"tokenizer/tokenizer.json": b"{}"})
+        archive = self.tar(entries)
+        with self.assertRaisesRegex(ValueError, "Only native JSON"):
+            install_archive(self.lab, io.BytesIO(archive), len(archive), descriptor)
+        self.assertFalse((self.lab.policy.root / "installed-pen").exists())
+
+    def test_other_nested_checkpoint_files_are_still_refused(self):
+        artifact = self.artifact()
+        for name in (
+            "extra/file.json",
+            "tokenizer/deeper/file.json",
+            "tokenizer/code.py",
+            "assets/other/config.json",
+        ):
+            descriptor, entries = self.with_files({name: b"{}"}, artifact)
+            archive = self.tar(entries)
+            with self.assertRaisesRegex(ValueError, "unsupported nested asset"):
+                install_archive(self.lab, io.BytesIO(archive), len(archive), descriptor)
+            self.assertFalse((self.lab.policy.root / "installed-pen").exists())
 
     def test_paths_links_duplicate_hash_and_manifest_damage_never_publish(self):
         descriptor, entries = self.artifact()
