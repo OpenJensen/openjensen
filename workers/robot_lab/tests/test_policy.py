@@ -434,6 +434,59 @@ class PolicyTests(unittest.TestCase):
         self.assertFalse(self.lab.torque)
         self.assertIn("non-finite", self.lab.error)
 
+    def run_with_slow_predictions(self, slow):
+        """Start a run whose inference takes 0.26 s on the calls ``slow`` selects."""
+        runner = self.prepare()
+        calls = []
+        answer = runner.runtime.request
+
+        def request(message, timeout=2):
+            if not message.get("reset"):
+                calls.append(time.monotonic())
+                if slow(len(calls)):
+                    time.sleep(0.26)
+            return answer(message)
+
+        runner.runtime.request = request
+        runner.start(self.run_payload())
+
+        def control_loop():
+            # The arm's own loop: applies the latest prediction and enforces its age limit.
+            while self.lab.mode == "policy":
+                try:
+                    runner.apply(dict(self.lab.positions), time.monotonic())
+                except HardwareError as error:
+                    self.lab.stop(str(error))
+                    return
+                time.sleep(0.01)
+
+        threading.Thread(target=control_loop, daemon=True).start()
+        return runner, calls
+
+    def test_one_slow_step_while_planning_a_chunk_does_not_stop_a_run(self):
+        """At 23 FPS with two cameras, planning took 0.2 s and every run stopped at once,
+        although the check before it had passed."""
+        runner, calls = self.run_with_slow_predictions(lambda number: number == 1)
+        deadline = time.monotonic() + 3
+        while runner.steps < 8 and self.lab.mode == "policy" and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.assertEqual(self.lab.mode, "policy", self.lab.error)
+        self.assertGreaterEqual(runner.steps, 8)
+        # The run continued at its own rate instead of hurrying through missed steps.
+        gaps = [later - earlier for earlier, later in zip(calls[1:], calls[2:], strict=False)]
+        self.assertGreater(min(gaps), 0.8 / runner.model["fps"])
+        self.lab.stop()
+
+    def test_a_policy_that_keeps_falling_behind_is_still_stopped(self):
+        runner, calls = self.run_with_slow_predictions(lambda number: True)
+        deadline = time.monotonic() + 4
+        while self.lab.mode != "idle" and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.assertEqual(self.lab.mode, "idle")
+        self.assertFalse(self.lab.torque)
+        self.assertIn("cannot maintain the trained frame rate", self.lab.error)
+        self.assertLessEqual(len(calls), 4)
+
     def test_preflight_measures_native_camera_path_without_arming(self):
         runner, _, _ = self.install()
         runner.load({"policy_id": "pen"})

@@ -852,11 +852,21 @@ class PolicyRunner:
             deadline, due = time.monotonic() + duration, time.monotonic()
             window = max(16, 2 * self.model["fps"])
             camera_stamps = {index: deque(maxlen=window) for index in cameras.values()}
+            late = deque(maxlen=window)
             while not cancel.is_set() and time.monotonic() < deadline:
                 if generation != self.lab.generation or self.lab.mode != "policy":
                     return
-                if time.monotonic() - due > max(0.15, 2 / self.model["fps"]):
-                    raise ValueError("Policy loop cannot maintain the trained frame rate")
+                behind = time.monotonic() - due > max(0.15, 2 / self.model["fps"])
+                late.append(behind)
+                if behind:
+                    # A policy that predicts a chunk of actions is slow on the one step
+                    # where it plans the next chunk. That step is already bounded by the
+                    # prediction time limit below and in apply(); what must stop the run
+                    # is falling behind again and again. Continue from now rather than
+                    # hurrying through the missed steps on stale camera frames.
+                    if sum(late) > max(1, len(late) // 20):
+                        raise ValueError("Policy loop cannot maintain the trained frame rate")
+                    due = time.monotonic()
                 positions = dict(self.lab.positions)
                 message, captured = self._observation(
                     cameras,
