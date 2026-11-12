@@ -11,7 +11,12 @@ from pathlib import Path, PurePosixPath
 
 from hardware import JOINTS
 from policy import UNITS, admit
-from policy_contract import SMOLVLM_ASSET_FILES, validate_policy_config
+from policy_contract import (
+    SMOLVLM_ASSET_FILES,
+    TOKENIZER_ARTIFACT,
+    TOKENIZER_ARTIFACT_FILES,
+    validate_policy_config,
+)
 
 MAX_ARCHIVE = 2 * 1024**3
 
@@ -148,6 +153,12 @@ def install_archive(lab, source, length, descriptor):
                                     len(parts) != 3
                                     or parts[:2] != ("assets", "smolvlm")
                                     or parts[2] not in SMOLVLM_ASSET_FILES
+                                )
+                                # The tokenizer LeRobot saves beside the weights.
+                                and (
+                                    len(parts) != 2
+                                    or parts[0] != TOKENIZER_ARTIFACT
+                                    or parts[1] not in TOKENIZER_ARTIFACT_FILES
                                 )
                             ):
                                 raise ValueError(

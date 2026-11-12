@@ -21,10 +21,12 @@ from pathlib import Path
 from hardware import JOINTS, HardwareError
 from motion import control_limits
 from policy_contract import (
+    TOKENIZER_ARTIFACT,
     read_json,
     validate_policy_config,
     validate_processors,
     validate_smolvla_assets,
+    validate_tokenizer_artifact,
 )
 
 UNITS = ["degrees"] * 5 + ["percent"]
@@ -85,12 +87,19 @@ def admit(root, ident):
         assets = validate_smolvla_assets(checkpoint)
         paths = [path for path in paths if path.name != "assets"]
         paths.extend(assets.iterdir())
+        tokenizer = checkpoint / TOKENIZER_ARTIFACT
+        if tokenizer.is_dir() and not tokenizer.is_symlink():
+            # The tokenizer LeRobot saved with the weights: known data files only.
+            validate_tokenizer_artifact(checkpoint)
+            paths = [path for path in paths if path != tokenizer]
+            paths.extend(tokenizer.iterdir())
     for path in paths:
         if (
             path.is_symlink()
             or not path.is_file()
             or path.suffix not in {".json", ".safetensors", ".md", ".txt"}
             and path.name != "LICENSE"
+            and not (kind == "smolvla" and path.parent.name == TOKENIZER_ARTIFACT)
         ):
             raise ValueError(
                 "Only native JSON, safetensors and closed tokenizer data are supported"

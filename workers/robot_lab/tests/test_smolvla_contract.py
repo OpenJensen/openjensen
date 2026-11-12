@@ -217,6 +217,61 @@ class SmolVLAContractTests(unittest.TestCase):
         validate_processors(self.checkpoint, "smolvla")
         self.assertEqual(set(original["steps"][3]["config"]), CONFIG_KEYS["tokenizer_processor"])
 
+    def test_the_tokenizer_a_trained_checkpoint_saves_is_accepted_only_as_plain_data(self):
+        """Current LeRobot saves ``tokenizer/`` and names it as the step's artifact."""
+        path = self.checkpoint / "policy_preprocessor.json"
+        original = json.loads(path.read_text())
+
+        def write(name="tokenizer", artifacts=None):
+            pipeline = copy.deepcopy(original)
+            pipeline["steps"][3]["config"]["tokenizer_name"] = name
+            pipeline["steps"][3]["artifacts"] = artifacts or {"tokenizer_name": "tokenizer"}
+            path.write_text(json.dumps(pipeline))
+
+        write()
+        with self.assertRaisesRegex(ValueError, "missing its saved tokenizer"):
+            validate_processors(self.checkpoint, "smolvla")
+        folder = self.checkpoint / "tokenizer"
+        folder.mkdir()
+        (folder / "tokenizer.json").write_text("{}")
+        with self.assertRaisesRegex(ValueError, "incomplete"):
+            validate_processors(self.checkpoint, "smolvla")
+        (folder / "tokenizer_config.json").write_text("{}")
+        (folder / "chat_template.jinja").write_text("template")
+        validate_processors(self.checkpoint, "smolvla")
+
+        (folder / "tokenizer.py").write_text("")
+        with self.assertRaisesRegex(ValueError, "known data files"):
+            validate_processors(self.checkpoint, "smolvla")
+        (folder / "tokenizer.py").unlink()
+        (folder / "vocab.json").symlink_to(self.root / "outside.json")
+        with self.assertRaisesRegex(ValueError, "known data files"):
+            validate_processors(self.checkpoint, "smolvla")
+        (folder / "vocab.json").unlink()
+        (folder / "merges.txt").mkdir()
+        with self.assertRaisesRegex(ValueError, "known data files"):
+            validate_processors(self.checkpoint, "smolvla")
+        (folder / "merges.txt").rmdir()
+        validate_processors(self.checkpoint, "smolvla")
+
+        # Only this one folder, named the same way in both places, is an artifact.
+        for name, artifacts in (
+            ("tokenizer", {"tokenizer_name": "tokenizer/../.."}),
+            ("assets", {"tokenizer_name": "assets"}),
+            (SMOLVLM_MODEL, {"tokenizer_name": "tokenizer"}),
+            ("tokenizer", {"tokenizer_name": "tokenizer", "state": "x"}),
+        ):
+            with self.subTest(name=name, artifacts=artifacts):
+                write(name, artifacts)
+                with self.assertRaises(ValueError):
+                    validate_processors(self.checkpoint, "smolvla")
+        # No other step may declare artifacts.
+        pipeline = copy.deepcopy(original)
+        pipeline["steps"][5]["artifacts"] = {"tokenizer_name": "tokenizer"}
+        path.write_text(json.dumps(pipeline))
+        with self.assertRaises(ValueError):
+            validate_processors(self.checkpoint, "smolvla")
+
     def test_dynamic_code_metadata_is_rejected_in_all_asset_configs(self):
         for name in ("config.json", "tokenizer_config.json", "processor_config.json"):
             with self.subTest(name=name):
