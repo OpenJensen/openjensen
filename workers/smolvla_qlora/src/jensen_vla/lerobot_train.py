@@ -85,9 +85,12 @@ def close_camera_inputs(config, cameras):
     not replace them. A SmolVLA policy fine-tuned on two cameras therefore kept the base
     model's three camera names beside its own. Training never noticed, because images
     that are absent are skipped, but the saved policy asked for five cameras and could
-    not be run. Returns the names removed.
+    not be run. Returns the names removed. A policy that does not declare every selected
+    camera under the dataset's own name is left as it is.
     """
     selected = set(cameras)
+    if selected - set(config.input_features):
+        return []
     extra = [
         key
         for key, feature in config.input_features.items()
@@ -97,8 +100,6 @@ def close_camera_inputs(config, cameras):
             or getattr(getattr(feature, "type", None), "name", None) == "VISUAL"
         )
     ]
-    if selected - set(config.input_features):
-        raise ValueError("The policy is missing a selected dataset camera")
     for key in extra:
         del config.input_features[key]
     return extra
