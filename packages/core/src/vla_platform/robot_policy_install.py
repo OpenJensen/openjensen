@@ -18,6 +18,10 @@ from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, field_
 from vla_platform.robot_lab_bridge import MAX_JSON, RobotLabError, strict_json
 
 MAX_ARCHIVE = 2 * 1024**3
+# Fetching a checkpoint from cloud storage depends on the connection: 2 GiB needs twenty
+# minutes at 1.7 MB/s. Handing it to the robot service happens on this network and is quick.
+DOWNLOAD_SECONDS = 1800
+INSTALL_SECONDS = 300
 HEADROOM = 10 * 1024**3
 JOINTS = ["shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll", "gripper"]
 UNITS = ["degrees"] * 5 + ["percent"]
@@ -321,7 +325,7 @@ async def install_artifact(app, project_id, artifact_id, payload: PolicyInstallR
         ):
             raise ValueError("Choose a reload-verified native ACT or SmolVLA checkpoint")
         config = bridge.config()
-        async with bridge.import_lock, asyncio.timeout(300):
+        async with bridge.import_lock:
             spool_root = bridge.data_dir / "policy-install"
             spool_root.mkdir(mode=0o700, parents=True, exist_ok=True)
             if (
@@ -331,61 +335,23 @@ async def install_artifact(app, project_id, artifact_id, payload: PolicyInstallR
                 raise ValueError("Policy installation needs its archive space plus 10 GiB free")
             with tempfile.TemporaryDirectory(prefix="artifact-", dir=spool_root) as temporary:
                 path = Path(temporary) / "policy.tar"
-                source = await lifecycle.download(project_id, artifact_id)
-                size = await _spool(source, path)
-                metadata, recipe = await asyncio.to_thread(
-                    _archive_metadata, path, artifact.manifest_sha256
-                )
-                recorded = await recorded_control(app, project_id, artifact)
                 try:
-                    descriptor = _descriptor(artifact, metadata, recipe, payload, recorded)
-                except ValueError as error:
-                    raise RobotLabError(str(error), 422) from None
-                encoded = base64.b64encode(
-                    json.dumps(descriptor, separators=(",", ":"), allow_nan=False).encode()
-                ).decode()
-                async with bridge.client.stream(
-                    "POST",
-                    bridge.url(config, "policy/install"),
-                    headers=bridge.headers(config)
-                    | {
-                        "Content-Type": "application/x-tar",
-                        "Content-Length": str(size),
-                        "X-OpenJensen-Policy": encoded,
-                    },
-                    content=_chunks(path),
-                    timeout=httpx.Timeout(120, connect=3),
-                    follow_redirects=False,
-                ) as response:
-                    raw = await bridge.read(response, MAX_JSON)
-                    try:
-                        result = bridge.sanitize(strict_json(raw), config)
-                    except ValueError, UnicodeError, RecursionError:
-                        raise RobotLabError(
-                            "Policy companion returned an invalid installation result"
-                        ) from None
-                    if not response.is_success:
-                        message = (
-                            result.get("error", result.get("detail"))
-                            if isinstance(result, dict)
-                            else None
-                        )
-                        status = (
-                            response.status_code
-                            if response.status_code in {400, 409, 413, 422, 503}
-                            else 502
-                        )
-                        raise RobotLabError(
-                            str(message)[:1000]
-                            if isinstance(message, str)
-                            else "Policy installation failed",
-                            status,
-                        )
-                    if not isinstance(result, dict):
-                        raise RobotLabError(
-                            "Policy companion returned an invalid installation result"
-                        )
-                    return result
+                    async with asyncio.timeout(DOWNLOAD_SECONDS) as limit:
+                        source = await lifecycle.download(project_id, artifact_id)
+                        size = await _spool(source, path)
+                except TimeoutError:
+                    if not limit.expired():
+                        raise
+                    raise RobotLabError(
+                        "The model could not be fetched from storage within "
+                        f"{DOWNLOAD_SECONDS // 60} minutes. Check the connection and install "
+                        "it again; the previous policies are retained",
+                        503,
+                    ) from None
+                return await asyncio.wait_for(
+                    _install_spooled(app, project_id, artifact, payload, path, size, config),
+                    INSTALL_SECONDS,
+                )
     except RobotLabError:
         raise
     except TimeoutError, httpx.HTTPError, OSError, RuntimeError:
@@ -396,3 +362,51 @@ async def install_artifact(app, project_id, artifact_id, payload: PolicyInstallR
         raise RobotLabError(
             "Selected policy archive or compatibility settings are invalid", 422
         ) from None
+
+
+async def _install_spooled(app, project_id, artifact, payload, path, size, config):
+    """Verify the fetched archive and hand it to the robot service."""
+    bridge = app.state.robot_lab
+    metadata, recipe = await asyncio.to_thread(_archive_metadata, path, artifact.manifest_sha256)
+    recorded = await recorded_control(app, project_id, artifact)
+    try:
+        descriptor = _descriptor(artifact, metadata, recipe, payload, recorded)
+    except ValueError as error:
+        raise RobotLabError(str(error), 422) from None
+    encoded = base64.b64encode(
+        json.dumps(descriptor, separators=(",", ":"), allow_nan=False).encode()
+    ).decode()
+    async with bridge.client.stream(
+        "POST",
+        bridge.url(config, "policy/install"),
+        headers=bridge.headers(config)
+        | {
+            "Content-Type": "application/x-tar",
+            "Content-Length": str(size),
+            "X-OpenJensen-Policy": encoded,
+        },
+        content=_chunks(path),
+        timeout=httpx.Timeout(120, connect=3),
+        follow_redirects=False,
+    ) as response:
+        raw = await bridge.read(response, MAX_JSON)
+        try:
+            result = bridge.sanitize(strict_json(raw), config)
+        except ValueError, UnicodeError, RecursionError:
+            raise RobotLabError(
+                "Policy companion returned an invalid installation result"
+            ) from None
+        if not response.is_success:
+            message = (
+                result.get("error", result.get("detail")) if isinstance(result, dict) else None
+            )
+            status = (
+                response.status_code if response.status_code in {400, 409, 413, 422, 503} else 502
+            )
+            raise RobotLabError(
+                str(message)[:1000] if isinstance(message, str) else "Policy installation failed",
+                status,
+            )
+        if not isinstance(result, dict):
+            raise RobotLabError("Policy companion returned an invalid installation result")
+        return result

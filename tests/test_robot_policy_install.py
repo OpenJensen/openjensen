@@ -221,6 +221,60 @@ def test_cloud_download_finishes_and_closes_before_upload(tmp_path):
     assert source.closed
 
 
+class SlowDownload(Download):
+    """Cloud storage on a slow connection."""
+
+    delay = 0.4
+
+    async def __aiter__(self):
+        yield self.content[:1024]
+        await asyncio.sleep(self.delay)
+        yield self.content[1024:]
+
+
+def test_a_slow_download_is_not_cut_off_by_the_limit_for_the_local_hand_over(tmp_path, monkeypatch):
+    """A 1.3 GB checkpoint needed fifteen minutes to fetch and one five-minute limit covered
+    both the fetch and the hand-over, so installing it always failed."""
+    monkeypatch.setattr("vla_platform.robot_policy_install.INSTALL_SECONDS", 0.2)
+    archive, artifact = bundle(tmp_path)
+    source = SlowDownload(archive.read_bytes())
+
+    async def handler(request):
+        assert await request.aread() == archive.read_bytes()
+        return httpx.Response(200, json={"installed_policy_id": "example"})
+
+    app = application(tmp_path, archive, artifact, handler, source)
+
+    async def run():
+        result = await install_artifact(
+            app, "project", artifact.id, PolicyInstallRequest(name="Pen")
+        )
+        assert result["installed_policy_id"] == "example"
+        await app.state.robot_lab.close()
+
+    asyncio.run(run())
+    assert source.closed
+
+
+def test_a_download_that_never_finishes_says_so_and_installs_nothing(tmp_path, monkeypatch):
+    monkeypatch.setattr("vla_platform.robot_policy_install.DOWNLOAD_SECONDS", 0.1)
+    archive, artifact = bundle(tmp_path)
+    source = SlowDownload(archive.read_bytes())
+    app = application(
+        tmp_path, archive, artifact, lambda _: pytest.fail("Nothing may be uploaded"), source
+    )
+
+    async def run():
+        with pytest.raises(RobotLabError, match="could not be fetched from storage") as error:
+            await install_artifact(app, "project", artifact.id, PolicyInstallRequest(name="Pen"))
+        assert error.value.status == 503
+        await app.state.robot_lab.close()
+
+    asyncio.run(run())
+    assert source.closed
+    assert not list((tmp_path / "app/policy-install").iterdir())
+
+
 def test_cloud_integrity_failure_closes_source_and_never_uploads(tmp_path):
     archive, artifact = bundle(tmp_path)
     source = Download(archive.read_bytes(), fail=True)
