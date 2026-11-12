@@ -415,8 +415,9 @@ def test_a_fine_tuned_policy_declares_only_the_cameras_it_was_trained_on():
     assert close_camera_inputs(config, [FRONT, SIDE]) == base
     assert list(config.input_features) == ["observation.state", FRONT, SIDE]
     assert close_camera_inputs(config, [FRONT, SIDE]) == []
-    with pytest.raises(ValueError, match="missing a selected dataset camera"):
-        close_camera_inputs(config, [FRONT, "observation.images.wrist"])
+    # A policy that names its cameras differently is not second-guessed.
+    assert close_camera_inputs(config, [FRONT, "observation.images.wrist"]) == []
+    assert list(config.input_features) == ["observation.state", FRONT, SIDE]
 
 
 def test_backbone_files_are_found_before_training_and_copied_into_a_checkpoint(tmp_path):
