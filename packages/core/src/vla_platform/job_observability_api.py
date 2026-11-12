@@ -5,7 +5,7 @@ from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query, Request, Response
 
-from vla_platform import __version__
+from vla_platform import __version__, build
 from vla_platform.job_observability import (
     JobFailure,
     JobLogPage,
@@ -92,6 +92,7 @@ async def diagnostics(project_id: str, key: str, request: Request):
     store, job = await context(request, project_id, key)
     specification = job.model_dump(mode="json")
     specification["application_version"] = __version__
+    specification["application_build"] = build.current().label
     try:
         bundle = await asyncio.to_thread(store.export, job.id, specification)
     except ObservabilityError:

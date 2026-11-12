@@ -15,7 +15,7 @@ from filelock import FileLock, Timeout
 from starlette.background import BackgroundTask
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from vla_platform import __version__
+from vla_platform import __version__, build
 from vla_platform.agent_control.service import AgentControl
 from vla_platform.agent_control_api import register_errors as register_agent_errors
 from vla_platform.agent_control_api import router as agent_control_router
@@ -350,7 +350,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/api/v1/health")
     async def health() -> dict[str, str]:
-        return {"status": "ok", "version": __version__}
+        # ``build`` names the exact code; ``version`` alone is shared by unmerged branches.
+        return {"status": "ok", "version": __version__, "build": build.current().label}
 
     @app.get("/api/v1/cloud-runs", response_model=CloudRunsFeed)
     async def cloud_runs(response: Response) -> CloudRunsFeed:
