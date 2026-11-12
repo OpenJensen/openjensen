@@ -11,6 +11,8 @@ from pathlib import Path
 
 DATA = "data/chunk-{chunk_index:03d}/file-{file_index:03d}.parquet"
 VIDEO = "videos/{video_key}/chunk-{chunk_index:03d}/file-{file_index:03d}.mp4"
+# Beyond this many frames between keyframes, random frame reads dominate training time.
+SLOW_SEEK_FRAMES = 12
 VIDEO_INPUT = [
     "-f",
     "mov",
@@ -621,6 +623,7 @@ def validate(root, limits):
     )
     actual_media = {path.relative_to(root).as_posix() for path in (root / "videos").rglob("*.mp4")}
     require(actual_media == set(media), "Missing or unreferenced camera media")
+    slowest_seek = 0
     for name, entry in media.items():
         path = root / name
         result = bounded_output(
@@ -663,7 +666,7 @@ def validate(root, limits):
                 "-show_entries",
                 # The common section name also works with FFmpeg 4.4; its
                 # frame-specific alias is unavailable on older installations.
-                "frame=best_effort_timestamp_time:side_data=",
+                "frame=best_effort_timestamp_time,key_frame:side_data=",
                 "-of",
                 "json=compact=1",
                 *VIDEO_INPUT,
@@ -673,6 +676,9 @@ def validate(root, limits):
         )
         decoded_frames = json.loads(timing)["frames"]
         require(len(decoded_frames) == count, "Decoded video timestamps are incomplete")
+        keyframes = [index for index, frame in enumerate(decoded_frames) if frame.get("key_frame")]
+        gaps = [later - earlier for earlier, later in zip(keyframes, [*keyframes[1:], count])]
+        slowest_seek = max(slowest_seek, max(gaps, default=count))
         for index, frame in enumerate(decoded_frames):
             timestamp = float(frame["best_effort_timestamp_time"])
             require(
@@ -754,6 +760,12 @@ def validate(root, limits):
         warnings.append(
             "Imported dataset ancestry is unknown; held-out episodes do not "
             "establish independent generalization."
+        )
+    if slowest_seek > SLOW_SEEK_FRAMES:
+        warnings.append(
+            f"Training will be slow: a camera video has a keyframe only every {slowest_seek} "
+            "frames, so each frame read decodes many frames first. Re-encode the videos with "
+            "a keyframe every 2 frames (ffmpeg -g 2 -bf 0)."
         )
     return {
         "total_episodes": episodes_count,

@@ -23,7 +23,7 @@ pytestmark = pytest.mark.skipif(os.name == "nt", reason="Secure local snapshot o
 CAMERA = "observation.images.front"
 
 
-def build_dataset(root, episodes=4):
+def build_dataset(root, episodes=4, video_options=()):
     """Write a finalized LeRobot v3 dataset: real Parquet, real MP4, three frames each."""
     root.mkdir()
     script = r"""
@@ -143,6 +143,7 @@ pq.write_table(pa.Table.from_pylist(rows, schema=schema), root / "data/chunk-000
             str(episodes * 3),
             "-c:v",
             "libx264",
+            *video_options,
             "-pix_fmt",
             "yuv420p",
             str(root / f"videos/{CAMERA}/chunk-000/file-000.mp4"),
@@ -576,3 +577,17 @@ def test_rehash_reads_no_more_than_the_declared_file_size(dataset, tmp_path, mon
     with pytest.raises(SnapshotError, match="changed while reading"):
         verify_snapshot(root, value["manifest_sha256"])
     assert sum(reads) <= declared_size + 1
+
+
+def test_videos_that_are_slow_to_read_are_reported_before_training(tmp_path):
+    """One keyframe per episode made every frame read decode a hundred frames first:
+    a cloud GPU then spent hours waiting on the CPU."""
+    sparse = build_dataset(tmp_path / "sparse", episodes=10)
+    value = create_snapshot(tmp_path, sparse, tmp_path / "snapshots")
+    slow = [warning for warning in value["warnings"] if warning.startswith("Training will be slow")]
+    assert len(slow) == 1 and "every 30 frames" in slow[0] and "-g 2" in slow[0]
+    quick = build_dataset(
+        tmp_path / "quick", episodes=10, video_options=("-g", "2", "-keyint_min", "2", "-bf", "0")
+    )
+    value = create_snapshot(tmp_path, quick, tmp_path / "snapshots")
+    assert not any("slow" in warning for warning in value["warnings"])
