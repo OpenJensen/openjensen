@@ -626,6 +626,18 @@ def test_invalid_guided_recording_settings_never_contact_hardware(tmp_path, chan
         ("policy/load", {"policy_id": "../escape"}),
         ("policy/load", {"policy_id": "pen", "python": "/tmp/untrusted"}),
         ("policy/preflight", {"camera_index": True}),
+        ("policy/preflight", {"camera_index": 0, "cameras": {}}),
+        ("policy/preflight", {"camera_index": 0, "cameras": {"front": 0}}),
+        ("policy/preflight", {"camera_index": 0, "cameras": {"observation.images.front": 64}}),
+        ("policy/preflight", {"camera_index": 0, "cameras": {"observation.images.front": "0"}}),
+        (
+            "policy/preflight",
+            {"camera_index": 0, "cameras": {f"observation.images.c{n}": n for n in range(4)}},
+        ),
+        (
+            "policy/preview",
+            {"state": [0] * 6, "jpeg": "YQ==", "cameras": {"observation.images.front": 0}},
+        ),
         ("policy/heartbeat", {"expected_generation": True}),
         (
             "policy/start",
@@ -686,6 +698,15 @@ def test_policy_catalog_load_and_explicit_start_are_finite_proxy_routes(tmp_path
         }
         assert client.post("/api/v1/robot-lab/policy/start", json=payload).status_code == 200
         assert json.loads(calls[-1].content) == payload
+        # A policy trained on two views names a camera for each; the choice reaches the arm.
+        views = {"observation.images.front": 0, "observation.images.camera_4": 2}
+        for path, body in (
+            ("policy/preflight", {"camera_index": 0, "cameras": views}),
+            ("policy/start", payload | {"cameras": views}),
+            ("policy/preview", {"state": [0.0] * 6, "camera_index": 0, "cameras": views}),
+        ):
+            assert client.post("/api/v1/robot-lab/" + path, json=body).status_code == 200
+            assert json.loads(calls[-1].content)["cameras"] == views
         assert client.post("/api/v1/robot-lab/policy/arbitrary", json={}).status_code == 404
     asyncio.run(companion.close())
 

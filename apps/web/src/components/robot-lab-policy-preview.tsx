@@ -9,10 +9,13 @@ export function RobotLabPolicyPreview({
   lab,
   selectedId,
   requiresTask,
+  cameras,
 }: {
   lab: RobotLabState;
   selectedId: string;
   requiresTask: boolean;
+  /** One camera for each view of a policy trained on several; absent for one view. */
+  cameras?: Record<string, number>;
 }) {
   const [values, setValues] = useState([0, 0, 0, 0, 0, 0]);
   const [image, setImage] = useState<string | null>(null);
@@ -115,9 +118,9 @@ export function RobotLabPolicyPreview({
             </button>
             <button
               disabled={!ready || !lab.availableCameras.length || !values.every(Number.isFinite)}
-              onClick={() => run({ state: values, camera_index: lab.cameraIndex })}
+              onClick={() => run({ state: values, camera_index: lab.cameraIndex, ...(cameras ? { cameras } : {}) })}
             >
-              Preview selected camera
+              {cameras ? 'Preview selected cameras' : 'Preview selected camera'}
             </button>
           </div>
         </div>

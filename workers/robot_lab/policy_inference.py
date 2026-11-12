@@ -62,10 +62,23 @@ def main():
             preprocessor_overrides=overrides,
             postprocessor_overrides={"device_processor": {"device": "cpu"}},
         )
-        camera = sys.argv[3] if len(sys.argv) > 3 else next(iter(policy.config.image_features))
-        if camera not in policy.config.image_features:
+        cameras = list(policy.config.image_features)
+        camera = sys.argv[3] if len(sys.argv) > 3 else cameras[0]
+        if camera not in cameras:
             raise ValueError("Selected policy camera is unsupported")
         shape = list(policy.config.image_features[camera].shape)
+
+        def picture(encoded, key):
+            image = Image.open(io.BytesIO(base64.b64decode(encoded, validate=True)))
+            if image.width * image.height > 24_000_000:
+                raise ValueError("Choose an observation image smaller than 24 megapixels")
+            image = image.convert("RGB")
+            image.thumbnail((1280, 1024))
+            if kind == "act":
+                size = policy.config.image_features[key].shape
+                image = image.resize((size[2], size[1]))
+            tensor = torch.from_numpy(np.asarray(image).copy()).permute(2, 0, 1).float() / 255
+            return tensor.unsqueeze(0)
 
         def infer(message):
             state = message.get("state")
@@ -75,18 +88,17 @@ def main():
                 or any(type(v) not in {int, float} or not math.isfinite(v) for v in state)
             ):
                 raise ValueError("Policy observation needs six finite joint values")
-            image = Image.open(io.BytesIO(base64.b64decode(message["jpeg"], validate=True)))
-            if image.width * image.height > 24_000_000:
-                raise ValueError("Choose an observation image smaller than 24 megapixels")
-            image = image.convert("RGB")
-            image.thumbnail((1280, 1024))
-            if kind == "act":
-                image = image.resize((shape[2], shape[1]))
-            tensor = torch.from_numpy(np.asarray(image).copy()).permute(2, 0, 1).float() / 255
-            batch = {
-                "observation.state": torch.tensor(state, dtype=torch.float32).unsqueeze(0),
-                camera: tensor.unsqueeze(0),
-            }
+            images = message.get("images")
+            if images is None and (len(cameras) == 1 or message.get("repeat") is True):
+                # A one-camera policy, or an offline preview that knowingly shows one
+                # picture to every camera input. An arm run never takes this path with
+                # several cameras: it must send each trained view.
+                images = {key: message["jpeg"] for key in cameras}
+            if not isinstance(images, dict) or set(images) != set(cameras):
+                raise ValueError("Policy observation needs one image for every trained camera")
+            batch = {"observation.state": torch.tensor(state, dtype=torch.float32).unsqueeze(0)}
+            for key in cameras:
+                batch[key] = picture(images[key], key)
             if kind == "smolvla":
                 task = message.get("task", "")
                 if not isinstance(task, str) or not task.strip() or len(task) > 1000:
@@ -105,6 +117,7 @@ def main():
             {
                 "state": [0.0] * 6,
                 "jpeg": base64.b64encode(buffer.getvalue()).decode(),
+                "repeat": True,
                 "task": "Remain still.",
             }
         )
@@ -115,6 +128,7 @@ def main():
             "device": device,
             "policy_type": kind,
             "camera_key": camera,
+            "camera_keys": cameras,
             "shape": shape,
             "task_required": kind == "smolvla",
             "warm_inference_ms": round(warm_ms, 1),

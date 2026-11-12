@@ -11730,6 +11730,10 @@ export interface operations {
                 "application/json": {
                     /** Camera Index */
                     camera_index: number;
+                    /** Cameras */
+                    cameras?: {
+                        [key: string]: number;
+                    } | null;
                     /**
                      * Task
                      * @default
@@ -11762,6 +11766,10 @@ export interface operations {
                 "application/json": {
                     /** Camera Index */
                     camera_index?: number | null;
+                    /** Cameras */
+                    cameras?: {
+                        [key: string]: number;
+                    } | null;
                     /** Jpeg */
                     jpeg?: string | null;
                     /** State */
@@ -11803,6 +11811,10 @@ export interface operations {
                 "application/json": {
                     /** Camera Index */
                     camera_index: number;
+                    /** Cameras */
+                    cameras?: {
+                        [key: string]: number;
+                    } | null;
                     /**
                      * Confirm
                      * @constant

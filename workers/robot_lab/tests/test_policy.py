@@ -1,5 +1,6 @@
 """ACT compatibility, bounded control and Stop races on fake hardware only."""
 
+import base64
 import copy
 import json
 import sys
@@ -14,6 +15,8 @@ import test_robot_lab as fixtures
 from hardware import JOINTS, HardwareError
 from policy import MAX_ACCELERATION, MAX_SPEED, UNITS, admit
 from policy_contract import PIPELINES
+
+FRONT, SIDE = "observation.images.front", "observation.images.camera_4"
 
 
 class Runtime:
@@ -389,6 +392,130 @@ class PolicyTests(unittest.TestCase):
         runner.preflight({"camera_index": 0})
         self.assertFalse(runner.check["passed"])
         self.assertEqual(runner.check["fresh_frames"], 1)
+
+    def two_cameras(self):
+        """The same policy trained on two views, as a two-camera recording produces."""
+        runner, _, checkpoint = self.install()
+        config = json.loads((checkpoint / "config.json").read_text())
+        config["input_features"][SIDE] = {"shape": [3, 480, 640]}
+        (checkpoint / "config.json").write_text(json.dumps(config))
+        runner.load({"policy_id": "pen"})
+        self.lab.camera = Camera()
+        self.lab.camera.latest_timed_jpeg = lambda index, max_age=0.15: {
+            "jpeg": b"view-%d" % index,
+            "captured_monotonic": time.monotonic(),
+        }
+        sent = []
+        answer = runner.runtime.request
+        runner.runtime.request = lambda message, timeout=2: (
+            sent.append(message),
+            answer(message),
+        )[1]
+        return runner, sent
+
+    def test_a_two_camera_policy_is_checked_with_a_camera_for_each_view(self):
+        runner, sent = self.two_cameras()
+        self.assertEqual(runner.catalog()["policies"][0]["camera_keys"], [FRONT, SIDE])
+        # One camera cannot stand in for two views, and neither can the same camera twice.
+        with self.assertRaisesRegex(ValueError, "trained on 2 cameras.*front, camera_4"):
+            runner.preflight({"camera_index": 0})
+        for cameras in (
+            {FRONT: 0, SIDE: 0},
+            {FRONT: 0},
+            {FRONT: 2, SIDE: 3},
+            {FRONT: 0, SIDE: "3"},
+        ):
+            with self.assertRaisesRegex(ValueError, "different available camera"):
+                runner.preflight({"camera_index": 0, "cameras": cameras})
+        self.assertEqual(runner.phase, "ready")
+        self.assertEqual(sent, [])
+
+        runner.preflight({"camera_index": 2, "cameras": {SIDE: 5, FRONT: 2}})
+        self.assertTrue(runner.check["passed"])
+        self.assertEqual(runner.check["cameras"], {FRONT: 2, SIDE: 5})
+        observations = [message for message in sent if not message.get("reset")]
+        self.assertGreaterEqual(len(observations), 16)
+        for message in observations:
+            self.assertNotIn("jpeg", message)
+            self.assertEqual(
+                {key: base64.b64decode(value) for key, value in message["images"].items()},
+                {FRONT: b"view-2", SIDE: b"view-5"},
+            )
+        self.assertEqual(self.buses, [])
+
+    def test_a_two_camera_check_fails_when_either_camera_repeats_frames(self):
+        runner, _ = self.two_cameras()
+        frozen = time.monotonic()
+        self.lab.camera.latest_timed_jpeg = lambda index, max_age=0.15: {
+            "jpeg": b"view",
+            "captured_monotonic": frozen if index == 5 else time.monotonic(),
+        }
+        runner.preflight({"camera_index": 2, "cameras": {FRONT: 2, SIDE: 5}})
+        self.assertFalse(runner.check["passed"])
+        self.assertEqual(runner.check["fresh_frames"], 1)
+
+    def test_a_two_camera_run_uses_the_checked_cameras_and_sends_both_views(self):
+        runner, sent = self.two_cameras()
+        chosen = {FRONT: 2, SIDE: 5}
+        runner.check = {
+            "passed": True,
+            "camera_index": 2,
+            "cameras": chosen,
+            "checked_at": time.monotonic(),
+        }
+        camera = self.lab.camera
+        self.start()
+        self.lab.camera = camera
+        payload = self.run_payload() | {"camera_index": 2}
+        with self.assertRaisesRegex(ValueError, "trained on 2 cameras"):
+            runner.start(payload)
+        # Swapping the views after the check would feed each input the wrong picture.
+        with self.assertRaisesRegex(ValueError, "Check this policy"):
+            runner.start(payload | {"cameras": {FRONT: 2, SIDE: 6}})
+        self.assertEqual(self.lab.mode, "manual")
+        runner.start(payload | {"cameras": chosen})
+        deadline = time.monotonic() + 2
+        while runner.steps < 2 and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.lab.stop()
+        self.assertGreaterEqual(runner.steps, 2)
+        observations = [message for message in sent if not message.get("reset")]
+        self.assertTrue(observations)
+        for message in observations:
+            self.assertEqual(
+                {key: base64.b64decode(value) for key, value in message["images"].items()},
+                {FRONT: b"view-2", SIDE: b"view-5"},
+            )
+
+    def test_a_two_camera_preview_says_when_one_image_stood_in_for_both_views(self):
+        runner, sent = self.two_cameras()
+        result = runner.preview_prediction({"state": [0.0] * 6, "jpeg": "YQ=="})
+        self.assertIn(
+            "same image shown to all 2 camera inputs", result["policy"]["preview"]["source"]
+        )
+        self.assertTrue(sent[-1]["repeat"])
+        self.lab.camera.capture_timed = lambda index: {"jpeg": b"view-%d" % index}
+        result = runner.preview_prediction(
+            {"state": [0.0] * 6, "camera_index": 2, "cameras": {FRONT: 2, SIDE: 5}}
+        )
+        self.assertEqual(
+            result["policy"]["preview"]["source"], "Selected cameras and supplied model state"
+        )
+        self.assertEqual(
+            {key: base64.b64decode(value) for key, value in sent[-1]["images"].items()},
+            {FRONT: b"view-2", SIDE: b"view-5"},
+        )
+        self.assertNotIn("repeat", sent[-1])
+        self.assertEqual(self.buses, [])
+
+    def test_more_than_three_cameras_are_refused(self):
+        runner, _, checkpoint = self.install()
+        config = json.loads((checkpoint / "config.json").read_text())
+        for name in ("a", "b", "c"):
+            config["input_features"]["observation.images." + name] = {"shape": [3, 480, 640]}
+        (checkpoint / "config.json").write_text(json.dumps(config))
+        with self.assertRaisesRegex(ValueError, "one to three RGB cameras"):
+            runner.load({"policy_id": "pen"})
 
 
 if __name__ == "__main__":

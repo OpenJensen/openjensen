@@ -11,6 +11,7 @@ from pydantic import (
     StrictBool,
     StrictFloat,
     StrictInt,
+    StringConstraints,
     ValidationError,
     model_validator,
 )
@@ -26,6 +27,21 @@ class PolicyLoadRequest(BaseModel):
     policy_id: str = Field(pattern=r"^[A-Za-z0-9_-]{1,80}$")
 
 
+# A policy trained on several views names one camera of this computer for each of them.
+PolicyCameras = Annotated[
+    dict[
+        Annotated[
+            str,
+            StringConstraints(
+                pattern=r"^observation\.(?:images\.[a-zA-Z0-9_.-]{1,64}|image[0-9]*)$"
+            ),
+        ],
+        Annotated[StrictInt, Field(ge=0, le=63)],
+    ],
+    Field(min_length=1, max_length=3),
+]
+
+
 class PolicyStartRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     task: str = Field(default="", max_length=1000)
@@ -33,6 +49,7 @@ class PolicyStartRequest(BaseModel):
     operator_present: Literal[True]
     workspace_clear: Literal[True]
     camera_index: StrictInt = Field(ge=0, le=63)
+    cameras: PolicyCameras | None = None
     duration_seconds: StrictInt = Field(ge=1, le=120)
     expected_generation: StrictInt
 
@@ -41,12 +58,14 @@ class PolicyPreflightRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     task: str = Field(default="", max_length=1000)
     camera_index: StrictInt = Field(ge=0, le=63)
+    cameras: PolicyCameras | None = None
 
 
 class PolicyPreviewRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     synthetic: StrictBool = False
     camera_index: StrictInt | None = Field(default=None, ge=0, le=63)
+    cameras: PolicyCameras | None = None
     state: list[float] | None = Field(default=None, min_length=6, max_length=6)
     jpeg: str | None = Field(default=None, max_length=3 * 1024**2)
     task: str = Field(default="", max_length=1000)
@@ -58,6 +77,8 @@ class PolicyPreviewRequest(BaseModel):
                 raise ValueError("Use either synthetic test inputs or one supplied observation")
         elif self.state is None or (self.camera_index is None) == (self.jpeg is None):
             raise ValueError("Supply six state values and one image or camera")
+        if self.cameras is not None and self.camera_index is None:
+            raise ValueError("Choose cameras only together with a camera observation")
         return self
 
 
