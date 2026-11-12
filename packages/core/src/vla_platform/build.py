@@ -24,7 +24,7 @@ from vla_platform import __version__
 
 ROOT = Path(__file__).resolve().parents[4]
 SHA = re.compile(r"[0-9a-f]{40}\Z")
-# Written into managed installations by the updater; those only ever install main.
+# Written into installations: by the updater (channel main) or by a hand-built preview.
 MARKERS = (".openjensen-build.json", ".openjensen-release.json")
 
 
@@ -61,21 +61,28 @@ def _git(root: Path, *arguments: str) -> str | None:
     return result.stdout.strip() if result.returncode == 0 else None
 
 
-def _marker(root: Path) -> str | None:
+def _marker(root: Path) -> tuple[str, bool] | None:
+    """The commit an installation records, and whether it came from the release channel.
+
+    Hand-built previews record their commit too, under another channel. They are not
+    the release, however complete they look.
+    """
     for name in MARKERS:
         try:
-            value = json.loads((root / name).read_text())["commit"]
+            record = json.loads((root / name).read_text())
+            value = record["commit"]
         except OSError, ValueError, KeyError, TypeError:
             continue
         if isinstance(value, str) and SHA.fullmatch(value):
-            return value
+            return value, record.get("channel", "main") == "main"
     return None
 
 
 def identify(root: Path = ROOT, version: str = __version__) -> Build:
     """Read the identity of the source tree at ``root``. Never raises."""
-    if commit := _marker(root):
-        return Build(version, commit, "main", dirty=False, released=True)
+    if marker := _marker(root):
+        commit, released = marker
+        return Build(version, commit, "main" if released else None, dirty=False, released=released)
     if not (root / ".git").exists():
         # An unpacked copy with no record of where it came from is not a release.
         return Build(version, None, None, dirty=False, released=False)

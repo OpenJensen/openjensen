@@ -112,6 +112,18 @@ def test_a_managed_installation_reports_its_recorded_main_commit(tmp_path):
     assert value.label == "0.1.30"
 
 
+@pytest.mark.parametrize("channel", ["preview", "development"])
+def test_a_hand_built_preview_installation_is_not_the_release(tmp_path, channel):
+    """Two machines ran previews built from different commits, both labelled 0.1.31."""
+    revision = "b" * 40
+    (tmp_path / ".openjensen-build.json").write_text(
+        json.dumps({"commit": revision, "channel": channel})
+    )
+    value = identify(tmp_path, "0.1.31")
+    assert not value.released and value.commit == revision
+    assert value.label == "0.1.31-dev+bbbbbbb"
+
+
 def test_a_copy_with_no_history_is_not_a_release(tmp_path):
     value = identify(tmp_path, "0.1.30")
     assert value.commit is None and not value.released
