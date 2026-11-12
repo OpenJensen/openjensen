@@ -22,6 +22,10 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Keep temporary folders only for failed tests: a full run otherwise leaves
+# hundreds of megabytes behind, three runs deep.
+tmp_path_retention_policy = "failed"
+tmp_path_retention_count = 1
 
 [tool.ruff]
 target-version = "py314"

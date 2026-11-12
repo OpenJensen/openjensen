@@ -551,9 +551,12 @@ def dataset_file(root: Path, dataset_id: str, relative: str):
     ):
         raise ValueError("Invalid dataset file path")
     target = directory / Path(*posix.parts)
+    # Only a link inside the datasets folder can redirect a file. Ancestors above it are
+    # the host's own layout (macOS reaches /var through a link) and are not the dataset's.
+    inside = [target, *(part for part in target.parents if part.is_relative_to(directory))]
     if (
         directory.is_symlink()
-        or any(part.is_symlink() for part in [target, *target.parents] if part != root.parent)
+        or any(part.is_symlink() for part in inside)
         or not target.is_file()
         or not target.resolve().is_relative_to(directory.resolve())
     ):
