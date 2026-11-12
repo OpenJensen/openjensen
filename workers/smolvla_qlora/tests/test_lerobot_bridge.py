@@ -72,6 +72,35 @@ def test_native_smolvla_supervised_training_uses_expert_weights_without_peft():
     assert native_profile_for_recipe(job["parameters"]["training"], "lora") is None
 
 
+def test_training_defaults_keep_the_gpu_busy():
+    """A run that decodes frames on one thread and validates every 100 steps leaves the
+    GPU idle most of the time: the reason SmolVLA on a large GPU took many hours."""
+    from jensen_vla.lerobot_application import evaluation_interval, loader_workers
+
+    assert [loader_workers(cpus) for cpus in (1, 2, 4, 12, 64)] == [0, 0, 2, 8, 8]
+    assert [evaluation_interval(steps) for steps in (20, 100, 2000, 20000, 100000)] == [
+        20,
+        100,
+        100,
+        1000,
+        5000,
+    ]
+    job = request()
+    job["parameters"]["training"]["steps"] = 20000
+    recipe, profile = resolve_recipe(job)
+    assert recipe["num_workers"] == loader_workers()
+    assert recipe["eval_every"] == 1000 and recipe["eval_batches"] == 8
+    args = cli_arguments(recipe, profile, output="out", dataset_root="dataset")
+    assert f"--num_workers={loader_workers()}" in args
+    assert "--cudnn_deterministic=false" in args
+    assert "--eval_steps=1000" in args
+    # What a person chooses is never replaced by a default.
+    job = request()
+    job["parameters"]["training"].update(steps=20000, num_workers=0, eval_every=100)
+    recipe, _ = resolve_recipe(job)
+    assert recipe["num_workers"] == 0 and recipe["eval_every"] == 100
+
+
 def test_native_recipe_rejects_unknown_arguments_and_moving_models():
     with pytest.raises(ValueError, match="Unsupported native"):
         resolve_recipe(request(command="arbitrary command"))

@@ -4,7 +4,7 @@ import { checkpointTiming, defaultTemporal, temporalFamily } from '@/lib/trainin
 import { trainingMemory } from '@/lib/training-memory';
 import { TrainingHelp } from './training-help';
 import { TrainingAdvancedSettings } from './training-advanced-settings';
-import { defaultRecipe } from '@/lib/training-recipe';
+import { defaultBatchSize, defaultRecipe } from '@/lib/training-recipe';
 import { number } from './training-shared';
 import type { TrainingPanelState } from './training-state';
 
@@ -253,7 +253,7 @@ export function TrainingComputeStep({
           onReset={() => {
             setRecipe({
               ...defaultRecipe,
-              batchSize: model?.id === 'smolvla' ? defaultRecipe.batchSize : model?.id === 'psi0' ? 2 : 4,
+              batchSize: defaultBatchSize(model?.id),
             });
             setModelBatchSizes({});
             setTemporalDrafts({});
