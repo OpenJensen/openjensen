@@ -14,6 +14,7 @@ export function RobotLabPolicy({ lab }: { lab: RobotLabState }) {
   const [duration, setDuration] = useState(10);
   const [attending, setAttending] = useState(false);
   const [viewCameras, setViewCameras] = useState<Record<string, number>>({});
+  const [planningPause, setPlanningPause] = useState(false);
   const catalog = useQuery({
     queryKey: ['robot-lab', 'policy-catalog'],
     queryFn: robotApi.policyCatalog,
@@ -50,8 +51,12 @@ export function RobotLabPolicy({ lab }: { lab: RobotLabState }) {
         )
       : undefined;
   const camerasReady = cameras !== null;
+  // A check counts only for the cameras, and the planning allowance, it was made with.
   const checkedTheseCameras =
-    policy?.preflight?.camera_index === lab.cameraIndex && (!cameras || sameCameras(policy.preflight.cameras, cameras));
+    policy?.preflight?.camera_index === lab.cameraIndex &&
+    (!cameras || sameCameras(policy.preflight.cameras, cameras)) &&
+    !!policy.preflight.planning_pause === planningPause;
+  const pauseSeconds = policy?.limits?.planning_pause_seconds ?? 1.5;
   return (
     <>
       <Heading title="Run policy" />
@@ -221,6 +226,7 @@ export function RobotLabPolicy({ lab }: { lab: RobotLabState }) {
                         lab.cameraIndex,
                         requiresTask ? lab.task : undefined,
                         cameras ?? undefined,
+                        planningPause,
                       ),
                     )
                   }
@@ -230,8 +236,28 @@ export function RobotLabPolicy({ lab }: { lab: RobotLabState }) {
                 {policy?.preflight && (
                   <Notice kind={policy.preflight.passed ? 'success' : 'warning'}>
                     {policy.preflight.message} · {policy.preflight.measured_fps} FPS ·{' '}
-                    {policy.preflight.mean_latency_ms} ms mean latency.
+                    {policy.preflight.mean_latency_ms} ms mean latency
+                    {policy.preflight.planning_pause
+                      ? ' · planning takes up to ' + Math.round(policy.preflight.max_latency_ms) + ' ms'
+                      : ''}
+                    .
                   </Notice>
+                )}
+                {(planningPause || policy?.preflight?.planning_pause_needed) && (
+                  <label className="robot-lab-check">
+                    <input
+                      type="checkbox"
+                      checked={planningPause}
+                      disabled={running || lab.busy || lab.active}
+                      onChange={(event) => setPlanningPause(event.target.checked)}
+                    />
+                    <span>
+                      <strong>Allow planning pauses for this run.</strong>This policy plans a set of actions at a time
+                      and needs longer than the usual limit to do it. While it plans, the arm holds its last target. A
+                      pause longer than {pauseSeconds} s still disables torque, and Stop, the heartbeat and the speed
+                      limit apply as always. Check again after changing this.
+                    </span>
+                  </label>
                 )}
                 <label>
                   Run duration (seconds)
@@ -316,6 +342,7 @@ export function RobotLabPolicy({ lab }: { lab: RobotLabState }) {
                             expected_generation: generation,
                             camera_index: lab.cameraIndex,
                             ...(cameras ? { cameras } : {}),
+                            ...(planningPause ? { allow_planning_pause: true } : {}),
                             duration_seconds: duration,
                             ...(requiresTask ? { task: lab.task } : {}),
                           }),

@@ -35,6 +35,15 @@ MAX_ACCELERATION = 20.0
 # Model predictions may slightly overshoot an endpoint: degrees for arm joints,
 # percentage points for the gripper. Commanded motion keeps its original bounds.
 PREDICTION_TOLERANCE = 5.0
+# A policy that plans a whole chunk of actions at once may need longer than the usual
+# prediction limit on a laptop. The operator can allow that for one run; the arm holds
+# its last target while the policy plans, and a longer pause still disables torque.
+PLANNING_PAUSE_SECONDS = 1.5
+
+
+def prediction_limit(fps, planning_pause=False):
+    """Seconds one prediction may take, and how old the applied prediction may get."""
+    return PLANNING_PAUSE_SECONDS if planning_pause else max(0.5, 3 / fps)
 
 
 def admit(root, ident):
@@ -255,6 +264,7 @@ class PolicyRunner:
         self.started = None
         self.generation = None
         self.check = None
+        self.planning_pause = False
         self.preview = None
         self.task = ""
         self.operation = 0
@@ -343,6 +353,7 @@ class PolicyRunner:
                     "prediction_tolerance_gripper_percent": PREDICTION_TOLERANCE,
                     "max_run_seconds": 120,
                     "operator_heartbeat_seconds": 2,
+                    "planning_pause_seconds": PLANNING_PAUSE_SECONDS,
                 },
                 "device": self.runtime.info.get("device") if self.runtime else None,
             }
@@ -552,12 +563,14 @@ class PolicyRunner:
     def preflight(self, payload):
         """Measure actual camera + normalized native inference, without motor writes."""
         if (
-            set(payload) - {"camera_index", "cameras", "task"}
+            set(payload) - {"camera_index", "cameras", "task", "allow_planning_pause"}
             or "camera_index" not in payload
             or type(payload["camera_index"]) is not int
             or not 0 <= payload["camera_index"] <= 63
+            or type(payload.get("allow_planning_pause", False)) is not bool
         ):
             raise ValueError("Choose a camera for the policy check")
+        pause = payload.get("allow_planning_pause", False)
         task = self._task(payload)
         with self.lock:
             if self.phase != "ready" or not self.runtime or not self.model:
@@ -595,16 +608,23 @@ class PolicyRunner:
             samples, starts, stamps = [], [], {index: [] for index in cameras.values()}
             count = max(16, 2 * fps)
             due = time.monotonic()
+            late, lost = 0, 0.0
             for _ in range(count):
                 with self.lock:
                     if operation != self.operation or self.phase != "checking":
                         raise ValueError("Policy check was cancelled")
                 started = time.monotonic()
+                if started - due > max(0.15, 2 / fps):
+                    # The step before this one was slow, as when a policy plans its next
+                    # chunk of actions. Measure it as a run treats it: continue from now.
+                    late, lost, due = late + 1, lost + started - due, started
                 positions = self.lab.positions
                 message, captured = self._observation(
                     cameras, [positions.get(j, 0.0) for j in JOINTS], task, max(0.15, 2 / fps)
                 )
-                reply = self.runtime.request(message, timeout=max(0.5, 3 / fps))
+                # No motor is involved here, so wait long enough to measure a slow
+                # prediction instead of ending the check with a timeout.
+                reply = self.runtime.request(message, timeout=PLANNING_PAUSE_SECONDS + 0.5)
                 action = reply.get("action")
                 if (
                     not isinstance(action, list)
@@ -619,19 +639,29 @@ class PolicyRunner:
                 due += 1 / fps
                 time.sleep(max(0, due - time.monotonic()))
             self.runtime.request({"reset": True})
-            actual = (count - 1) / (starts[-1] - starts[0])
+            # The rate between slow steps; how many slow steps there may be is checked too.
+            actual = (count - 1) / max(1e-6, starts[-1] - starts[0] - lost)
             # Every camera must keep up; the slowest one decides.
             unique = min(len(set(values)) for values in stamps.values())
             mean = sum(samples) / count
             longest = max(samples)
-            passed = (
+            steady = (
                 actual >= fps * 0.95
                 and mean <= 0.85 / fps
-                and longest <= max(0.5, 3 / fps)
+                and late <= max(1, count // 20)
                 and unique >= count * 0.9
+            )
+            passed = steady and longest <= prediction_limit(fps, pause)
+            # Everything holds except that planning takes longer than the usual limit:
+            # the operator may allow planning pauses and check again.
+            pause_needed = (
+                steady and not pause and prediction_limit(fps) < longest <= PLANNING_PAUSE_SECONDS
             )
             check = {
                 "passed": passed,
+                "planning_pause": pause,
+                "planning_pause_needed": pause_needed,
+                "prediction_limit_ms": round(prediction_limit(fps, pause) * 1000),
                 "camera_index": camera,
                 "cameras": cameras,
                 "checked_at": time.monotonic(),
@@ -644,6 +674,13 @@ class PolicyRunner:
                 "samples": count,
                 "message": "Camera and local ACT inference meet the trained frame rate"
                 if passed
+                else (
+                    f"This policy takes {longest * 1000:.0f} ms to plan its next actions; "
+                    f"{prediction_limit(fps) * 1000:.0f} ms is allowed. To run it, allow "
+                    "planning pauses and check again. The arm holds its last target while "
+                    "the policy plans."
+                )
+                if pause_needed
                 else (
                     "This camera or local runtime cannot sustain the trained frame rate. "
                     "Use a faster inference device or matching camera; "
@@ -662,7 +699,7 @@ class PolicyRunner:
         return self.lab.status()
 
     def start(self, payload):
-        if set(payload) - {"task", "cameras"} != {
+        if set(payload) - {"task", "cameras", "allow_planning_pause"} != {
             "confirm",
             "operator_present",
             "workspace_clear",
@@ -679,11 +716,13 @@ class PolicyRunner:
             raise ValueError("An attending operator and clear workspace are required")
         task = self._task(payload)
         duration, camera = payload["duration_seconds"], payload["camera_index"]
+        pause = payload.get("allow_planning_pause", False)
         if (
             type(duration) is not int
             or not 1 <= duration <= 120
             or type(camera) is not int
             or not 0 <= camera <= 63
+            or type(pause) is not bool
         ):
             raise ValueError("Run duration must be 1–120 seconds with an available camera")
         with self.lab.lock, self.lock, self.lab.lifecycle_lock:
@@ -714,6 +753,8 @@ class PolicyRunner:
                 or not self.check["passed"]
                 or self.check["camera_index"] != camera
                 or self.check.get("cameras", cameras) != cameras
+                # A run may pause for planning only if its check measured it that way.
+                or self.check.get("planning_pause", False) != pause
                 or time.monotonic() - self.check["checked_at"] > 60
                 or (
                     self.model["task_required"]
@@ -735,6 +776,7 @@ class PolicyRunner:
             self.steps = 0
             self.generation = self.lab.generation
             self.task = task
+            self.planning_pause = pause
             self.started = time.monotonic()
             self.last_prediction = self.last_health = self.started
             self.operator_deadline = self.started + 2
@@ -801,7 +843,9 @@ class PolicyRunner:
             self.last_health = now
             if self.expired():
                 raise HardwareError("Policy operator heartbeat or run duration expired")
-            if now - self.last_prediction > max(0.5, 3 / self.model["fps"]):
+            if now - self.last_prediction > prediction_limit(
+                self.model["fps"], self.planning_pause
+            ):
                 raise HardwareError("Policy predictions fell behind the trained frame rate")
             if self.predicted is None:
                 return dict(measured)
@@ -882,7 +926,9 @@ class PolicyRunner:
                 if set(positions) != set(JOINTS) or time.monotonic() - self.last_health > 0.15:
                     raise ValueError("Fresh full-arm encoder observations are unavailable")
                 before = time.monotonic()
-                result = self.runtime.request(message, timeout=max(0.5, 3 / self.model["fps"]))
+                result = self.runtime.request(
+                    message, timeout=prediction_limit(self.model["fps"], self.planning_pause)
+                )
                 action = result.get("action")
                 if (
                     not isinstance(action, list)

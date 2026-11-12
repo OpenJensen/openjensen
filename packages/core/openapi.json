@@ -16413,6 +16413,11 @@
               "schema": {
                 "additionalProperties": false,
                 "properties": {
+                  "allow_planning_pause": {
+                    "default": false,
+                    "title": "Allow Planning Pause",
+                    "type": "boolean"
+                  },
                   "camera_index": {
                     "maximum": 63.0,
                     "minimum": 0.0,
@@ -16586,6 +16591,11 @@
               "schema": {
                 "additionalProperties": false,
                 "properties": {
+                  "allow_planning_pause": {
+                    "default": false,
+                    "title": "Allow Planning Pause",
+                    "type": "boolean"
+                  },
                   "camera_index": {
                     "maximum": 63.0,
                     "minimum": 0.0,

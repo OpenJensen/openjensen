@@ -487,6 +487,113 @@ class PolicyTests(unittest.TestCase):
         self.assertIn("cannot maintain the trained frame rate", self.lab.error)
         self.assertLessEqual(len(calls), 4)
 
+    def planning_takes(self, runner, seconds):
+        """Make the first prediction after every reset take ``seconds``, like a policy
+        that plans a chunk of actions and then replays it."""
+        state = {"fresh": True}
+        answer = runner.runtime.request
+
+        def request(message, timeout=2):
+            if message.get("reset"):
+                state["fresh"] = True
+            elif state["fresh"]:
+                state["fresh"] = False
+                time.sleep(seconds)
+            return answer(message)
+
+        runner.runtime.request = request
+
+    def test_slow_planning_fails_the_check_and_says_how_to_run_the_policy(self):
+        runner, _, _ = self.install()
+        runner.load({"policy_id": "pen"})
+        self.lab.camera = Camera()
+        self.planning_takes(runner, 0.6)
+        runner.preflight({"camera_index": 0})
+        check = runner.check
+        self.assertFalse(check["passed"])
+        self.assertTrue(check["planning_pause_needed"])
+        self.assertEqual(check["prediction_limit_ms"], 500)
+        self.assertRegex(check["message"], r"takes 6\d\d ms to plan .* 500 ms is allowed")
+        self.assertIn("allow planning pauses", check["message"])
+        # The slow prediction was measured, not cut off: the policy is still loaded.
+        self.assertFalse(runner.runtime.closed)
+        self.assertEqual(runner.phase, "ready")
+
+        runner.preflight({"camera_index": 0, "allow_planning_pause": True})
+        check = runner.check
+        self.assertTrue(check["passed"], check)
+        self.assertTrue(check["planning_pause"])
+        self.assertFalse(check["planning_pause_needed"])
+        self.assertEqual(check["prediction_limit_ms"], 1500)
+        self.assertEqual(self.buses, [])
+        with self.assertRaisesRegex(ValueError, "Choose a camera"):
+            runner.preflight({"camera_index": 0, "allow_planning_pause": "yes"})
+
+    def test_planning_slower_than_the_pause_allows_cannot_be_run_at_all(self):
+        runner, _, _ = self.install()
+        runner.load({"policy_id": "pen"})
+        self.lab.camera = Camera()
+        self.planning_takes(runner, 1.6)
+        for payload in ({"camera_index": 0}, {"camera_index": 0, "allow_planning_pause": True}):
+            runner.preflight(payload)
+            self.assertFalse(runner.check["passed"])
+            self.assertFalse(runner.check["planning_pause_needed"])
+            self.assertIn("cannot sustain", runner.check["message"])
+
+    def test_a_run_pauses_for_planning_only_when_its_check_allowed_it(self):
+        runner = self.prepare()
+        runner.check = {
+            "passed": True,
+            "camera_index": 0,
+            "planning_pause": True,
+            "checked_at": time.monotonic(),
+        }
+        # The check and the run must agree, in both directions.
+        with self.assertRaisesRegex(ValueError, "Check this policy"):
+            runner.start(self.run_payload())
+        runner.check["planning_pause"] = False
+        with self.assertRaisesRegex(ValueError, "Check this policy"):
+            runner.start(self.run_payload() | {"allow_planning_pause": True})
+        with self.assertRaisesRegex(ValueError, "Run duration"):
+            runner.start(self.run_payload() | {"allow_planning_pause": 1})
+        self.assertEqual(self.lab.mode, "manual")
+
+    def run_slow_planner(self, pause):
+        runner = self.prepare()
+        runner.check["planning_pause"] = pause
+        self.planning_takes(runner, 0.7)
+        runner.start(self.run_payload() | ({"allow_planning_pause": True} if pause else {}))
+
+        def control_loop():
+            while self.lab.mode == "policy":
+                try:
+                    runner.apply(dict(self.lab.positions), time.monotonic())
+                except HardwareError as error:
+                    self.lab.stop(str(error))
+                    return
+                time.sleep(0.01)
+
+        threading.Thread(target=control_loop, daemon=True).start()
+        return runner
+
+    def test_an_allowed_planning_pause_does_not_stop_the_run(self):
+        runner = self.run_slow_planner(True)
+        deadline = time.monotonic() + 3
+        while runner.steps < 6 and self.lab.mode == "policy" and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.assertEqual(self.lab.mode, "policy", self.lab.error)
+        self.assertGreaterEqual(runner.steps, 6)
+        self.lab.stop()
+
+    def test_without_the_allowance_slow_planning_disables_torque_as_before(self):
+        self.run_slow_planner(False)
+        deadline = time.monotonic() + 3
+        while self.lab.mode != "idle" and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.assertEqual(self.lab.mode, "idle")
+        self.assertFalse(self.lab.torque)
+        self.assertIn("fell behind", self.lab.error)
+
     def test_preflight_measures_native_camera_path_without_arming(self):
         runner, _, _ = self.install()
         runner.load({"policy_id": "pen"})

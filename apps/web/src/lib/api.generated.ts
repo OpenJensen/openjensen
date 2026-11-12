@@ -11830,6 +11830,11 @@ export interface operations {
         requestBody?: {
             content: {
                 "application/json": {
+                    /**
+                     * Allow Planning Pause
+                     * @default false
+                     */
+                    allow_planning_pause?: boolean;
                     /** Camera Index */
                     camera_index: number;
                     /** Cameras */
@@ -11911,6 +11916,11 @@ export interface operations {
         requestBody?: {
             content: {
                 "application/json": {
+                    /**
+                     * Allow Planning Pause
+                     * @default false
+                     */
+                    allow_planning_pause?: boolean;
                     /** Camera Index */
                     camera_index: number;
                     /** Cameras */
