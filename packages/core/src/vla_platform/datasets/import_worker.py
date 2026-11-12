@@ -13,6 +13,11 @@ import uuid
 from pathlib import Path
 
 MAX_ROWS = 100_000
+# Training reads single frames in random order. A decoder can only start at a keyframe,
+# so with the encoder's default of one keyframe per 250 frames each read decodes over a
+# hundred frames first and the GPU waits. A keyframe every second frame, with no
+# backward-predicted frames, is the LeRobot convention and makes every read cheap.
+RANDOM_ACCESS = ("-g", "2", "-keyint_min", "2", "-sc_threshold", "0", "-bf", "0")
 MAX_FILES = 4096
 MAX_BYTES = 2 * 1024**3
 
@@ -563,6 +568,7 @@ def convert(root, output, detected, settings):
                                 "-an",
                                 "-c:v",
                                 "libx264",
+                                *RANDOM_ACCESS,
                                 "-threads",
                                 "1",
                                 "-pix_fmt",

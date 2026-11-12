@@ -80,6 +80,21 @@ def test_example_labels_export_and_training_snapshot(tmp_path):
         assert resolve_snapshot(store, snapshot).is_dir()
         assert snapshot["total_frames"] == 24
         assert (await library.example("project-one"))["id"] == value["id"]
+        # Converted videos are encoded for training: any frame is at most one frame
+        # away from a keyframe, so a random read never decodes a long run first.
+        videos = sorted(library.resolve(value["id"], "project-one").rglob("*.mp4"))
+        assert videos
+        for video in videos:
+            probe = subprocess.run(
+                ["ffprobe", "-v", "error", "-select_streams", "v:0"]
+                + ["-show_entries", "frame=key_frame", "-of", "csv=p=0", str(video)],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            flags = [line.strip().rstrip(",") for line in probe.stdout.splitlines() if line.strip()]
+            assert len(flags) == 12 and flags[0] == "1"
+            assert "0,0" not in ",".join(flags), flags
         await library.close()
 
     asyncio.run(check())
