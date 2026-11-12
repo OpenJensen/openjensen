@@ -137,6 +137,7 @@ export function LocalDatasetPlayer({
       <div className="dx-playback-controls">
         <button
           type="button"
+          className="secondary-button"
           aria-label={playing ? 'Pause episode' : 'Play episode'}
           disabled={!active || indices.length < 2}
           onClick={() => {

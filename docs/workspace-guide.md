@@ -34,6 +34,8 @@ Open **ROBOT LAB → AI teleoperation** for saved session jobs, then choose **Ne
 
 Inspect a public dataset or import local files. Open an episode to play its cameras, inspect samples, and edit labels before exporting.
 
+Open a saved dataset to see whether it is ready to train. **Prepare for training** makes a verified copy on the same page; if something is missing, the page says what, such as needing at least two episodes. When several saved datasets hold one episode each and share cameras and frame rate, **Combine** joins them into one dataset and keeps the originals.
+
 ## Real to sim
 
 Open **Real to sim** under **Data**. Choose **New scene**, then select a dataset, agent model and power before starting. Codex can inspect episodes across the full dataset. Open the saved job for environment images, a recorded-episode replay video and the scene bundle. Use **Retry simulation** to create a new job from the saved scene and evidence without repeating model work. Physical calibration remains a separate validation step.

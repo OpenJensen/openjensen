@@ -34,6 +34,8 @@ export type LibraryDataset = {
   uploaded_files?: number;
   total_bytes?: number;
   can_discard?: boolean;
+  /** The saved datasets this one was combined from. */
+  combined_from?: { id: string; name: string }[];
 };
 export type DatasetRepairNotice = {
   id: string;
@@ -129,6 +131,13 @@ export const datasetLibrary = {
       method: 'POST',
       body: JSON.stringify(settings),
     }),
+  /** Joining many recordings copies every frame, so allow minutes, not seconds. */
+  combine: (project: string, ids: string[], name: string) =>
+    datasetRequest<LibraryDataset>(
+      `/projects/${encodeURIComponent(project)}/datasets/combine`,
+      { method: 'POST', body: JSON.stringify({ name, dataset_ids: ids }) },
+      600_000,
+    ),
   annotate: (id: string, revision: number, labels: DatasetLabels) =>
     datasetRequest<LibraryDataset>(`/datasets/${encodeURIComponent(id)}/annotations`, {
       method: 'PUT',
@@ -229,4 +238,29 @@ export function formatName(value?: string) {
       } as Record<string, string>
     )[value ?? ''] || 'Unknown format'
   );
+}
+
+const episodesOf = (entry: LibraryDataset) => entry.converted?.episodes ?? entry.detection?.episodes;
+/**
+ * Saved datasets that hold one episode each and could be one dataset: same cameras, same
+ * frame rate. One episode cannot be trained on, and a recording run that writes a dataset
+ * per episode leaves dozens of them. Returns the largest such group not combined already.
+ */
+export function combinableDatasets(entries: LibraryDataset[]): LibraryDataset[] {
+  const groups = new Map<string, LibraryDataset[]>();
+  for (const entry of entries) {
+    if (entry.id.startsWith('inspection:') || entry.source !== 'local' || entry.status !== 'ready') continue;
+    if (episodesOf(entry) !== 1) continue;
+    const cameras = [...(entry.converted?.cameras ?? entry.detection?.cameras ?? [])].sort();
+    const fps = entry.converted?.fps ?? entry.detection?.fps;
+    const key = `${fps}|${cameras.join(',')}`;
+    groups.set(key, [...(groups.get(key) ?? []), entry]);
+  }
+  const combined = entries.map((entry) => new Set((entry.combined_from ?? []).map((item) => item.id)));
+  return (
+    [...groups.values()]
+      .filter((group) => group.length > 1)
+      .filter((group) => !combined.some((ids) => group.every((entry) => ids.has(entry.id))))
+      .sort((a, b) => b.length - a.length)[0] ?? []
+  ).sort((a, b) => a.created_at.localeCompare(b.created_at));
 }

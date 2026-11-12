@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   datasetDownload,
   datasetLibrary,
+  combinableDatasets,
   formatName,
   sampleImage,
   labelDraftKey,
@@ -43,6 +44,24 @@ export function DatasetLibrary({
   const repairNotices = (datasets.data ?? []).filter(
     (entry) => entry.status === 'unavailable' && entry.project_id === null,
   );
+  const client = useQueryClient();
+  // Search narrows what is shown, never what can be combined.
+  const singles = combinableDatasets(
+    (datasets.data ?? []).filter((entry): entry is LibraryDataset => isProjectDataset(entry, projectId)),
+  );
+  const [combinedName, setCombinedName] = useState('Combined recordings');
+  const combine = useMutation({
+    mutationFn: () =>
+      datasetLibrary.combine(
+        projectId,
+        singles.map((entry) => entry.id),
+        combinedName.trim(),
+      ),
+    onSuccess: async (created) => {
+      await client.invalidateQueries({ queryKey: ['datasets', projectId] });
+      onOpen(created);
+    },
+  });
   return (
     <section className="dataset-library" aria-labelledby="dataset-library-title">
       <div className="library-heading">
@@ -80,6 +99,42 @@ export function DatasetLibrary({
               <li key={entry.id}>{entry.error}</li>
             ))}
           </ul>
+        </section>
+      )}
+      {singles.length > 1 && (
+        <section className="panel dataset-combine" aria-label="Combine datasets">
+          <div className="dataset-combine-copy">
+            <h3>{singles.length} datasets hold one episode each</h3>
+            <p>
+              One episode is too few to train on. They share the same cameras and frame rate, so they can become one
+              dataset with {singles.length} episodes. The originals are kept.
+            </p>
+          </div>
+          <div className="dataset-combine-actions">
+            <label>
+              <span className="visually-hidden">Name of the combined dataset</span>
+              <input
+                aria-label="Name of the combined dataset"
+                value={combinedName}
+                maxLength={100}
+                disabled={combine.isPending}
+                onChange={(event) => setCombinedName(event.target.value)}
+              />
+            </label>
+            <button
+              type="button"
+              className="primary-button"
+              disabled={combine.isPending || !combinedName.trim()}
+              onClick={() => combine.mutate()}
+            >
+              {combine.isPending ? 'Combining…' : `Combine ${singles.length} datasets`}
+            </button>
+          </div>
+          {combine.error && (
+            <p className="error-notice" role="alert">
+              {combine.error.message}
+            </p>
+          )}
         </section>
       )}
       {datasets.isError ? (
@@ -626,7 +681,7 @@ export function LocalDatasetImport({
   );
 }
 
-export function DatasetLabeling({ entry, onInspect }: { entry: LibraryDataset; onInspect: () => void }) {
+export function DatasetLabeling({ entry }: { entry: LibraryDataset }) {
   const client = useQueryClient();
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
@@ -862,11 +917,6 @@ export function DatasetLabeling({ entry, onInspect }: { entry: LibraryDataset; o
               )}
               <p className="field-help">Save labels before exporting.</p>
             </div>
-          </div>
-          <div className="dataset-label-actions">
-            <button className="secondary-button" onClick={onInspect}>
-              Inspect for training <Icon name="arrow" size={15} />
-            </button>
           </div>
         </>
       )}

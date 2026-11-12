@@ -240,6 +240,17 @@
       },
       "ApplicationVersion": {
         "properties": {
+          "branch": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Branch"
+          },
           "commit": {
             "anyOf": [
               {
@@ -251,9 +262,23 @@
             ],
             "title": "Commit"
           },
+          "dirty": {
+            "default": false,
+            "title": "Dirty",
+            "type": "boolean"
+          },
           "host": {
             "title": "Host",
             "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "released": {
+            "default": false,
+            "title": "Released",
+            "type": "boolean"
           },
           "version": {
             "title": "Version",
@@ -263,7 +288,8 @@
         "required": [
           "version",
           "commit",
-          "host"
+          "host",
+          "label"
         ],
         "title": "ApplicationVersion",
         "type": "object"
@@ -1807,6 +1833,33 @@
         "title": "CloudRunsFeed",
         "type": "object"
       },
+      "Combination": {
+        "additionalProperties": false,
+        "properties": {
+          "dataset_ids": {
+            "items": {
+              "pattern": "^[a-f0-9]{32}$",
+              "type": "string"
+            },
+            "maxItems": 1000,
+            "minItems": 2,
+            "title": "Dataset Ids",
+            "type": "array"
+          },
+          "name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "dataset_ids"
+        ],
+        "title": "Combination",
+        "type": "object"
+      },
       "CompanionUpdateStatus": {
         "properties": {
           "managed": {
@@ -2296,6 +2349,19 @@
             "minimum": 0.0,
             "title": "Total Frames",
             "type": "integer"
+          },
+          "training_blocker": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Training Blocker"
           },
           "warnings": {
             "items": {
@@ -13501,6 +13567,57 @@
           }
         },
         "summary": "Begin Upload",
+        "tags": [
+          "Dataset library"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/datasets/combine": {
+      "post": {
+        "description": "Join datasets that share cameras and frame rate into one new, trainable dataset.",
+        "operationId": "combine_datasets_api_v1_projects__project_id__datasets_combine_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Combination"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Combine Datasets",
         "tags": [
           "Dataset library"
         ]
