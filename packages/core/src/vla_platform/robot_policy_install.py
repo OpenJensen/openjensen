@@ -110,7 +110,71 @@ def _archive_metadata(path, expected_sha):
     return manifest["metadata"], recipe
 
 
-def _descriptor(artifact, metadata, recipe, payload):
+async def recorded_control(app, project_id, artifact):
+    """Units, joint order and rate of the Robot Lab recording a policy was trained on.
+
+    A policy speaks the units of its training data. When that data is the verified,
+    immutable training copy of a Robot Lab recording, the recorder's own metadata is
+    evidence of those units, not a claim made at installation time. Anything else
+    (another source, several datasets, a copy that no longer verifies) yields nothing,
+    and the existing rules apply unchanged.
+    """
+    from vla_platform.datasets.snapshots import resolve_snapshot
+
+    try:
+        execution = app.state.execution
+        job = await execution.get(artifact.job_id)
+        request = getattr(job, "request", None)
+        if (
+            job is None
+            or job.project_id != project_id
+            or getattr(request, "dataset_job_ids", None)
+            or not getattr(request, "dataset_job_id", None)
+        ):
+            return None
+        dataset = await execution.get(request.dataset_job_id)
+        snapshot = getattr(getattr(dataset, "result", None), "snapshot", None)
+        if dataset is None or dataset.project_id != project_id or snapshot is None:
+            return None
+        root = await asyncio.to_thread(
+            resolve_snapshot,
+            execution.settings.data_dir / "dataset-snapshots",
+            snapshot.model_dump(),
+        )
+
+        def read(name):
+            path = root / name
+            if path.is_symlink() or not path.is_file() or path.stat().st_size > 8 * 1024**2:
+                raise ValueError("Recording metadata is unavailable")
+            return _json(path.read_bytes())
+
+        recording = await asyncio.to_thread(read, "openjensen.json")
+        info = await asyncio.to_thread(read, "meta/info.json")
+        features = info.get("features", {})
+        names = [features.get(key, {}).get("names") for key in ("observation.state", "action")]
+        if (
+            recording.get("created_by") != "OpenJensen Robot Lab"
+            or recording.get("finalized") is not True
+            or recording.get("units") != "degrees; gripper percent"
+            or type(info.get("fps")) is not int
+            or any(
+                not isinstance(value, list)
+                or [str(name).removesuffix(".pos") for name in value] != JOINTS
+                for value in names
+            )
+        ):
+            return None
+        return {
+            "units": recording["units"],
+            "state_names": names[0],
+            "action_names": names[1],
+            "dataset_fps": info["fps"],
+        }
+    except OSError, ValueError, KeyError, TypeError, AttributeError:
+        return None
+
+
+def _descriptor(artifact, metadata, recipe, payload, recorded=None):
     if (
         artifact.format not in {"training_checkpoint", "native_checkpoint"}
         or metadata.get("architecture") not in {"act", "smolvla"}
@@ -125,6 +189,10 @@ def _descriptor(artifact, metadata, recipe, payload):
         for key in ("control_contract", "temporal_contract", "dataset"):
             if isinstance(source.get(key), dict):
                 records.append(source[key])
+    if recorded is not None:
+        # Evidence from the verified training recording, checked like any saved record:
+        # a mismatch with the artifact's own records is still refused below.
+        records.append(recorded)
     offline = payload.offline_only
     rates, units_known, joints_known = set(), False, False
     for record in records:
@@ -265,8 +333,9 @@ async def install_artifact(app, project_id, artifact_id, payload: PolicyInstallR
                 metadata, recipe = await asyncio.to_thread(
                     _archive_metadata, path, artifact.manifest_sha256
                 )
+                recorded = await recorded_control(app, project_id, artifact)
                 try:
-                    descriptor = _descriptor(artifact, metadata, recipe, payload)
+                    descriptor = _descriptor(artifact, metadata, recipe, payload, recorded)
                 except ValueError as error:
                     raise RobotLabError(str(error), 422) from None
                 encoded = base64.b64encode(

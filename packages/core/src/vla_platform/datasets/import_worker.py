@@ -802,6 +802,35 @@ def _combined_statistics(parts):
     return output
 
 
+def _recorder_statement(roots):
+    """What the Robot Lab recorder said about every source, when all of them agree.
+
+    The recorder states the units of the arm positions. A policy trained on the combined
+    dataset speaks those units, so the statement carries over, but only when every source
+    is a finished Robot Lab recording and they all say the same thing.
+    """
+    shared = None
+    for root in roots:
+        try:
+            recording = json.loads(safe(root, "openjensen.json").read_bytes())
+        except OSError, ValueError:
+            return None
+        if (
+            not isinstance(recording, dict)
+            or recording.get("created_by") != "OpenJensen Robot Lab"
+            or recording.get("finalized") is not True
+            or recording.get("abandoned", False) is not False
+        ):
+            return None
+        statement = {
+            key: recording.get(key) for key in ("created_by", "format_version", "units", "format")
+        }
+        if shared is not None and statement != shared:
+            return None
+        shared = statement
+    return shared
+
+
 def merge(roots, output):
     """Join datasets that share features and frame rate into one LeRobot v3 dataset.
 
@@ -954,6 +983,28 @@ def merge(roots, output):
     }
     (meta / "info.json").write_text(json.dumps(info, allow_nan=False))
     (meta / "stats.json").write_text(json.dumps(_combined_statistics(statistics), allow_nan=False))
+    statement = _recorder_statement([root for root, *_ in sources])
+    if statement is not None:
+        (output / "openjensen.json").write_text(
+            json.dumps(
+                {
+                    **statement,
+                    "episodes": episode_index,
+                    "frames": frame_index,
+                    "fps": first["fps"],
+                    "task": next(iter(task_ids), ""),
+                    "finalized": True,
+                    "abandoned": False,
+                    "pending_frames": 0,
+                    "camera_features": [
+                        key
+                        for key, value in first["features"].items()
+                        if value.get("dtype") in {"video", "image"}
+                    ],
+                },
+                allow_nan=False,
+            )
+        )
     return {
         "episodes": episode_index,
         "frames": frame_index,

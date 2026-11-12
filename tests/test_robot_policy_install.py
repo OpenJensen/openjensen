@@ -322,3 +322,113 @@ def test_smol_unknown_control_semantics_cannot_be_claimed_by_checkbox(tmp_path):
     )
     assert value["offline_only"] is True
     assert value["joint_names"] is None and value["action_units"] is None
+
+
+RECORDED = {
+    "units": "degrees; gripper percent",
+    "state_names": [name + ".pos" for name in JOINTS],
+    "action_names": [name + ".pos" for name in JOINTS],
+    "dataset_fps": 23,
+}
+
+
+def test_a_policy_trained_on_a_robot_lab_recording_inherits_its_units(tmp_path):
+    """SmolVLA may drive the arm only when units and joint order are on record. A tick-box
+    is not a record; the verified recording the policy was trained on is."""
+    _, artifact = bundle(tmp_path, known=False)
+    artifact.metadata["architecture"] = "smolvla"
+    request = PolicyInstallRequest(name="Duck")
+    without = _descriptor(artifact, artifact.metadata, {}, request)
+    assert without["offline_only"] is True
+    value = _descriptor(artifact, artifact.metadata, {}, request, RECORDED)
+    assert value["offline_only"] is False and not value["id"].endswith("-offline")
+    assert value["fps"] == 23 and value["joint_names"] == JOINTS
+    assert value["state_units"] == UNITS and value["action_units"] == UNITS
+    # Asking for offline use is still honoured, and a different rate is still refused.
+    offline = _descriptor(
+        artifact,
+        artifact.metadata,
+        {},
+        PolicyInstallRequest(name="Duck", offline_only=True),
+        RECORDED,
+    )
+    assert offline["offline_only"] is True
+    with pytest.raises(ValueError, match="saved training FPS"):
+        _descriptor(
+            artifact, artifact.metadata, {}, PolicyInstallRequest(name="D", fps=30), RECORDED
+        )
+
+
+@pytest.mark.parametrize(
+    "change,match",
+    [
+        ({"units": "radians"}, "units are incompatible"),
+        ({"action_names": [name + ".pos" for name in reversed(JOINTS)]}, "joint order"),
+        ({"dataset_fps": 120}, "FPS is unsupported"),
+    ],
+)
+def test_a_recording_in_other_units_or_joint_order_still_blocks_arm_control(
+    tmp_path, change, match
+):
+    _, artifact = bundle(tmp_path, known=False)
+    artifact.metadata["architecture"] = "smolvla"
+    with pytest.raises(ValueError, match=match):
+        _descriptor(
+            artifact,
+            artifact.metadata,
+            {},
+            PolicyInstallRequest(name="Duck"),
+            {**RECORDED, **change},
+        )
+
+
+def test_recorded_units_are_read_only_from_a_verified_robot_lab_training_copy(tmp_path):
+    from test_dataset_combine import record, worker
+    from test_dataset_snapshots import build_dataset
+    from vla_platform.contracts import DatasetSnapshot
+    from vla_platform.datasets.snapshots import create_snapshot
+    from vla_platform.robot_policy_install import recorded_control
+
+    store = tmp_path / "workspace/dataset-snapshots"
+    # Two one-episode recordings, combined, make a valid training copy. Combining keeps
+    # what the recorder said about units.
+    two = tmp_path / "two"
+    runs = record(tmp_path / "recorded", 2)
+    code, _ = worker({"operation": "merge", "roots": [str(r) for r in runs], "output": str(two)})
+    assert code == 0
+    robot = DatasetSnapshot.model_validate(create_snapshot(tmp_path, two, store))
+    imported = DatasetSnapshot.model_validate(
+        create_snapshot(tmp_path, build_dataset(tmp_path / "video"), store)
+    )
+
+    def app(snapshot, *, project="project", many=False):
+        jobs = {
+            "train": SimpleNamespace(
+                project_id="project",
+                request=SimpleNamespace(
+                    dataset_job_id="data", dataset_job_ids=["data", "x"] if many else None
+                ),
+            ),
+            "data": SimpleNamespace(project_id=project, result=SimpleNamespace(snapshot=snapshot)),
+        }
+
+        async def get(ident):
+            return jobs.get(ident)
+
+        execution = SimpleNamespace(
+            get=get, settings=SimpleNamespace(data_dir=tmp_path / "workspace")
+        )
+        return SimpleNamespace(state=SimpleNamespace(execution=execution))
+
+    artifact = SimpleNamespace(job_id="train")
+    assert asyncio.run(recorded_control(app(robot), "project", artifact)) == {
+        "units": "degrees; gripper percent",
+        "state_names": [name + ".pos" for name in JOINTS],
+        "action_names": [name + ".pos" for name in JOINTS],
+        "dataset_fps": 10,
+    }
+    # Not a Robot Lab recording, another project's data, or several datasets: no evidence.
+    assert asyncio.run(recorded_control(app(imported), "project", artifact)) is None
+    assert asyncio.run(recorded_control(app(robot, project="other"), "project", artifact)) is None
+    assert asyncio.run(recorded_control(app(robot, many=True), "project", artifact)) is None
+    assert asyncio.run(recorded_control(app(None), "project", artifact)) is None
