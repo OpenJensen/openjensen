@@ -146,8 +146,8 @@ export function RobotLabPolicyInstall({ lab, installed }: { lab: RobotLabState; 
           Install policy on USB computer
         </button>
         <p className="robot-lab-subtle">
-          A model kept in cloud storage is fetched first. On a slow connection that can take half an hour; stay on
-          this page until it finishes.
+          A model kept in cloud storage is fetched first. On a slow connection that can take half an hour; stay on this
+          page until it finishes.
         </p>
         {(!lab.state?.capabilities?.policy_install || !lab.state?.capabilities?.native_policy_adapters) && (
           <Notice kind="warning">Update the robot control service to install policies from Models.</Notice>
