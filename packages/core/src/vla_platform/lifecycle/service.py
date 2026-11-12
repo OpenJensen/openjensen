@@ -934,9 +934,20 @@ class Lifecycle:
             if model.backend == "psi0" and dataset.result.format != "lerobot_v2":
                 raise ValueError("Psi-Zero currently requires a LeRobot v2.1 dataset")
             if dataset.result.source == "local":
-                if model.backend != "lerobot" or dataset.result.snapshot is None:
+                if dataset.result.snapshot is None:
                     raise ValueError(
-                        "Local training requires a verified v3 snapshot and a native LeRobot model"
+                        "This dataset is not ready for training. "
+                        + (
+                            dataset.result.training_blocker
+                            or "Open it in Datasets with a training copy selected, then retry."
+                        )
+                    )
+                if model.backend != "lerobot":
+                    raise ValueError(
+                        f"{model.label} {request.training_method.upper()} trains from a Hugging "
+                        "Face dataset, not from one saved on this computer. Publish this dataset "
+                        "to Hugging Face and train on the published copy, or choose full "
+                        "fine-tuning or ACT."
                     )
                 from vla_platform.datasets.snapshots import resolve_snapshot, training_split
 
