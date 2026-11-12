@@ -114,6 +114,11 @@ def test_one_episode_recordings_combine_into_a_dataset_the_trainer_accepts(tmp_p
     assert third[0]["observation.state"] == [200.0, 201.0, 202.0, 203.0, 204.0, 205.0]
     # The originals are untouched.
     assert json.loads((recordings[2] / "meta/info.json").read_text())["total_episodes"] == 1
+    # The recorder's statement of units carries over, with the combined totals.
+    recorder = json.loads((output / "openjensen.json").read_text())
+    assert recorder["created_by"] == "OpenJensen Robot Lab"
+    assert recorder["units"] == "degrees; gripper percent"
+    assert (recorder["episodes"], recorder["frames"], recorder["fps"]) == (5, 19, 10)
     stats = json.loads((output / "meta/stats.json").read_text())
     assert stats["action"]["count"] == [19]
     assert stats["action"]["min"][0] == 0.0 and stats["action"]["max"][0] == 403.0
