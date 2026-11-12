@@ -199,6 +199,9 @@ def _descriptor(artifact, metadata, recipe, payload, recorded=None):
         for key in ("fps", "action_fps", "dataset_fps"):
             if key in record:
                 value = record[key]
+                if type(value) is float and value.is_integer():
+                    # A dataset saved on this computer records 23 frames per second as 23.0.
+                    value = int(value)
                 if type(value) is not int or not 1 <= value <= (240 if offline else 40):
                     raise ValueError("Saved policy FPS is unsupported by this arm")
                 rates.add(value)

@@ -359,6 +359,32 @@ def test_a_policy_trained_on_a_robot_lab_recording_inherits_its_units(tmp_path):
         )
 
 
+def test_a_whole_frame_rate_saved_as_a_decimal_is_that_frame_rate(tmp_path):
+    """A dataset saved on this computer records 23 frames per second as 23.0, and every
+    model trained on one was refused with "Saved policy FPS is unsupported by this arm"."""
+    _, artifact = bundle(tmp_path, known=False)
+    artifact.metadata.update(
+        dataset={"fps": 23.0}, temporal_contract={"action_fps": 23, "prediction_horizon": 100}
+    )
+    value = _descriptor(
+        artifact, artifact.metadata, {}, PolicyInstallRequest(name="Duck"), RECORDED
+    )
+    assert value["fps"] == 23 and type(value["fps"]) is int and value["offline_only"] is False
+    # A rate that is not a whole number, or that disagrees, is still refused.
+    artifact.metadata["dataset"] = {"fps": 29.97}
+    with pytest.raises(ValueError, match="FPS is unsupported"):
+        _descriptor(artifact, artifact.metadata, {}, PolicyInstallRequest(name="Duck"), RECORDED)
+    artifact.metadata["dataset"] = {"fps": 30.0}
+    with pytest.raises(ValueError, match="frame rates disagree"):
+        _descriptor(artifact, artifact.metadata, {}, PolicyInstallRequest(name="Duck"), RECORDED)
+    for value in (True, "23", float("nan"), float("inf")):
+        artifact.metadata["dataset"] = {"fps": value}
+        with pytest.raises(ValueError, match="FPS is unsupported"):
+            _descriptor(
+                artifact, artifact.metadata, {}, PolicyInstallRequest(name="Duck"), RECORDED
+            )
+
+
 @pytest.mark.parametrize(
     "change,match",
     [
