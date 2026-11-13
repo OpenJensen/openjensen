@@ -9,6 +9,7 @@ import asyncio
 import json
 import os
 import re
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
@@ -58,54 +59,87 @@ class SkyPilotAdapter:
             f"({target['project_id']}, {target['region']})",
         )
 
-        cloud_stage = "preparing"
-
-        async def progress(message):
-            nonlocal cloud_stage
-            if message.startswith("_cloud_setup:"):
-                detail = json.loads(message.split(":", 1)[1])
-                cloud_stage = detail["phase"]
-                await owner.event(job, cloud_stage, detail["message"], detail)
-                return
-            if message.startswith(("_quantization:", "_inference:")):
-                detail = json.loads(message.split(":", 1)[1])
-                cloud_stage = detail.get("phase", "quantizing")
-                await owner.event(job, cloud_stage, detail.get("message", "Quantizing checkpoint"))
-                return
-            if message.startswith("_telemetry:"):
-                line = message[len("_telemetry:") :]
-                observed = telemetry.parse_observation(line)
-                if observed:
-                    cloud_stage = observed.get("phase") or (
-                        "checkpoint" if observed.get("checkpoint_saved") else "training"
-                    )
-                await owner.training_observation(job, line)
-                return
-            if message.startswith("Optimizer step"):
-                cloud_stage = "training"
-            elif message.startswith(("Downloading training", "Saving cloud artifacts")):
-                cloud_stage = "saving"
-            elif message == "Quantizing on Google Cloud":
-                cloud_stage = "quantizing"
-            elif message == "Evaluating on Google Cloud":
-                cloud_stage = "evaluating"
-            elif message == "Running policy on Google Cloud":
-                cloud_stage = "running"
-            elif message == "Training on Google Cloud":
-                cloud_stage = "training"
-            elif message.startswith("Stopping Google Cloud"):
-                cloud_stage = "finishing"
-            await owner.event(job, cloud_stage, message)
-
         from vla_platform.huggingface_connection import HuggingFaceConnection
 
         hf_token = HuggingFaceConnection(owner.settings.data_dir).token()
         secret_options = {"hf_token": hf_token} if hf_token else {}
-        with sky_runner.log_to(lambda line: _record_remote(owner, job, invocation.output, line)):
+        with _session(sky_runner, owner, job, invocation.output):
             returncode = await sky_runner.run(
-                payload, stage_dir, target, progress, **secret_options
+                payload, stage_dir, target, _cloud_progress(owner, job), **secret_options
             )
         return returncode
+
+    async def reattach(self, invocation: WorkerInvocation) -> int:
+        owner, job = invocation.lifecycle, invocation.job
+        from vla_platform.huggingface_connection import HuggingFaceConnection
+        from vla_platform.lifecycle import sky_runner
+
+        hf_token = HuggingFaceConnection(owner.settings.data_dir).token()
+        secret_options = {"hf_token": hf_token} if hf_token else {}
+        with _session(sky_runner, owner, job, invocation.output):
+            return await sky_runner.reattach(
+                invocation.payload,
+                invocation.stage_dir,
+                _cloud_progress(owner, job, job.stage or "training"),
+                **secret_options,
+            )
+
+
+def _cloud_progress(owner, job, cloud_stage="preparing"):
+    """Turn the runner's messages into job events, remembering the stage they belong to."""
+
+    async def progress(message):
+        nonlocal cloud_stage
+        if message.startswith("_cloud_setup:"):
+            detail = json.loads(message.split(":", 1)[1])
+            cloud_stage = detail["phase"]
+            await owner.event(job, cloud_stage, detail["message"], detail)
+            return
+        if message.startswith(("_quantization:", "_inference:")):
+            detail = json.loads(message.split(":", 1)[1])
+            cloud_stage = detail.get("phase", "quantizing")
+            await owner.event(job, cloud_stage, detail.get("message", "Quantizing checkpoint"))
+            return
+        if message.startswith("_telemetry:"):
+            line = message[len("_telemetry:") :]
+            observed = telemetry.parse_observation(line)
+            if observed:
+                cloud_stage = observed.get("phase") or (
+                    "checkpoint" if observed.get("checkpoint_saved") else "training"
+                )
+            await owner.training_observation(job, line)
+            return
+        if message.startswith("Optimizer step"):
+            cloud_stage = "training"
+        elif message.startswith(("Downloading training", "Saving cloud artifacts")):
+            cloud_stage = "saving"
+        elif message == "Quantizing on Google Cloud":
+            cloud_stage = "quantizing"
+        elif message == "Evaluating on Google Cloud":
+            cloud_stage = "evaluating"
+        elif message == "Running policy on Google Cloud":
+            cloud_stage = "running"
+        elif message == "Training on Google Cloud":
+            cloud_stage = "training"
+        elif message.startswith("Stopping Google Cloud"):
+            cloud_stage = "finishing"
+        await owner.event(job, cloud_stage, message)
+
+    return progress
+
+
+@contextmanager
+def _session(sky_runner, owner, job, stage):
+    """Record the provider's output on the job, and let its machine outlive a shutdown.
+
+    Only a stopping application leaves a training machine running; a cancelled or
+    overdue job is not stopping, so its machine is torn down as before.
+    """
+    with (
+        sky_runner.log_to(lambda line: _record_remote(owner, job, stage, line)),
+        sky_runner.detach_when(lambda: owner.execution._closing),
+    ):
+        yield
 
 
 class LocalAdapter:
@@ -286,17 +320,39 @@ class SkyPilotTargetAdapter:
             target["region"] = region
             target["project_id"] = connection["project_id"]
 
-        async def progress(message):
-            if message.startswith("_telemetry:"):
-                await owner.training_observation(job, message[len("_telemetry:") :])
-            else:
-                await owner.event(job, invocation.output, message)
-
         token = HuggingFaceConnection(owner.settings.data_dir).token()
-        with sky_runner.log_to(lambda line: _record_remote(owner, job, invocation.output, line)):
+        with _session(sky_runner, owner, job, invocation.output):
             return await sky_runner.run(
-                invocation.payload, invocation.stage_dir, target, progress, hf_token=token
+                invocation.payload,
+                invocation.stage_dir,
+                target,
+                _target_progress(owner, job, invocation.output),
+                hf_token=token,
             )
+
+    async def reattach(self, invocation: WorkerInvocation) -> int:
+        from vla_platform.huggingface_connection import HuggingFaceConnection
+        from vla_platform.lifecycle import sky_runner
+
+        owner, job = invocation.lifecycle, invocation.job
+        token = HuggingFaceConnection(owner.settings.data_dir).token()
+        with _session(sky_runner, owner, job, invocation.output):
+            return await sky_runner.reattach(
+                invocation.payload,
+                invocation.stage_dir,
+                _target_progress(owner, job, invocation.output),
+                hf_token=token,
+            )
+
+
+def _target_progress(owner, job, stage):
+    async def progress(message):
+        if message.startswith("_telemetry:"):
+            await owner.training_observation(job, message[len("_telemetry:") :])
+        else:
+            await owner.event(job, stage, message)
+
+    return progress
 
 
 class AdapterRegistry:
@@ -313,6 +369,13 @@ class AdapterRegistry:
         if adapter is None:
             raise ValueError(f"Execution adapter is not installed: {name}")
         return await adapter.run(invocation)
+
+    async def reattach(self, name: str, invocation: WorkerInvocation) -> int:
+        """Finish work the adapter started before the application restarted."""
+        adapter = self._adapters.get(name)
+        if adapter is None or not hasattr(adapter, "reattach"):
+            raise ValueError(f"Execution adapter cannot follow earlier work again: {name}")
+        return await adapter.reattach(invocation)
 
 
 adapters = AdapterRegistry()

@@ -46,7 +46,7 @@ async def workspace(tmp_path, monkeypatch):
     monkeypatch.setattr(vla_platform.lifecycle, "isaac_runner", runner, raising=False)
     monkeypatch.setattr(simulation, "profiles", lambda _: (profile,))
 
-    async def sky_recover(_):
+    async def sky_recover(_, keep=None):
         return []
 
     monkeypatch.setattr(sky_runner, "recover", sky_recover)

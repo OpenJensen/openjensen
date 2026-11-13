@@ -1356,7 +1356,7 @@ class Lifecycle:
                     "id": descriptor["id"],
                     "manifest_sha256": descriptor["manifest_sha256"],
                 }
-        request_path, result_path = stage_dir / "request.json", stage_dir / "result.json"
+        request_path = stage_dir / "request.json"
         request_path.write_text(json.dumps(payload, allow_nan=False))
         from vla_platform.compute.contracts import verify_binding
         from vla_platform.compute.providers import WorkerInvocation, adapters
@@ -1377,6 +1377,34 @@ class Lifecycle:
                 self, job, runtime, operation, payload, stage_dir, output, training, act_export
             ),
         )
+        return await self._publish_stage(
+            job,
+            operation,
+            artifact,
+            output,
+            result,
+            returncode,
+            final=final,
+            act_export=act_export,
+            register_artifact=register_artifact,
+        )
+
+    async def _publish_stage(
+        self,
+        job,
+        operation,
+        artifact,
+        output,
+        result,
+        returncode,
+        *,
+        final=False,
+        act_export=False,
+        register_artifact=True,
+    ):
+        """Check what a finished worker left in its stage directory and publish it."""
+        stage_dir = self.settings.data_dir / "jobs" / job.id / output
+        result_path = stage_dir / "result.json"
         if not result_path.exists() or result_path.stat().st_size > 4 * 1024 * 1024:
             raise ValueError("Worker did not produce a bounded result")
         response = json.loads(
@@ -1427,6 +1455,93 @@ class Lifecycle:
         await self.publish(job, result)
         await self.event(job, output, f"Completed {operation}")
         return created, report
+
+    def reattachable(self, job) -> str | None:
+        """The stage at which a job's cloud machine can be followed again, if any.
+
+        A job that is one cloud operation keeps everything needed to finish it beside
+        that one dispatch. A workflow chains several workers through results held in
+        memory, and a local worker dies with the application, so neither qualifies.
+        """
+        request = job.request
+        if not isinstance(request, PolicyRequest):
+            return None
+        adapter = (
+            job.execution.adapter
+            if job.execution
+            else "skypilot"
+            if job.compute_target is not None
+            else "local"
+        )
+        if (
+            adapter not in {"skypilot", "skypilot-target"}
+            or request.operation
+            not in {"policy.finetune", "policy.quantize", "policy.evaluate", "policy.run"}
+            or request.native_replay is not None
+            or request.native_distillation is not None
+            or request.native_quantization is not None
+            or request.simulation is not None
+        ):
+            return None
+        return "operation"
+
+    async def reattach(self, job: Job, output: str):
+        """Finish a cloud operation whose machine outlived an application restart.
+
+        The request saved beside the dispatch stands in for the one ``native`` built
+        before launching, so the result is checked and published exactly as it would
+        have been without the restart. Nothing is validated against today's settings:
+        the machine is already running and paid for.
+        """
+        from vla_platform.compute.providers import WorkerInvocation, adapters
+
+        request = job.request
+        stage_dir = self.settings.data_dir / "jobs" / job.id / output
+        request_path = stage_dir / "request.json"
+        if (
+            request_path.is_symlink()
+            or not request_path.is_file()
+            or request_path.stat().st_size > 16 * 1024 * 1024
+        ):
+            raise ValueError("The saved cloud request is unavailable")
+        payload = json.loads(request_path.read_text())
+        if (
+            not isinstance(payload, dict)
+            or payload.get("job_id") != job.id
+            or payload.get("operation") != request.operation
+        ):
+            raise ValueError("The saved cloud request does not belong to this job")
+        # The input artifact as it was at launch: only its identity is recorded now.
+        saved = payload.get("artifact")
+        artifact = PolicyArtifact.model_validate(saved) if saved else None
+        result = LifecycleResult()
+        returncode = await adapters.reattach(
+            job.execution.adapter if job.execution else "skypilot",
+            WorkerInvocation(
+                self,
+                job,
+                self.runtime(request.runtime_id),
+                request.operation,
+                payload,
+                stage_dir,
+                output,
+                request.operation == "policy.finetune",
+                False,
+            ),
+        )
+        _, report = await self._publish_stage(
+            job,
+            request.operation,
+            artifact,
+            output,
+            result,
+            returncode,
+            final=bool(payload.get("final")),
+        )
+        if report.get("scope") == "engine_diagnostics":
+            result.decision = "diagnostics_only"
+        await self.publish(job, result)
+        return result
 
     async def completed_cloud_act(self, artifact):
         original = await self.execution.get(artifact.job_id)
