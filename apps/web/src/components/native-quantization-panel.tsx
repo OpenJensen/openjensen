@@ -419,7 +419,7 @@ export function NativeQuantizationPanel({
                     {onPrepareSimulation && handoff && (
                       <p className="field-help" role="status">
                         {simulation.isError
-                          ? 'Simulation profile availability is unknown. Open Run to refresh its configuration.'
+                          ? 'Simulation profile availability is unknown. Open Simulate to refresh its configuration.'
                           : simulation.isPending
                             ? 'Checking configured simulation profiles…'
                             : compatible.length

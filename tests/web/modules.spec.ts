@@ -2,12 +2,12 @@ import { expect, test, type Page } from '@playwright/test';
 import { fulfillApplicationUpdateRead } from './application-update-controls';
 
 const catalog = [
-  ['robot-lab', 'Initial setup', 'Robot Lab'],
+  ['robot-lab', 'Robot Lab', 'Robot Lab'],
   ['teaching', 'AI teleoperation', 'Robot Lab'],
   ['datasets', 'Datasets', 'Data'],
   ['augmentation', 'Augmentation', 'Data'],
   ['real-to-sim', 'Real to sim', 'Data'],
-  ['training', 'Fine-tuning', 'Train'],
+  ['training', 'Train', 'Train'],
   ['distillation', 'Distillation', 'Train'],
   ['quantization', 'Quantization', 'Train'],
   ['evaluation', 'Evaluation', 'Test'],
@@ -188,27 +188,27 @@ test('module manager groups every feature and clearly marks the fresh defaults',
     await expect(page.getByRole('list', { name: `${group} modules`, exact: true })).toBeVisible();
   }
   await expect(page.getByRole('list', { name: 'Train modules' }).getByRole('heading')).toHaveText([
-    'Fine-tuning',
+    'Train',
     'Distillation',
     'Quantization',
   ]);
   for (const name of ['Datasets', 'Models']) await expect(moduleCard(page, name)).toContainText('Included by default');
   const nav = page.getByRole('navigation', { name: 'Policy lifecycle' });
-  for (const name of ['Dashboard', 'Datasets', 'Models', 'Modules', 'Cloud & APIs', 'Settings'])
+  for (const name of ['Home', 'Datasets', 'Models', 'Modules', 'Cloud & APIs', 'Settings'])
     await expect(nav.getByRole('link', { name, exact: true })).toBeVisible();
   for (const name of [
-    'Initial setup',
+    'Robot Lab',
     'AI teleoperation',
-    'Fine-tune',
+    'Train',
     'Distill',
     'Quantize',
     'Evaluate',
-    'Run',
+    'Simulate',
     'Cloud runs',
   ])
     await expect(nav.getByRole('link', { name, exact: true })).toHaveCount(0);
-  const robot = moduleCard(page, 'Initial setup');
-  await expect(robot.getByRole('button', { name: 'Install module Initial setup', exact: true })).toBeVisible();
+  const robot = moduleCard(page, 'Robot Lab');
+  await expect(robot.getByRole('button', { name: 'Install module Robot Lab', exact: true })).toBeVisible();
   await expect(robot.getByText('Setup required', { exact: true })).toHaveCount(0);
   await expect(robot.getByRole('link')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Install Training', exact: true })).toHaveCount(0);
@@ -325,15 +325,15 @@ test('unreadable module state reveals no feature navigation from stale browser h
   await expect(page.getByText('Module list unavailable.', { exact: true })).toBeVisible();
   const nav = page.getByRole('navigation', { name: 'Policy lifecycle' });
   for (const name of [
-    'Initial setup',
+    'Robot Lab',
     'AI teleoperation',
     'Datasets',
     'Models',
-    'Fine-tune',
+    'Train',
     'Distill',
     'Quantize',
     'Evaluate',
-    'Run',
+    'Simulate',
   ])
     await expect(nav.getByRole('link', { name, exact: true })).toHaveCount(0);
   for (const name of ['Modules', 'Cloud & APIs', 'Settings'])

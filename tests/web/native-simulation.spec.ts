@@ -192,7 +192,7 @@ async function fixture(page: Page) {
   });
   await page.goto('/datasets/');
   await expect(page.getByLabel('Current project')).toHaveAttribute('data-project-id', 'alpha');
-  await page.getByRole('link', { name: 'Run', exact: true }).click();
+  await page.getByRole('link', { name: 'Simulate', exact: true }).click();
   await openModuleTask(page);
   await page.getByRole('button', { name: '3D simulation', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Native Isaac simulation', exact: true })).toBeVisible();
@@ -216,7 +216,7 @@ test('a packed CPU profile is never selected automatically on direct Run entry',
   state.profiles = [cpu];
   state.artifacts.push(artifact('packed-policy', 'act', 'native_quantized', { format: 'firebird_quant' }));
   await page.reload();
-  await page.getByRole('link', { name: 'Run', exact: true }).click();
+  await page.getByRole('link', { name: 'Simulate', exact: true }).click();
   await openModuleTask(page);
   await page.getByRole('button', { name: '3D simulation', exact: true }).click();
   const profiles = page.getByRole('radiogroup', { name: 'Isaac profile', exact: true });
@@ -236,10 +236,10 @@ test('native Run preserves engine navigation and fails closed when profiles are 
   const state = await fixture(page);
   state.profiles = [];
   await page.reload();
-  await page.getByRole('link', { name: 'Run', exact: true }).click();
+  await page.getByRole('link', { name: 'Simulate', exact: true }).click();
   await openModuleTask(page);
   await expect(page.getByRole('group', { name: 'Run mode', exact: true })).toBeVisible();
-  await expect(page.getByRole('region', { name: 'Run jobs', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Simulation runs', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: '3D simulation' }).click();
   await expect(page.getByText('Simulator not connected', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Start experimental simulation' })).toBeDisabled();
@@ -645,7 +645,7 @@ for (const width of [320, 390])
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1),
     ).toBe(true);
-    await page.getByRole('link', { name: 'Run', exact: true }).focus();
+    await page.getByRole('link', { name: 'Simulate', exact: true }).focus();
     await page.keyboard.press('Tab');
     await expect(page.getByRole('link', { name: 'Decision Lab', exact: true })).toBeFocused();
     await page.keyboard.press('Tab');
@@ -668,7 +668,7 @@ for (const width of [320, 390])
     await expect(page.getByRole('heading', { name: 'Cloud runs', exact: true })).toBeVisible();
     await page.getByLabel('Current project').focus();
     await page.keyboard.press('Tab');
-    await expect(page.getByRole('link', { name: 'Dashboard', exact: true })).toBeFocused();
+    await expect(page.getByRole('link', { name: 'Home', exact: true })).toBeFocused();
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1),
     ).toBe(true);
@@ -770,12 +770,12 @@ async function openNativeAgain(page: Page, reload = false) {
     await page.reload();
     await expect(page.getByLabel('Current project')).toHaveAttribute('data-project-id', 'alpha');
   } else await page.getByRole('link', { name: 'Datasets', exact: true }).click();
-  await page.getByRole('link', { name: 'Run', exact: true }).click();
+  await page.getByRole('link', { name: 'Simulate', exact: true }).click();
   const review = page.getByRole('button', { name: 'Review pending run', exact: true });
   await expect
     .poll(
       async () =>
-        (await review.isVisible()) || (await page.getByRole('button', { name: 'New run', exact: true }).isVisible()),
+        (await review.isVisible()) || (await page.getByRole('button', { name: 'New simulation', exact: true }).isVisible()),
     )
     .toBe(true);
   if (await review.isVisible()) await review.click();
@@ -1180,7 +1180,7 @@ for (const both of [false, true])
     }, both);
     await page.reload();
     await expect(page.getByLabel('Current project')).toHaveAttribute('data-project-id', 'alpha');
-    await page.getByRole('link', { name: 'Run', exact: true }).click();
+    await page.getByRole('link', { name: 'Simulate', exact: true }).click();
     await page.getByRole('button', { name: 'Review pending run', exact: true }).click();
     const nativeMode = page.getByRole('button', { name: '3D simulation', exact: true });
     if (both) {
@@ -1195,7 +1195,7 @@ for (const both of [false, true])
     );
     await page.getByRole('button', { name: 'Check inference', exact: true }).click();
     await page.getByRole('link', { name: 'Datasets', exact: true }).click();
-    await page.getByRole('link', { name: 'Run', exact: true }).click();
+    await page.getByRole('link', { name: 'Simulate', exact: true }).click();
     await openModuleTask(page);
     await expect(page.getByRole('button', { name: 'Check inference', exact: true })).toHaveAttribute(
       'aria-pressed',

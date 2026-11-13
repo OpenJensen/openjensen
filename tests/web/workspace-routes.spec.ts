@@ -4,13 +4,13 @@ import { expect, test, type Page } from '@playwright/test';
 import { selectProject } from './project-controls';
 
 const destinations = [
-  ['dashboard', 'Dashboard'],
+  ['dashboard', 'Home'],
   ['datasets', 'Datasets'],
-  ['training', 'Fine-tune'],
+  ['training', 'Train'],
   ['distillation', 'Distill'],
   ['quantization', 'Quantize'],
   ['evaluation', 'Evaluate'],
-  ['simulation', 'Run'],
+  ['simulation', 'Simulate'],
   ['settings', 'Settings'],
   ['modules', 'Modules'],
   ['cloud-apis', 'Cloud & APIs'],
@@ -20,7 +20,7 @@ const destinations = [
   ['ai-teleoperation', 'AI teleoperation'],
   ['decision-lab', 'Decision Lab'],
   ['models', 'Models'],
-  ['robot-lab', 'Initial setup'],
+  ['robot-lab', 'Robot Lab'],
 ] as const;
 
 const moduleGroups: Record<string, string> = {
@@ -144,7 +144,7 @@ test('the sidebar lists installed modules and Modules shows how to install the r
   await page.route('**/api/v1/modules', (route) => route.fulfill({ json: moduleFixture(['robot-lab', 'datasets']) }));
   await page.goto('/dashboard/');
   const nav = page.getByRole('navigation', { name: 'Policy lifecycle' });
-  await expect(nav.getByRole('group', { name: 'Robot Lab' }).getByRole('link')).toHaveText(['Initial setup']);
+  await expect(nav.getByRole('group', { name: 'Robot', exact: true }).getByRole('link')).toHaveText(['Robot Lab']);
   await expect(nav.getByRole('group', { name: 'Data' }).getByRole('link')).toHaveText(['Datasets']);
   for (const name of ['AI teleoperation', 'Augmentation', 'Real to sim', 'Decision Lab', 'Cloud runs']) {
     await expect(nav.getByRole('link', { name, exact: true })).toHaveCount(0);
@@ -152,7 +152,9 @@ test('the sidebar lists installed modules and Modules shows how to install the r
   await nav.getByRole('link', { name: 'Modules', exact: true }).click();
   const modules = page.getByLabel('Workspace modules', { exact: true }).getByRole('listitem');
   await expect(modules).toHaveCount(13);
-  await expect(modules.filter({ hasText: 'Initial setup' })).toContainText('Installed');
+  await expect(modules.filter({ has: page.getByRole('heading', { name: 'Robot Lab', exact: true }) })).toContainText(
+    'Installed',
+  );
   const teaching = modules.filter({ hasText: 'AI teleoperation' });
   await expect(teaching).toContainText('Disabled');
   await expect(teaching.getByText('Setup required', { exact: true })).toHaveCount(0);
@@ -176,13 +178,13 @@ test('sidebar links, Back and Forward preserve project, theme and unfinished dat
     (window as any).__routeDocument = 'same document';
   });
   const nav = page.getByRole('navigation', { name: 'Policy lifecycle' });
-  await nav.getByRole('link', { name: 'Fine-tune', exact: true }).click();
+  await nav.getByRole('link', { name: 'Train', exact: true }).click();
   await expect(page).toHaveURL(/\/training\/$/);
   await nav.getByRole('link', { name: 'Settings', exact: true }).click();
   await expect(page).toHaveURL(/\/settings\/$/);
   await page.goBack();
   await expect(page).toHaveURL(/\/training\/$/);
-  await expect(nav.getByRole('link', { name: 'Fine-tune', exact: true })).toHaveAttribute('aria-current', 'page');
+  await expect(nav.getByRole('link', { name: 'Train', exact: true })).toHaveAttribute('aria-current', 'page');
   await page.goBack();
   await expect(page).toHaveURL(/\/datasets\/$/);
   await expect(repository).toHaveValue('our/unfinished-dataset');
@@ -205,7 +207,7 @@ test('section links can open in a new tab and unknown pages remain 404s', async 
   const nav = page.getByRole('navigation', { name: 'Policy lifecycle' });
   // Installed modules join the sidebar once listed; click after it settles.
   await expect(nav).toHaveAttribute('aria-busy', 'false');
-  const link = nav.getByRole('link', { name: 'Fine-tune', exact: true });
+  const link = nav.getByRole('link', { name: 'Train', exact: true });
   await expect(link).toHaveAttribute('href', '/training/');
   // A modifier click belongs to the browser: the workspace must neither cancel it nor
   // navigate this tab. Chromium does not reliably report the background tab it opens
@@ -220,7 +222,7 @@ test('section links can open in a new tab and unknown pages remain 404s', async 
   await expect(page).toHaveURL(/\/datasets\/$/);
   const other = await context.newPage();
   await other.goto('/training/');
-  await expect(other.getByRole('heading', { name: 'Fine-tune', level: 1, exact: true })).toBeVisible();
+  await expect(other.getByRole('heading', { name: 'Train', level: 1, exact: true })).toBeVisible();
   await other.close();
   const response = await page.request.get('/training/missing-page/');
   expect(response.status()).toBe(404);

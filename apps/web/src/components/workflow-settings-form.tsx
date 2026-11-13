@@ -1,6 +1,6 @@
 import type { Preferences } from '@/lib/workflow-preferences';
 
-/** Project defaults for compression, evaluation and fine-tuning used by later workflow runs. */
+/** Project defaults for compression, evaluation and training used by later workflow runs. */
 export function WorkflowSettingsForm({
   preferences,
   ready,
@@ -188,7 +188,7 @@ export function WorkflowSettingsForm({
           )}
         </>
       )}
-      <h2>Fine-tuning</h2>
+      <h2>Training</h2>
       <label>
         Optimizer steps
         <input

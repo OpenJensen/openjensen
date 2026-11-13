@@ -238,7 +238,7 @@ test('late intake acknowledgement records the job without replacing later stage 
   const state = await fixture(page, 'delayed-ack');
   await page.getByRole('button', { name: 'Import dataset', exact: true }).click();
   await expect.poll(() => state.writes.length).toBe(1);
-  await page.getByRole('link', { name: 'Fine-tune', exact: true }).click();
+  await page.getByRole('link', { name: 'Train', exact: true }).click();
   state.releaseAck();
   await expect
     .poll(() =>

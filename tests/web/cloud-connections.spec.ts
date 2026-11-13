@@ -1029,7 +1029,7 @@ test('Gemini environment configuration shows metadata with an empty replacement 
 test('dashboard and Settings omit uninstalled cloud integrations and local setup controls', async ({ page }) => {
   const state = await integrationFixture(page, []);
   await page.goto('/dashboard/');
-  await expect(page.getByRole('heading', { name: 'Dashboard', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Home', exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Resources & connections', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Check resources', exact: true })).toHaveCount(0);
   await page.getByRole('link', { name: 'Settings', exact: true }).click();

@@ -157,7 +157,7 @@ async function fixture(page: Page) {
   });
   await page.goto('/datasets/');
   await expect(page.getByLabel('Current project')).toHaveAttribute('data-project-id', 'alpha');
-  await page.getByRole('link', { name: 'Run', exact: true }).click();
+  await page.getByRole('link', { name: 'Simulate', exact: true }).click();
   await openModuleTask(page);
   await page.getByRole('button', { name: 'Replay observations', exact: true }).click();
   await expect(page.getByRole('region', { name: 'CPU observation replay', exact: true })).toBeVisible();
@@ -255,7 +255,7 @@ for (const outcome of ['lost', 'wrong'])
     await submit(page).click();
     await expect(page.getByText(/request outcome is unverified/).first()).toBeVisible();
     await page.reload();
-    await page.getByRole('link', { name: 'Run', exact: true }).click();
+    await page.getByRole('link', { name: 'Simulate', exact: true }).click();
     await openModuleTask(page);
     await page.getByRole('button', { name: 'Replay observations', exact: true }).click();
     const acknowledgment = page.getByRole('button', { name: 'I checked replay jobs; allow a new request' });
@@ -376,7 +376,7 @@ test('journal cleanup failure after navigation preserves recovery guidance', asy
   await expect
     .poll(() => page.evaluate(() => (window as unknown as { journalCleanupFailures?: number }).journalCleanupFailures))
     .toBe(1);
-  await page.getByRole('link', { name: 'Run', exact: true }).click();
+  await page.getByRole('link', { name: 'Simulate', exact: true }).click();
   await openModuleTask(page);
   await page.getByRole('button', { name: 'Replay observations', exact: true }).click();
   await expect(page.getByRole('button', { name: 'I checked replay jobs; allow a new request' })).toBeVisible();
@@ -671,7 +671,7 @@ async function confirmCancellation(page: Page) {
   await page.getByRole('button', { name: 'Confirm cancellation', exact: true }).click();
 }
 async function reopenCancellationLane(page: Page) {
-  await page.getByRole('link', { name: 'Run', exact: true }).click();
+  await page.getByRole('link', { name: 'Simulate', exact: true }).click();
   await openModuleTask(page);
   const choice = page.getByRole('button', { name: 'Replay observations', exact: true });
   await expect(panel(page).or(choice).first()).toBeVisible();

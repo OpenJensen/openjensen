@@ -409,7 +409,7 @@ test('completed candidate shows measured storage and drift separately from exact
       .map((item) => ({ tag: item.tagName, cls: item.className, right: item.getBoundingClientRect().right })),
   }));
   expect(widths.scroll, JSON.stringify(widths)).toBeLessThanOrEqual(widths.width + 1);
-  await page.getByRole('link', { name: 'Run', exact: true }).click();
+  await page.getByRole('link', { name: 'Simulate', exact: true }).click();
   await openModuleTask(page);
   await page.getByRole('button', { name: '3D simulation', exact: true }).click();
   await expect(page.locator('.native-simulation').locator('input[type=radio][value="packed-result"]')).toHaveCount(0);

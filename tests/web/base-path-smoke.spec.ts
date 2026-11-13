@@ -25,7 +25,7 @@ test('prefixed export loads bundles, library media, API and docs without escapin
     'href',
     `${prefix}/dashboard/`,
   );
-  await expect(page.getByRole('link', { name: 'Fine-tune', exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Train', exact: true })).toBeVisible();
   await page.getByRole('link', { name: 'Datasets', exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`${prefix}/datasets/$`));
   expect((await page.request.post(`${origin}${prefix}/api/v1/projects/${project.id}/datasets/example`)).status()).toBe(

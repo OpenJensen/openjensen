@@ -145,7 +145,7 @@ async function fixture(
   return state;
 }
 async function openLibrary(page: Page) {
-  await page.getByRole('link', { name: 'Dashboard', exact: true }).click();
+  await page.getByRole('link', { name: 'Home', exact: true }).click();
   await page.getByRole('link', { name: 'Models', exact: true }).click();
 }
 test('collection shows model versions and their full recorded training and student history', async ({

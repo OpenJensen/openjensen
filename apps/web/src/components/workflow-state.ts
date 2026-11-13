@@ -337,16 +337,16 @@ export function useWorkflowPanel({
       : stage === 'Evaluate'
         ? 'Evaluation jobs'
         : stage === 'Fine-tune'
-          ? 'Training jobs'
-          : 'Run jobs';
+          ? 'Training runs'
+          : 'Simulation runs';
   const newLabel =
     stage === 'Quantize'
       ? 'New quantization'
       : stage === 'Evaluate'
         ? 'New evaluation'
         : stage === 'Fine-tune'
-          ? 'New training'
-          : 'New run';
+          ? 'New training run'
+          : 'New simulation';
   const allArtifacts = [...(artifacts.data ?? []), ...(data?.artifacts ?? [])];
   const sourceFor = (job: Job): PolicyArtifact | undefined =>
     allArtifacts.find((artifact) => artifact.id === policyRequest(job)?.artifact_id);

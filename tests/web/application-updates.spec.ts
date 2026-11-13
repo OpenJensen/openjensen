@@ -235,7 +235,7 @@ test('unavailable browser storage keeps the workspace and update dialog usable',
   });
   await page.route('**/api/v1/updates**', (route) => route.fulfill({ json: initial }));
   await page.goto('/dashboard/');
-  await expect(page.getByRole('heading', { name: 'Dashboard', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Home', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Version and updates' }).click();
   await expect(page.getByRole('dialog', { name: 'OpenJensen updates' })).toBeVisible();
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();

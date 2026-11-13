@@ -23,7 +23,7 @@ const catalog = [
 
 export const installedModules: WorkspaceModule[] = catalog.map(([id, group]) => ({
   id,
-  name: id === 'robot-lab' ? 'Initial setup' : id === 'teaching' ? 'AI teleoperation' : id,
+  name: id === 'robot-lab' ? 'Robot Lab' : id === 'teaching' ? 'AI teleoperation' : id,
   group,
   default_installed: id === 'datasets' || id === 'models',
   installed: true,

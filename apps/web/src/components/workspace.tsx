@@ -151,7 +151,7 @@ function Workbench({ children }: { children: ReactNode }) {
                   items.length > 0 && (
                     <div
                       className="navigation-group"
-                      key={group.name ?? 'home'}
+                      key={group.name ?? group.items[0]}
                       role={group.name ? 'group' : undefined}
                       aria-label={group.name}
                     >

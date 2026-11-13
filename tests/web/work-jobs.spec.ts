@@ -221,7 +221,7 @@ test('shared job filters remain usable at a narrow viewport', async ({ page }) =
 });
 
 for (const [path, history, action, setup] of [
-  ['/training/', 'Fine-tuning jobs', 'Start a new fine-tuning', 'Training setup'],
+  ['/training/', 'Training runs', 'New training run', 'Training setup'],
   ['/distillation/', 'Distillation jobs', 'Start a new distillation', 'Distillation setup'],
   ['/quantization/', 'Quantization jobs', 'Start a new quantization', 'Quantization setup'],
 ] as const) {
@@ -285,7 +285,7 @@ test('all-jobs New opens setup directly and compute is selected inside that setu
   );
   await page.goto('/jobs/');
   await page.getByRole('button', { name: 'New job', exact: true }).click();
-  await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
+  await page.getByRole('button', { name: 'Train', exact: true }).click();
   await expect(page.getByRole('navigation', { name: 'Training setup' })).toBeVisible();
   await page.getByRole('combobox', { name: 'Compute target', exact: true }).selectOption('policy-pool');
   await expect(page.getByRole('region', { name: 'Selected job compute' })).toContainText('Policy pool');

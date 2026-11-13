@@ -111,7 +111,7 @@ test('open an imported two-view fixture, save labels, reopen it and reach the da
   const jobRows = page.locator('[data-job-id]');
   await expect(jobRows.filter({ hasText: 'Inspect dataset' })).toContainText('Robot labeling playground');
   await expect(jobRows.filter({ hasText: 'Local dataset' })).toHaveCount(0);
-  await page.getByRole('link', { name: 'Dashboard', exact: true }).click();
+  await page.getByRole('link', { name: 'Home', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Resources & connections' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Models', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Datasets', exact: true })).toBeVisible();
@@ -367,7 +367,7 @@ test('dashboard reports a failed local probe instead of successful resource chec
     route.fulfill({ status: 503, json: { detail: 'Local GPU probe failed' } }),
   );
   await ownProject(page, `Resource failure ${testInfo.project.name}`);
-  await page.getByRole('link', { name: 'Dashboard', exact: true }).click();
+  await page.getByRole('link', { name: 'Home', exact: true }).click();
   const local = page
     .getByRole('article')
     .filter({ has: page.getByRole('heading', { name: 'Local compute', exact: true }) });
@@ -513,7 +513,7 @@ for (const available of [true, false]) {
       await page.getByRole('heading', { name: 'Datasets', exact: true }).hover();
       await expect.poll(() => video.evaluate((node) => (node as HTMLVideoElement).paused)).toBe(true);
     }
-    await page.getByRole('link', { name: 'Fine-tune', exact: true }).click();
+    await page.getByRole('link', { name: 'Train', exact: true }).click();
     await page.getByRole('link', { name: 'Datasets', exact: true }).click();
     if (available) {
       expect(requests).toHaveLength(1);
@@ -607,7 +607,7 @@ test('dashboard uses the current project library scope, and inspection is reache
   await page.goto('/datasets/');
   await expect(page.getByRole('navigation', { name: 'Dataset views' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: /Open dataset/ })).toHaveCount(3);
-  await page.getByRole('link', { name: 'Dashboard', exact: true }).click();
+  await page.getByRole('link', { name: 'Home', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Datasets', exact: true })).toContainText('3 saved datasets');
   await expect(page.getByRole('region', { name: 'Recent datasets' }).getByText('our/data-3')).toHaveCount(0);
   await page.getByRole('button', { name: 'Datasets', exact: true }).click();
@@ -667,7 +667,7 @@ test('dashboard resource checks stay in the same position on a fresh visit and a
   expect(Math.abs(after.y - before.y)).toBeLessThan(1);
   await page.getByRole('link', { name: 'Datasets', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Saved datasets', exact: true })).toBeVisible();
-  await page.getByRole('link', { name: 'Dashboard', exact: true }).click();
+  await page.getByRole('link', { name: 'Home', exact: true }).click();
   const revisited = await position();
   expect(Math.abs(revisited.x - before.x)).toBeLessThan(1);
   expect(Math.abs(revisited.y - before.y)).toBeLessThan(1);
@@ -786,7 +786,7 @@ test('unsaved labels survive library, workflow, project and reload navigation wi
   await page.getByRole('button', { name: '← Back to datasets', exact: true }).click();
   await open();
   await expect(field()).toHaveValue('Unsaved front camera');
-  await page.getByRole('link', { name: 'Fine-tune', exact: true }).click();
+  await page.getByRole('link', { name: 'Train', exact: true }).click();
   await page.getByRole('link', { name: 'Datasets', exact: true }).click();
   await open();
   await expect(field()).toHaveValue('Unsaved front camera');
@@ -908,7 +908,7 @@ test('unknown-owner records are workspace repair notices with no project or disc
     0,
   );
   expect(state.deletes).toEqual([]);
-  await page.getByRole('link', { name: 'Dashboard', exact: true }).click();
+  await page.getByRole('link', { name: 'Home', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Datasets', exact: true })).toContainText(/1 saved dataset$/);
 });
 
@@ -1177,8 +1177,8 @@ test('recorded local frames play and seek in inspection and training without Hub
   await page.getByRole('button', { name: 'Play episode', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Play episode', exact: true })).toBeVisible();
   await expect(picture).toBeVisible();
-  await page.getByRole('link', { name: 'Fine-tune', exact: true }).click();
-  await page.getByRole('button', { name: 'Start a new fine-tuning', exact: true }).click();
+  await page.getByRole('link', { name: 'Train', exact: true }).click();
+  await page.getByRole('button', { name: 'New training run', exact: true }).click();
   const training = page.getByRole('region', { name: 'Dataset', exact: true });
   await expect(training).toBeVisible();
   await training.getByLabel('Preview episode').selectOption('1');

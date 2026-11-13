@@ -2,7 +2,7 @@
 
 Select or create a project from the project menu, then open a page from the sidebar. Use the API reference in the navigation for programmatic access.
 
-## Dashboard
+## Home
 
 Open Models or Datasets, or inspect the current resource and connection status.
 
@@ -12,7 +12,7 @@ Each work category opens its job history. Start a new distillation, training run
 
 Open a job for its status, inputs, results and source jobs. **Timeline** explains lifecycle changes; **Logs** follows retained messages with severity, output and text filters. Pause live following to inspect earlier output, or download the redacted diagnostics bundle. Failed jobs retain an explanation and available technical evidence. Cancellation stays pending until execution and cleanup are reconciled.
 
-## Initial setup
+## Robot Lab
 
 Open **Devices** to see connected SO-101 USB controllers and saved devices. Each tile shows its name or USB address, motor-ID setup and calibration status. Open a tile to choose its default role, edit its name, and use its **Motor IDs** and **Calibration** sections. Then choose actual devices in **Teleoperation** and **Record**. Default leader/follower roles are suggestions for those sessions. USB access and captures stay on the robot computer until you add recordings to a project.
 
@@ -28,7 +28,7 @@ Open **Run policy** and use **Install from Models** to copy a reload-verified na
 
 ## AI teleoperation
 
-Open **ROBOT LAB → AI teleoperation** for saved session jobs, then choose **New job** or **Workspace** for physical SO101 control. **Agent Control** opens with **Physical SO101** selected; choose the USB port, saved calibration and workspace camera before explicitly enabling movement. Describe the task and review the selected provider, current observation and run limits. A proposed action is separate from measured execution and verified task completion.
+Open **Robot → AI teleoperation** for saved session jobs, then choose **New job** or **Workspace** for physical SO101 control. **Agent Control** opens with **Physical SO101** selected; choose the USB port, saved calibration and workspace camera before explicitly enabling movement. Describe the task and review the selected provider, current observation and run limits. A proposed action is separate from measured execution and verified task completion.
 
 ## Datasets
 
@@ -46,7 +46,7 @@ Open **Real to sim** under **Data**. Choose **New scene**, then select a dataset
 
 Choose **New job** or **Workspace**, then select a dataset, camera and clip interval. Choose an appearance edit, review the request, and compare the returned clips before downloading.
 
-## Fine-tune
+## Train
 
 Select compatible datasets, a model, a training method and a compute target. Review the recipe, start training, and open the saved job to follow progress or download a checkpoint.
 
@@ -62,7 +62,7 @@ Select a saved model and an available method. Review the recipe and start the jo
 
 Select a policy, runtime and check type. Review the recipe, start the job, and inspect its saved result.
 
-## Run
+## Simulate
 
 Choose simulation, observation replay or inference. Select the runtime and inputs, review the request, and open the saved job for status and output.
 

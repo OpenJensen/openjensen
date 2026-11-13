@@ -16,13 +16,13 @@ const infrastructureLabels: Record<ComputeTarget['infrastructure'], string> = {
   slurm: 'Slurm cluster',
 };
 const operationLabels: Record<string, string> = {
-  'policy.finetune': 'Fine-tune',
+  'policy.finetune': 'Train',
   'policy.distill': 'Distill',
   'policy.quantize': 'Quantize',
   'policy.export': 'Export',
   'policy.import': 'Import',
   'policy.evaluate': 'Evaluate',
-  'policy.run': 'Run policy',
+  'policy.run': 'Run in simulation',
   'policy.workflow': 'Policy workflow',
 };
 const operationLabel = (value: string) => operationLabels[value] ?? value;

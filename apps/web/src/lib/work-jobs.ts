@@ -10,11 +10,11 @@ export type WorkSubmission = Omit<components['schemas']['WorkSubmission'], 'inpu
   inputs: NonNullable<components['schemas']['WorkSubmission']['inputs']>;
 };
 export const jobCategoryActions: Record<string, { operation: string; label: string; title: string }> = {
-  training: { operation: 'policy.finetune', label: 'Start a new fine-tuning', title: 'Fine-tuning jobs' },
+  training: { operation: 'policy.finetune', label: 'New training run', title: 'Training runs' },
   distillation: { operation: 'policy.distill', label: 'Start a new distillation', title: 'Distillation jobs' },
   quantization: { operation: 'policy.quantize', label: 'Start a new quantization', title: 'Quantization jobs' },
   evaluation: { operation: 'policy.evaluate', label: 'New evaluation', title: 'Evaluation jobs' },
-  simulation: { operation: 'policy.run', label: 'New run', title: 'Run jobs' },
+  simulation: { operation: 'policy.run', label: 'New simulation', title: 'Simulation runs' },
   augmentation: { operation: 'dataset.augment', label: 'New augmentation', title: 'Augmentation jobs' },
   'real-to-sim': { operation: 'scene.generate', label: 'New scene', title: 'Real-to-sim jobs' },
   teaching: { operation: 'agent.control', label: 'New teleoperation', title: 'Teleoperation jobs' },

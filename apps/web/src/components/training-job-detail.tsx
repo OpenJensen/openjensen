@@ -4,7 +4,7 @@ import { Icon } from '@/components/icon';
 import { TrainingMonitor } from '@/components/training-monitor';
 import type { TrainingPanelState } from './training-state';
 
-/** One fine-tuning job: its monitor, cancel, export and resume actions. */
+/** One training run: its monitor, cancel, export and resume actions. */
 export function TrainingJobDetail({
   panel,
   preferredRunId,
@@ -38,7 +38,7 @@ export function TrainingJobDetail({
     showHistory,
   } = panel;
   return (
-    <section className="training-activity training-job-detail" aria-label="Fine-tuning job">
+    <section className="training-activity training-job-detail" aria-label="Training run">
       <button type="button" className="text-button training-back" onClick={showHistory}>
         <Icon name="arrow" size={14} />
         Back to jobs
@@ -58,7 +58,7 @@ export function TrainingJobDetail({
                 },
                 { date: true },
               )
-            : 'Fine-tuning job'}
+            : 'Training run'}
         </h2>
         <button type="button" className="text-button" onClick={onDiagnostics}>
           Diagnostics <Icon name="arrow" size={14} />

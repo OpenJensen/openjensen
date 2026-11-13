@@ -626,7 +626,7 @@ for (const fault of ['missing-profile', 'profile-error'] as const)
       await page.route('**/api/v1/simulation-options', (route) =>
         route.fulfill({ status: 503, json: { detail: 'Generated profile outage' } }),
       );
-    await page.getByRole('link', { name: 'Run', exact: true }).click();
+    await page.getByRole('link', { name: 'Simulate', exact: true }).click();
     await openModuleTask(page);
     await page.getByRole('button', { name: '3D simulation', exact: true }).click();
     await page.getByRole('button', { name: 'Refresh simulation jobs', exact: true }).click();
@@ -901,7 +901,7 @@ test('owned saved history restores ACT quantization and exact replay without mut
     'data-job-id',
     'quant-job',
   );
-  await page.getByRole('link', { name: 'Run', exact: true }).click();
+  await page.getByRole('link', { name: 'Simulate', exact: true }).click();
   await page.locator('[data-job-id="core:' + replay.id + '"]').click();
   await page.getByRole('button', { name: 'View run', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Replay observations', exact: true })).toHaveAttribute(
@@ -938,7 +938,7 @@ test('Run history opens the selected engine job without replacing it with replay
   state.jobs.push(replay, engine);
   await page.reload();
   await expect(page.getByLabel('Current project')).toHaveAttribute('data-project-id', 'alpha');
-  await page.getByRole('link', { name: 'Run', exact: true }).click();
+  await page.getByRole('link', { name: 'Simulate', exact: true }).click();
   await page.locator('[data-job-id="core:saved-engine"]').click();
   const events = page.waitForResponse(
     (response) => new URL(response.url()).pathname === '/api/v1/jobs/saved-engine/events',
@@ -1024,14 +1024,14 @@ for (const configured of ['none', 'native', 'engine', 'simulation'] as const)
     await expect(page.getByRole('region', { name: 'Quantization jobs', exact: true })).toContainText(
       'No quantization jobs yet.',
     );
-    await page.getByRole('link', { name: 'Run', exact: true }).click();
+    await page.getByRole('link', { name: 'Simulate', exact: true }).click();
     await openModuleTask(page);
     await expect(page.getByRole('region', { name: 'Workflow selection status', exact: true })).toHaveCount(0);
     for (const name of ['3D simulation', 'Replay observations', 'Check inference'])
       await expect(page.getByRole('button', { name, exact: true })).toHaveAttribute('aria-pressed', 'false');
     await expect(page.getByRole('region', { name: 'CPU observation replay', exact: true })).toHaveCount(0);
     await expect(page.getByRole('region', { name: 'Native Isaac simulation', exact: true })).toHaveCount(0);
-    await expect(page.getByRole('region', { name: 'Run jobs', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('region', { name: 'Simulation runs', exact: true })).toHaveCount(0);
     await page.getByRole('button', { name: 'Replay observations', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Replay observations', exact: true })).toHaveAttribute(
       'aria-pressed',
@@ -1047,7 +1047,7 @@ for (const mode of ['quantize', 'replay'] as const)
       job = mode === 'quantize' ? makeJob('active-quant', quantRequest()) : savedReplay('active-replay', 'running');
     state.jobs.push(job);
     await reloadProject(page);
-    await page.getByRole('link', { name: mode === 'quantize' ? 'Quantize' : 'Run', exact: true }).click();
+    await page.getByRole('link', { name: mode === 'quantize' ? 'Quantize' : 'Simulate', exact: true }).click();
     if (mode === 'quantize') await openTransformationJob(page, 'quantization', job.id);
     else {
       await page.locator('[data-job-id="core:' + job.id + '"]').click();
@@ -1079,7 +1079,7 @@ test('delayed capability reads and history polling cannot replace a manual mode 
   state.optionsGate = new Promise<void>((resolve) => {
     release = resolve;
   });
-  await page.getByRole('link', { name: 'Run', exact: true }).click();
+  await page.getByRole('link', { name: 'Simulate', exact: true }).click();
   await openModuleTask(page);
   await page.getByRole('button', { name: 'Check inference', exact: true }).click();
   const response = page.waitForResponse('**/api/v1/policy-options');
@@ -1100,7 +1100,7 @@ test('delayed capability reads and history polling cannot replace a manual mode 
     'replay-b',
   );
   await page.getByRole('link', { name: 'Datasets', exact: true }).click();
-  await page.getByRole('link', { name: 'Run', exact: true }).click();
+  await page.getByRole('link', { name: 'Simulate', exact: true }).click();
   await page.locator('[data-job-id="core:replay-b"]').click();
   await page.getByRole('button', { name: 'View run', exact: true }).click();
   await expect(page.getByRole('article', { name: 'Observation replay details' })).toHaveAttribute(
@@ -1114,7 +1114,7 @@ test('manual mode is project scoped and saved foreign jobs never become entry co
   const state = await fixture(page);
   state.jobs.push(savedReplay('alpha-replay'));
   await reloadProject(page);
-  await page.getByRole('link', { name: 'Run', exact: true }).click();
+  await page.getByRole('link', { name: 'Simulate', exact: true }).click();
   await openModuleTask(page);
   await page.getByRole('button', { name: 'Check inference', exact: true }).click();
   await selectProject(page, 'beta');
@@ -1152,7 +1152,7 @@ for (const mode of ['quantize', 'replay'] as const)
       }),
     );
     await reloadProject(page);
-    await page.getByRole('link', { name: mode === 'quantize' ? 'Quantize' : 'Run', exact: true }).click();
+    await page.getByRole('link', { name: mode === 'quantize' ? 'Quantize' : 'Simulate', exact: true }).click();
     if (mode === 'quantize') {
       await page.getByRole('button', { name: 'Review request', exact: true }).click();
       await expect(page.getByRole('region', { name: 'Native ACT quantization', exact: true })).toBeVisible();
@@ -1186,7 +1186,7 @@ test('unreadable request recovery pauses automatic selection without clearing st
     };
   });
   await reloadProject(page);
-  await page.getByRole('link', { name: 'Run', exact: true }).click();
+  await page.getByRole('link', { name: 'Simulate', exact: true }).click();
   await openModuleTask(page);
   await expect(page.getByRole('region', { name: 'Workflow selection status' })).toContainText(
     'Saved request recovery could not be read',
@@ -1232,7 +1232,7 @@ test('query failures keep Evaluate availability unknown and do not choose an ini
   await expect(purpose.getByRole('alert').filter({ hasText: 'Isaac profile availability' })).toBeVisible();
   await expect(purpose).not.toContainText('No LIBERO evaluation target is configured.');
   await expect(purpose.getByRole('button', { name: 'Open observation replay' })).toHaveCount(0);
-  await page.getByRole('link', { name: 'Run', exact: true }).click();
+  await page.getByRole('link', { name: 'Simulate', exact: true }).click();
   await openModuleTask(page);
   await expect(page.getByRole('region', { name: 'Workflow selection status' })).toContainText('could not be loaded');
   await expect(page.getByRole('button', { name: 'Check inference', exact: true })).toHaveAttribute(
@@ -1285,7 +1285,7 @@ test('saved simulation history opens once and preserves the manually selected ex
       status: 'succeeded',
     });
   await reloadProject(page);
-  await page.getByRole('link', { name: 'Run', exact: true }).click();
+  await page.getByRole('link', { name: 'Simulate', exact: true }).click();
   await page.locator('[data-job-id="core:isaac-a"]').click();
   await page.getByRole('button', { name: 'View run', exact: true }).click();
   await expect(page.getByRole('button', { name: '3D simulation', exact: true })).toHaveAttribute(
@@ -1298,7 +1298,7 @@ test('saved simulation history opens once and preserves the manually selected ex
   );
   await page.getByLabel('Saved simulation job', { exact: true }).selectOption('isaac-b');
   await page.getByRole('link', { name: 'Datasets', exact: true }).click();
-  await page.getByRole('link', { name: 'Run', exact: true }).click();
+  await page.getByRole('link', { name: 'Simulate', exact: true }).click();
   await page.locator('[data-job-id="core:isaac-b"]').click();
   await page.getByRole('button', { name: 'View run', exact: true }).click();
   await expect(page.getByRole('article', { name: 'Native simulation job details' })).toHaveAttribute(
@@ -1332,7 +1332,7 @@ test('mixed configured workflows start unselected and preserve a deliberate nati
       task_object: 'cup',
     },
   ];
-  await page.getByRole('link', { name: 'Run', exact: true }).click();
+  await page.getByRole('link', { name: 'Simulate', exact: true }).click();
   await openModuleTask(page);
   await expect(page.getByRole('region', { name: 'Workflow selection status', exact: true })).toHaveCount(0);
   for (const name of ['3D simulation', 'Replay observations', 'Check inference'])
@@ -1340,7 +1340,7 @@ test('mixed configured workflows start unselected and preserve a deliberate nati
   await page.getByRole('button', { name: 'Replay observations', exact: true }).click();
   await page.getByRole('link', { name: 'Evaluate', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Evaluation purpose' })).toContainText('A LIBERO target is configured');
-  await page.getByRole('link', { name: 'Run', exact: true }).click();
+  await page.getByRole('link', { name: 'Simulate', exact: true }).click();
   await openModuleTask(page);
   await expect(page.getByRole('button', { name: 'Replay observations', exact: true })).toHaveAttribute(
     'aria-pressed',
@@ -1391,7 +1391,7 @@ for (const mode of ['distillation', 'quantization', 'replay'] as const)
     state.runtimes.push(alternate);
     await page
       .getByRole('link', {
-        name: mode === 'distillation' ? 'Distill' : mode === 'quantization' ? 'Quantize' : 'Run',
+        name: mode === 'distillation' ? 'Distill' : mode === 'quantization' ? 'Quantize' : 'Simulate',
         exact: true,
       })
       .click();
@@ -1528,7 +1528,7 @@ for (const mode of ['quantize', 'replay'] as const)
     state.failOptions = true;
     state.failSimulation = true;
     await reloadProject(page);
-    await page.getByRole('link', { name: mode === 'quantize' ? 'Quantize' : 'Run', exact: true }).click();
+    await page.getByRole('link', { name: mode === 'quantize' ? 'Quantize' : 'Simulate', exact: true }).click();
     if (mode === 'quantize') {
       await openTransformationJob(page, 'quantization', saved.id);
       await expect(page.getByRole('region', { name: 'Native ACT quantization', exact: true })).toBeVisible();

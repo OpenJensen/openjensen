@@ -718,7 +718,7 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin', 
     return route.fulfill({ json: [] });
   });
   await page.goto('/robot-lab/');
-  await expect(page.getByRole('heading', { level: 1, name: 'Initial setup', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Robot Lab', exact: true })).toBeVisible();
   await expect(page.getByTestId('device-arm-a')).toBeVisible();
   if (enterDevice) await page.getByTestId('device-arm-a').click();
   return state;
@@ -1137,7 +1137,7 @@ test('manual control is explicit, jogs are bounded, and navigating away stops th
   expect(writes(state, '/control/jog')[0].body).toEqual({ joint: 'shoulder_pan', delta: 2 });
   await page
     .getByRole('navigation', { name: 'Policy lifecycle' })
-    .getByRole('link', { name: 'Dashboard', exact: true })
+    .getByRole('link', { name: 'Home', exact: true })
     .click();
   await expect.poll(() => writes(state, '/stop').length).toBe(1);
 });

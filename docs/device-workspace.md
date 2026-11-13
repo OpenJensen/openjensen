@@ -1,6 +1,6 @@
 # Devices in Robot Lab
 
-Initial setup has three tabs: **Devices**, **Teleoperation**, and **Record**.
+Robot Lab has four tabs: **Devices**, **Teleoperation**, **Record** and **Run policy**.
 
 Devices lists connected USB controllers and saved devices, including disconnected ones. A tile shows its saved name (or USB address), connection state, motor-ID setup, and calibration status. Opening a new device asks for its default leader/follower role. Its detail page contains Overview, Motor IDs, and Calibration, including calibration export/import. The name and default role are editable there. Discovery and metadata edits do not command motors.
 

@@ -43,7 +43,7 @@ import {
   type InspectedDataset,
 } from './training-shared';
 
-// Fine-tune page state, queries and actions; TrainingPanel and its step and job views render from this.
+// Train page state, queries and actions; TrainingPanel and its step and job views render from this.
 export function useTrainingPanel({
   projectId,
   preferredDatasetId,
@@ -692,10 +692,10 @@ export function useTrainingPanel({
         ? 'Preparing GPU…'
         : 'Training…'
       : resumeId
-        ? 'Resume fine-tuning'
+        ? 'Resume training'
         : selectedModels.length > 1
           ? `Start ${selectedModels.length} training jobs`
-          : 'Start fine-tuning';
+          : 'Start training';
   const summaryModel = resumeId
     ? String(model?.label ?? originalTraining?.model_id ?? 'Original model')
     : (model?.label ?? 'Choose a model');

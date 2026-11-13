@@ -76,7 +76,7 @@ test('project switching and keyboard navigation preserve scope without creating 
   await current(page).click();
   await page.keyboard.press('Tab');
   await expect(menu(page)).toHaveCount(0);
-  await expect(page.getByRole('link', { name: 'Dashboard', exact: true })).toBeFocused();
+  await expect(page.getByRole('link', { name: 'Home', exact: true })).toBeFocused();
   await current(page).click();
   // The popover may cover the page heading on a narrow screen. Exercise a
   // genuine outside click at a visible content point below its bounded menu.
