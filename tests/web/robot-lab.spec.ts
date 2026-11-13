@@ -2959,6 +2959,50 @@ test('Run policy installs a project model without loading or starting hardware',
   expect(state.errors).toEqual([]);
 });
 
+test('every Run policy button is drawn as one of the application buttons', async ({ page }) => {
+  const state = await fixture(page, true, 'Darwin', false);
+  state.projectModels = [
+    {
+      id: 'native-act',
+      project_id: 'alpha',
+      job_id: 'training-one',
+      label: 'Pen ACT imported',
+      format: 'training_checkpoint',
+      metadata: { architecture: 'act', training_backend: 'lerobot', reload_verified: true },
+    },
+  ];
+  await page
+    .getByRole('navigation', { name: 'Robot Lab tabs' })
+    .getByRole('button', { name: 'Run policy', exact: true })
+    .click();
+  const run = page.getByRole('region', { name: 'Run policy', exact: true });
+  await run.getByText('Install from Models', { exact: true }).click();
+  await run.getByText('Use an observation image and state', { exact: true }).click();
+  for (const name of [
+    'Install policy on USB computer',
+    'Load and check policy',
+    'Try with test inputs',
+    'Preview uploaded observation',
+    'Check camera and inference rate',
+  ])
+    await expect(run.getByRole('button', { name, exact: true })).toBeVisible();
+  // A button without one of these classes falls back to the browser's own grey button.
+  const plain = await run
+    .locator('button')
+    .evaluateAll((buttons) =>
+      buttons
+        .filter(
+          (button) =>
+            !['primary-button', 'secondary-button', 'text-button', 'danger-button', 'text-link'].some((name) =>
+              button.classList.contains(name),
+            ),
+        )
+        .map((button) => button.textContent?.trim()),
+    );
+  expect(plain).toEqual([]);
+  expect(state.errors).toEqual([]);
+});
+
 test('Run policy previews an offline ACT observation without devices or motor authority', async ({ page }) => {
   const state = await fixture(page, true, 'Darwin', false);
   state.catalog = [];

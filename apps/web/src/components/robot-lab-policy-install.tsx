@@ -118,6 +118,7 @@ export function RobotLabPolicyInstall({ lab, installed }: { lab: RobotLabState; 
           installation.
         </small>
         <button
+          className="secondary-button"
           disabled={
             !lab.canAct ||
             lab.active ||
