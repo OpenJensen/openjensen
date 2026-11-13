@@ -1,17 +1,19 @@
-# Supervised Astra collection through Pi
+# Supervised AI collection through Pi
 
-Open **Robot Lab → Astra collection** inside a project. Start with **Dry run**:
+Open **Robot Lab → AI collection** inside a project. Start with **Practice run**:
 it runs the pinned Pi Agent SDK with a deterministic model, a synthetic SO101
 bus and two moving synthetic camera views. It never opens USB or calls an API.
 The resulting private dataset appears in the project dataset library for normal
-review/replay and ZIP export. Dry-run artifacts are explicitly synthetic.
+review/replay and ZIP export. Practice-run artifacts are explicitly synthetic.
 
 For hardware, update the USB computer's Robot Lab companion from this release,
 select the connected calibrated SO101 in Teleoperation and enable full-arm joint
-control. Configure the OpenAI API key in existing Settings. Select wrist and side
-cameras, then confirm operator presence, workspace clearance and ARM AI CONTROL.
-The first version uses gpt-6-astra via the Responses API with low reasoning effort.
-Subscriptions are not API credentials. Account/model access remains a live-run check.
+control. Configure the OpenAI API key in existing Settings. Choose **Real arm**,
+pick the AI model and the wrist and side cameras, then tick operator presence and
+workspace clearance. The page offers the current image-capable models and accepts
+any other model ID; the model is called through the Responses API with low
+reasoning effort. Subscriptions are not API credentials. Account and model access
+remain a live-run check.
 
 Every proposed physical segment is displayed for approval. Check the scene and
 the joint targets before approving. The executor reobserves locally, checks the
