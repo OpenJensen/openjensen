@@ -33,6 +33,7 @@ export function RobotLabPolicy({ lab }: { lab: RobotLabState }) {
     lab.session.active_joints?.length === robotJoints.length &&
     lab.session.torque_enabled;
   const generation = lab.session?.generation;
+  const maxDuration = policy?.limits?.max_run_seconds ?? 120;
   const offline = choice?.offline_only ?? policy?.offline_only ?? false;
   const requiresTask = choice?.task_required ?? policy?.task_required ?? false;
   return (
@@ -167,7 +168,7 @@ export function RobotLabPolicy({ lab }: { lab: RobotLabState }) {
                     aria-label="Policy run duration"
                     type="number"
                     min={1}
-                    max={120}
+                    max={maxDuration}
                     value={duration}
                     disabled={lab.active || lab.busy}
                     onChange={(event) => setDuration(Number(event.target.value))}
@@ -232,7 +233,7 @@ export function RobotLabPolicy({ lab }: { lab: RobotLabState }) {
                       generation === undefined ||
                       !Number.isInteger(duration) ||
                       duration < 1 ||
-                      duration > 120 ||
+                      duration > maxDuration ||
                       !lab.availableCameras.length
                     }
                     onClick={() => {

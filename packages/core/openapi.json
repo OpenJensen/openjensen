@@ -16331,7 +16331,7 @@
                     "type": "string"
                   },
                   "duration_seconds": {
-                    "maximum": 120.0,
+                    "maximum": 600.0,
                     "minimum": 1.0,
                     "title": "Duration Seconds",
                     "type": "integer"

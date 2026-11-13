@@ -33,7 +33,7 @@ class PolicyStartRequest(BaseModel):
     operator_present: Literal[True]
     workspace_clear: Literal[True]
     camera_index: StrictInt = Field(ge=0, le=63)
-    duration_seconds: StrictInt = Field(ge=1, le=120)
+    duration_seconds: StrictInt = Field(ge=1, le=600)
     expected_generation: StrictInt
 
 

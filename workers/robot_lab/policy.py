@@ -30,6 +30,7 @@ from policy_contract import (
 UNITS = ["degrees"] * 5 + ["percent"]
 MAX_SPEED = 10.0
 MAX_ACCELERATION = 20.0
+MAX_RUN_SECONDS = 600
 
 
 def admit(root, ident):
@@ -327,7 +328,7 @@ class PolicyRunner:
                 "limits": {
                     "max_speed": MAX_SPEED,
                     "max_acceleration": MAX_ACCELERATION,
-                    "max_run_seconds": 120,
+                    "max_run_seconds": MAX_RUN_SECONDS,
                     "operator_heartbeat_seconds": 2,
                 },
                 "device": self.runtime.info.get("device") if self.runtime else None,
@@ -600,11 +601,11 @@ class PolicyRunner:
         duration, camera = payload["duration_seconds"], payload["camera_index"]
         if (
             type(duration) is not int
-            or not 1 <= duration <= 120
+            or not 1 <= duration <= MAX_RUN_SECONDS
             or type(camera) is not int
             or not 0 <= camera <= 63
         ):
-            raise ValueError("Run duration must be 1–120 seconds with an available camera")
+            raise ValueError(f"Run duration must be 1–{MAX_RUN_SECONDS} seconds with an available camera")
         with self.lab.lock, self.lock, self.lab.lifecycle_lock:
             if self.phase != "ready" or not self.runtime or not self.model:
                 raise ValueError("Load and verify a policy first")
