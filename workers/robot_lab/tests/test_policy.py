@@ -12,9 +12,9 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import test_robot_lab as fixtures
-from hardware import JOINTS, HardwareError
-from policy import MAX_ACCELERATION, MAX_SPEED, PREDICTION_TOLERANCE, UNITS, admit
+from hardware import JOINTS, HardwareError, normalized
 from motion import control_limits
+from policy import MAX_ACCELERATION, MAX_SPEED, PREDICTION_TOLERANCE, UNITS, admit
 from policy_contract import PIPELINES
 
 FRONT, SIDE = "observation.images.front", "observation.images.camera_4"
@@ -304,6 +304,42 @@ class PolicyTests(unittest.TestCase):
         runner.check["checked_at"] -= 61
         with self.assertRaisesRegex(ValueError, "check expired"):
             runner.start(self.run_payload())
+
+    def test_policy_starts_with_encoders_inside_calibration_but_outside_command_inset(self):
+        runner = self.prepare()
+        lower_joint, upper_joint = "shoulder_lift", "elbow_flex"
+        ranges = control_limits(self.lab.calibration)
+        measured = {
+            **self.lab.positions,
+            lower_joint: normalized(
+                lower_joint,
+                self.lab.calibration[lower_joint]["range_min"] + 7,
+                self.lab.calibration,
+            ),
+            upper_joint: normalized(
+                upper_joint,
+                self.lab.calibration[upper_joint]["range_max"] - 7,
+                self.lab.calibration,
+            ),
+        }
+        self.lab.positions = measured
+        with patch.object(runner, "_run"):
+            runner.start(self.run_payload())
+            runner.thread.join(timeout=1)
+        held = runner.apply(measured, time.monotonic())
+        self.assertEqual(held[lower_joint], ranges[lower_joint]["min"])
+        self.assertEqual(held[upper_joint], ranges[upper_joint]["max"])
+        runner.predicted = {
+            **held,
+            lower_joint: held[lower_joint] + 2,
+            upper_joint: held[upper_joint] - 2,
+        }
+        moment = runner.last_apply + 0.025
+        goals = runner.apply(measured, moment)
+        for joint, direction in ((lower_joint, 1), (upper_joint, -1)):
+            step = direction * (goals[joint] - held[joint])
+            self.assertGreater(step, 0)
+            self.assertLessEqual(step, MAX_ACCELERATION * 0.025**2 + 1e-8)
 
     def test_targets_obey_speed_acceleration_limits_and_manual_heartbeat_cannot_extend_authority(
         self,

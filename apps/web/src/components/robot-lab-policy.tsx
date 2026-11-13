@@ -40,6 +40,7 @@ export function RobotLabPolicy({ lab }: { lab: RobotLabState }) {
   const generation = lab.session?.generation;
   const offline = choice?.offline_only ?? policy?.offline_only ?? false;
   const requiresTask = choice?.task_required ?? policy?.task_required ?? false;
+  const taskReady = !requiresTask || !!lab.task.trim();
   // A policy trained on several views needs a camera of this computer for each of them.
   const views = choice?.camera_keys ?? (choice?.camera_key ? [choice.camera_key] : []);
   const cameras =
@@ -53,13 +54,13 @@ export function RobotLabPolicy({ lab }: { lab: RobotLabState }) {
         )
       : undefined;
   const camerasReady = cameras !== null;
+  const preflight = policy?.preflight;
   // A check counts only for the cameras, and the planning allowance, it was made with.
   const checkedTheseCameras =
-    policy?.preflight?.camera_index === lab.cameraIndex &&
-    (!cameras || sameCameras(policy.preflight.cameras, cameras)) &&
-    !!policy.preflight.planning_pause === planningPause;
+    preflight?.camera_index === lab.cameraIndex &&
+    (!cameras || sameCameras(preflight.cameras, cameras)) &&
+    !!preflight.planning_pause === planningPause;
   const pauseSeconds = policy?.limits?.planning_pause_seconds ?? 1.5;
-  const preflight = policy?.preflight;
   const checkStamp = preflight?.checked_at;
   const remaining = preflight?.valid_for_ms;
   const checkPassed = preflight?.passed === true;
@@ -75,6 +76,15 @@ export function RobotLabPolicy({ lab }: { lab: RobotLabState }) {
     const timer = window.setTimeout(() => setExpiredCheck(checkStamp), remaining ?? 60_000);
     return () => window.clearTimeout(timer);
   }, [checkPassed, checkStamp, checkExpired, remaining]);
+  const loadPolicy = (
+    <button
+      className="secondary-button"
+      disabled={!lab.canAct || lab.active || !choice?.compatible || !catalog.data?.runtime.configured}
+      onClick={() => void lab.perform('Policy loaded.', () => robotApi.loadPolicy(selectedId))}
+    >
+      {policy?.phase === 'loading' ? 'Loading policy…' : 'Load policy'}
+    </button>
+  );
   return (
     <>
       <Heading title="Run policy" />
@@ -127,6 +137,9 @@ export function RobotLabPolicy({ lab }: { lab: RobotLabState }) {
                 ))}
               </select>
             </label>
+            <button className="text-button" disabled={lab.busy} onClick={() => void catalog.refetch()}>
+              Refresh policies
+            </button>
             {catalog.isPending && <p role="status">Checking installed policies…</p>}
             {catalog.error && <Notice kind="warning">{catalog.error.message}</Notice>}
             {!catalog.isPending && !installed.length && (
@@ -199,18 +212,6 @@ export function RobotLabPolicy({ lab }: { lab: RobotLabState }) {
             {catalog.data?.runtime && !catalog.data.runtime.configured && (
               <Notice kind="warning">{catalog.data.runtime.message}</Notice>
             )}
-            <div className="robot-lab-actions">
-              <button
-                className="secondary-button"
-                disabled={!lab.canAct || !choice?.compatible || !catalog.data?.runtime.configured || running}
-                onClick={() => void lab.perform('Policy loaded and checked.', () => robotApi.loadPolicy(selectedId))}
-              >
-                {policy?.phase === 'loading' ? 'Loading policy…' : 'Load and check policy'}
-              </button>
-              <button className="text-button" disabled={lab.busy} onClick={() => void catalog.refetch()}>
-                Refresh policies
-              </button>
-            </div>
             {policy?.error && <Notice kind="warning">{policy.error}</Notice>}
             {policy?.phase === 'ready' && (
               <Notice>
@@ -218,44 +219,33 @@ export function RobotLabPolicy({ lab }: { lab: RobotLabState }) {
                 {policy.fps ? ' · ' + policy.fps + ' FPS' : ''}. Loading does not enable motor torque.
               </Notice>
             )}
-            <RobotLabPolicyPreview
-              lab={lab}
-              selectedId={selectedId}
-              requiresTask={requiresTask}
-              cameras={cameras ?? undefined}
-            />
+            {requiresTask && (
+              <label>
+                Task instruction
+                <textarea
+                  value={lab.task}
+                  maxLength={1000}
+                  disabled={lab.busy || lab.active}
+                  onChange={(event) => lab.setTask(event.target.value)}
+                  placeholder="Describe what the policy should do."
+                />
+              </label>
+            )}
+            {!offline && (
+              <p className="robot-lab-subtle">
+                Load the policy, then check the cameras and inference rate. Confirm attendance, enable policy control
+                and start the run within 60 seconds of a passing check.
+              </p>
+            )}
             {offline ? (
-              <Notice>
-                Offline inference only. Physical control units and timing must be verified before an arm session.
-              </Notice>
+              <>
+                <div className="robot-lab-actions">{loadPolicy}</div>
+                <Notice>
+                  Offline inference only. Physical control units and timing must be verified before an arm session.
+                </Notice>
+              </>
             ) : (
               <>
-                <button
-                  className="secondary-button"
-                  disabled={
-                    !lab.canAct ||
-                    lab.active ||
-                    policy?.phase !== 'ready' ||
-                    policy.policy_id !== selectedId ||
-                    !lab.availableCameras.length ||
-                    !camerasReady
-                  }
-                  onClick={() =>
-                    void lab.perform(
-                      'Policy camera and inference check completed.',
-                      () =>
-                        robotApi.preflightPolicy(
-                          lab.cameraIndex,
-                          requiresTask ? lab.task : undefined,
-                          cameras ?? undefined,
-                          planningPause,
-                        ),
-                      (result) => setLocalCheck(result.policy?.preflight?.checked_at),
-                    )
-                  }
-                >
-                  Check camera and inference rate
-                </button>
                 {checkExpired && !running ? (
                   <Notice kind="warning">
                     Camera and inference check expired. {lab.active ? 'Stop the arm and run' : 'Run'} the check again.
@@ -271,7 +261,7 @@ export function RobotLabPolicy({ lab }: { lab: RobotLabState }) {
                 ) : (
                   <p className="robot-lab-subtle">Run the camera and inference check before enabling policy control.</p>
                 )}
-                {(planningPause || policy?.preflight?.planning_pause_needed) && (
+                {(planningPause || preflight?.planning_pause_needed) && (
                   <label className="robot-lab-check">
                     <input
                       type="checkbox"
@@ -311,48 +301,78 @@ export function RobotLabPolicy({ lab }: { lab: RobotLabState }) {
                     10°/s (gripper 10%/s). Stop, a missing heartbeat or a stale prediction disables torque.
                   </span>
                 </label>
-                {!lab.active && (
-                  <button
-                    className="primary-button"
-                    disabled={
-                      !lab.canUseArm ||
-                      !lab.calibrated ||
-                      !attending ||
-                      policy?.phase !== 'ready' ||
-                      policy.policy_id !== selectedId ||
-                      !preflight?.passed ||
-                      checkExpired ||
-                      !checkedTheseCameras ||
-                      !!lab.recording?.active
-                    }
-                    onClick={() =>
-                      void lab.perform(
-                        'Policy control enabled; holding the current pose.',
-                        () =>
-                          robotApi.startControl({
-                            port: lab.port,
-                            robot_id: lab.robotId,
-                            mode: 'manual',
-                            joints: robotJoints.map((joint) => joint.name),
-                            move_to_middle: false,
-                          }),
-                        lab.ownSession,
-                      )
-                    }
-                  >
-                    Enable policy control
-                  </button>
-                )}
                 {lab.active && !prepared && !running && (
                   <Notice kind="warning">Stop the current session before preparing policy control.</Notice>
                 )}
-                <div className="robot-lab-actions">
+                <div className="robot-lab-actions" role="group" aria-label="Policy run controls">
+                  {loadPolicy}
+                  <button
+                    className="secondary-button"
+                    disabled={
+                      !lab.canAct ||
+                      lab.active ||
+                      policy?.phase !== 'ready' ||
+                      policy.policy_id !== selectedId ||
+                      !lab.availableCameras.length ||
+                      !camerasReady ||
+                      !taskReady
+                    }
+                    onClick={() =>
+                      void lab.perform(
+                        'Policy camera and inference check completed.',
+                        () =>
+                          robotApi.preflightPolicy(
+                            lab.cameraIndex,
+                            requiresTask ? lab.task : undefined,
+                            cameras ?? undefined,
+                            planningPause,
+                          ),
+                        (result) => setLocalCheck(result.policy?.preflight?.checked_at),
+                      )
+                    }
+                  >
+                    Check camera and inference rate
+                  </button>
+                  {!lab.active && (
+                    <button
+                      className="primary-button"
+                      disabled={
+                        !lab.canUseArm ||
+                        !lab.calibrated ||
+                        !attending ||
+                        !taskReady ||
+                        policy?.phase !== 'ready' ||
+                        policy.policy_id !== selectedId ||
+                        !preflight?.passed ||
+                        checkExpired ||
+                        !checkedTheseCameras ||
+                        !!lab.recording?.active
+                      }
+                      onClick={() =>
+                        void lab.perform(
+                          'Policy control enabled; holding the current pose.',
+                          () =>
+                            robotApi.startControl({
+                              port: lab.port,
+                              robot_id: lab.robotId,
+                              mode: 'manual',
+                              joints: robotJoints.map((joint) => joint.name),
+                              move_to_middle: false,
+                            }),
+                          lab.ownSession,
+                        )
+                      }
+                    >
+                      Enable policy control
+                    </button>
+                  )}
                   <button
                     className="primary-button"
                     disabled={
                       !lab.canAct ||
                       !prepared ||
                       !attending ||
+                      !taskReady ||
                       policy?.phase !== 'ready' ||
                       !preflight?.passed ||
                       checkExpired ||
@@ -397,6 +417,12 @@ export function RobotLabPolicy({ lab }: { lab: RobotLabState }) {
                 )}
               </>
             )}
+            <RobotLabPolicyPreview
+              lab={lab}
+              selectedId={selectedId}
+              requiresTask={requiresTask}
+              cameras={cameras ?? undefined}
+            />
           </>
         )}
       </div>

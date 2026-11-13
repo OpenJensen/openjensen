@@ -2802,7 +2802,7 @@ test('an expired policy check blocks enabling torque and starting a run', async 
   const check = page.getByRole('button', { name: 'Check camera and inference rate' });
   const enable = page.getByRole('button', { name: 'Enable policy control', exact: true });
   const run = page.getByRole('button', { name: 'Run policy', exact: true }).last();
-  await page.getByRole('button', { name: 'Load and check policy' }).click();
+  await page.getByRole('button', { name: 'Load policy', exact: true }).click();
   await page.getByRole('checkbox', { name: /I am present; the arm is secured/ }).check();
   await check.click();
   await expect(enable).toBeEnabled();
@@ -2833,15 +2833,16 @@ test('Run policy requires a native preflight and attended start, then renews onl
     .getByRole('navigation', { name: 'Robot Lab tabs' })
     .getByRole('button', { name: 'Run policy', exact: true })
     .click();
-  const run = page.getByRole('button', { name: 'Run policy', exact: true }).last();
+  const controls = page.getByRole('group', { name: 'Policy run controls' });
+  const run = controls.getByRole('button', { name: 'Run policy', exact: true });
   await expect(run).toBeDisabled();
-  await page.getByRole('button', { name: 'Load and check policy', exact: true }).click();
+  await controls.getByRole('button', { name: 'Load policy', exact: true }).click();
   expect(writes(state, '/control/start')).toEqual([]);
   expect(writes(state, '/policy/start')).toEqual([]);
-  await page.getByRole('button', { name: 'Check camera and inference rate', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Enable policy control', exact: true })).toBeDisabled();
+  await controls.getByRole('button', { name: 'Check camera and inference rate', exact: true }).click();
+  await expect(controls.getByRole('button', { name: 'Enable policy control', exact: true })).toBeDisabled();
   await page.getByRole('checkbox', { name: /I am present; the arm is secured/ }).check();
-  await page.getByRole('button', { name: 'Enable policy control', exact: true }).click();
+  await controls.getByRole('button', { name: 'Enable policy control', exact: true }).click();
   expect(writes(state, '/control/start').at(-1)?.body).toMatchObject({
     mode: 'manual',
     move_to_middle: false,
@@ -2890,7 +2891,7 @@ test('a policy trained on two views is checked and run with a camera for each', 
   await frontCamera.selectOption('1');
   await expect(sideCamera).toHaveValue('0');
   await sideCamera.selectOption('2');
-  await page.getByRole('button', { name: 'Load and check policy', exact: true }).click();
+  await page.getByRole('button', { name: 'Load policy', exact: true }).click();
   await page.getByRole('button', { name: 'Check camera and inference rate', exact: true }).click();
   expect(writes(state, '/policy/preflight').at(-1)?.body).toEqual({
     camera_index: 1,
@@ -2917,7 +2918,7 @@ test('a policy that plans slowly runs only after the operator allows planning pa
   await openTab(page, 'Run policy');
   const allow = page.getByRole('checkbox', { name: /Allow planning pauses for this run/ });
   await expect(allow).toHaveCount(0);
-  await page.getByRole('button', { name: 'Load and check policy', exact: true }).click();
+  await page.getByRole('button', { name: 'Load policy', exact: true }).click();
   const check = page.getByRole('button', { name: 'Check camera and inference rate', exact: true });
   await check.click();
   await expect(page.getByText(/takes 680 ms to plan its next actions; 500 ms is allowed/)).toBeVisible();
@@ -2952,7 +2953,7 @@ test('a two-view policy on a computer with one camera says what is missing', asy
   await expect(page.getByRole('group', { name: 'Policy cameras' })).toContainText(
     'This policy needs 2 cameras and this computer shows 1.',
   );
-  await page.getByRole('button', { name: 'Load and check policy', exact: true }).click();
+  await page.getByRole('button', { name: 'Load policy', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Check camera and inference rate', exact: true })).toBeDisabled();
   expect(writes(state, '/policy/preflight')).toEqual([]);
 });
@@ -3092,7 +3093,7 @@ test('every Run policy button is drawn as one of the application buttons', async
   await run.getByText('Use an observation image and state', { exact: true }).click();
   for (const name of [
     'Install policy on USB computer',
-    'Load and check policy',
+    'Load policy',
     'Try with test inputs',
     'Preview uploaded observation',
     'Check camera and inference rate',
@@ -3121,7 +3122,7 @@ test('Run policy previews an offline ACT observation without devices or motor au
   state.portsConnected = false;
   state.policyOffline = true;
   await openTab(page, 'Run policy');
-  await page.getByRole('button', { name: 'Load and check policy', exact: true }).click();
+  await page.getByRole('button', { name: 'Load policy', exact: true }).click();
   await expect(page.getByLabel('Task instruction', { exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Try with test inputs', exact: true }).click();
   await expect(page.getByText('Latest prediction · 25 ms · no movement')).toBeVisible();
@@ -3150,7 +3151,7 @@ test('Run policy supplies a task only for the language-conditioned offline adapt
   state.policyKind = 'smolvla';
   state.policyOffline = true;
   await openTab(page, 'Run policy');
-  await page.getByRole('button', { name: 'Load and check policy', exact: true }).click();
+  await page.getByRole('button', { name: 'Load policy', exact: true }).click();
   await page.getByLabel('Task instruction', { exact: true }).fill('Pick up the white pen.');
   await page.getByRole('button', { name: 'Try with test inputs', exact: true }).click();
   await expect.poll(() => writes(state, '/policy/preview').length).toBe(1);

@@ -802,7 +802,14 @@ class PolicyRunner:
                 raise ValueError("Policy files changed; load the policy again")
             self.cancel = threading.Event()
             self.predicted = None
-            self.commanded = dict(self.lab.positions)
+            # The manual hold can start at a measured encoder position in the
+            # margin between the calibrated endpoints and the command inset.
+            # Seed the trajectory at the same bounded goal the motor bridge uses.
+            ranges = control_limits(self.lab.calibration)
+            self.commanded = {
+                joint: min(ranges[joint]["max"], max(ranges[joint]["min"], position))
+                for joint, position in self.lab.positions.items()
+            }
             self.velocity = {j: 0.0 for j in JOINTS}
             self.last_apply = time.monotonic()
             self.steps = 0
@@ -880,7 +887,7 @@ class PolicyRunner:
             ):
                 raise HardwareError("Policy predictions fell behind the trained frame rate")
             if self.predicted is None:
-                return dict(measured)
+                return dict(self.commanded)
             dt = min(0.05, max(0.001, now - getattr(self, "last_apply", now - 0.025)))
             self.last_apply = now
             ranges = control_limits(self.lab.calibration)

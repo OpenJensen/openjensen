@@ -36,20 +36,6 @@ export function RobotLabPolicyPreview({
     );
   return (
     <div className="robot-lab-form">
-      {requiresTask ? (
-        <label>
-          Task instruction
-          <textarea
-            value={lab.task}
-            maxLength={1000}
-            disabled={lab.busy || lab.active}
-            onChange={(event) => lab.setTask(event.target.value)}
-            placeholder="Describe what the policy should do."
-          />
-        </label>
-      ) : (
-        <p className="robot-lab-subtle">ACT inference uses images and state values.</p>
-      )}
       <h3>Try inference</h3>
       {!lab.state?.capabilities?.policy_preview && (
         <Notice kind="warning">Update the robot control service to preview policies without arm control.</Notice>
