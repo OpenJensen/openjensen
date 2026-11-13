@@ -6,6 +6,7 @@ import { nativeQuantizationInput } from './native-quantization';
 import { replayPolicy } from './native-replay';
 import { nativeInput } from './native-simulation';
 import { publicFormatLabel } from './public-display';
+import { datasetName, type NamedDataset } from './dataset-names';
 
 export type ModelAction = 'distill' | 'quantize' | 'evaluate' | 'replay' | 'simulate';
 export const modelFormats = new Set([
@@ -206,17 +207,18 @@ export function modelLineage(artifact: PolicyArtifact, artifacts: PolicyArtifact
   visit(artifact);
   return result;
 }
-export function modelDataset(artifact: PolicyArtifact, artifacts: PolicyArtifact[], jobs: Job[]): string {
+export function modelDataset(
+  artifact: PolicyArtifact,
+  artifacts: PolicyArtifact[],
+  jobs: Job[],
+  library: NamedDataset[] = [],
+): string {
   for (const step of modelLineage(artifact, artifacts, jobs).reverse()) {
     const id = textValue(record(step.job?.request).dataset_job_id);
     const dataset = jobs.find(
       (item) => item.project_id === artifact.project_id && item.id === id && isDatasetJob(item),
     );
-    if (dataset && isDatasetJob(dataset))
-      return (
-        dataset.result?.repo_id ||
-        (dataset.result?.source === 'local' ? 'Local dataset' : 'Dataset details unavailable')
-      );
+    if (dataset && isDatasetJob(dataset)) return datasetName(dataset, library);
   }
   return textValue(record(artifact.metadata?.dataset).repo_id) ?? 'Dataset not recorded';
 }

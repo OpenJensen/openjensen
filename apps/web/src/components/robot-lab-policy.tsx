@@ -183,6 +183,7 @@ export function RobotLabPolicy({ lab }: { lab: RobotLabState }) {
             )}
             <div className="robot-lab-actions">
               <button
+                className="secondary-button"
                 disabled={!lab.canAct || !choice?.compatible || !catalog.data?.runtime.configured || running}
                 onClick={() => void lab.perform('Policy loaded and checked.', () => robotApi.loadPolicy(selectedId))}
               >
@@ -212,6 +213,7 @@ export function RobotLabPolicy({ lab }: { lab: RobotLabState }) {
             ) : (
               <>
                 <button
+                  className="secondary-button"
                   disabled={
                     !lab.canAct ||
                     lab.active ||

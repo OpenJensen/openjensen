@@ -14,22 +14,17 @@ import { DatasetSubmissionRecovery } from '@/components/dataset-submission-recov
 import { TrainingHelp } from '@/components/training-help';
 import './datasets.css';
 import { ErrorNotice, displayDate } from '@/components/workspace-ui';
+import { JobStatus } from '@/components/ui/job-status';
+import { jobStatusWord } from '@/lib/job-status';
+import { datasetName } from '@/lib/dataset-names';
+import { useProjectDatasets } from '@/lib/use-project-datasets';
 
 import { useWorkspace } from '@/components/workspace-context';
-function JobStatus({ status }: { status: Job['status'] }) {
-  return (
-    <span className={`status status-${status}`}>
-      <span className="status-dot" />
-      {status}
-    </span>
-  );
-}
-
 function formatNumber(value: number) {
   return new Intl.NumberFormat('en-US').format(value);
 }
 
-function DatasetResult({ profile, history }: { profile: DatasetProfile; history?: ReactNode }) {
+function DatasetResult({ profile, name, history }: { profile: DatasetProfile; name: string; history?: ReactNode }) {
   return (
     <section className="result inspection-overview" aria-labelledby="result-title">
       {profile.snapshot && (
@@ -47,7 +42,7 @@ function DatasetResult({ profile, history }: { profile: DatasetProfile; history?
       )}
       <div className="result-heading">
         <div>
-          <h3 id="result-title">{profile.repo_id || 'Local dataset'}</h3>
+          <h3 id="result-title">{name}</h3>
         </div>
         <span className="metadata-badge">
           <Icon name="check" size={14} /> {profile.format.replace('_', ' ')}
@@ -89,7 +84,7 @@ function DatasetResult({ profile, history }: { profile: DatasetProfile; history?
         <dl>
           <div>
             <dt>Source</dt>
-            <dd>{profile.repo_id || 'Local metadata snapshot'}</dd>
+            <dd>{profile.repo_id || 'Local files'}</dd>
           </div>
           <div>
             <dt>Declared license</dt>
@@ -507,6 +502,7 @@ function TrainingReadiness({
 
 function JobDetail({ job, projectId, history }: { job: DatasetJob; projectId: string; history?: ReactNode }) {
   const queryClient = useQueryClient();
+  const library = useProjectDatasets(projectId);
   const cancel = useMutation({
     mutationFn: () => api.cancel(job.id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['jobs', projectId] }),
@@ -538,7 +534,9 @@ function JobDetail({ job, projectId, history }: { job: DatasetJob; projectId: st
       {(job.status === 'cancelled' || job.status === 'interrupted') && (
         <p className="muted">Inspection did not complete.</p>
       )}
-      {job.result && 'inspection_scope' in job.result && <DatasetResult profile={job.result} history={history} />}
+      {job.result && 'inspection_scope' in job.result && (
+        <DatasetResult profile={job.result} name={datasetName(job, library)} history={history} />
+      )}
     </>
   );
 }
@@ -567,6 +565,7 @@ export default function DatasetsSection() {
     setModuleJobView,
     startTrainingOnDataset,
   } = useWorkspace();
+  const library = useProjectDatasets(workflowProjectId);
   return (
     <>
       <div className="dataset-view" hidden={activeStage !== 'datasets'}>
@@ -662,7 +661,7 @@ export default function DatasetsSection() {
                         >
                           {sortedJobs.map((job) => (
                             <option key={job.id} value={job.id}>
-                              {job.request.repo_id || 'Local dataset'} · {displayDate(job.created_at)} · {job.status}
+                              {datasetName(job, library)} · {displayDate(job.created_at)} · {jobStatusWord(job.status)}
                             </option>
                           ))}
                         </select>

@@ -2,7 +2,10 @@
 
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { api } from '@/lib/api';
+import { api, type PolicyArtifact } from '@/lib/api';
+import { checkpointStep } from '@/lib/checkpoints';
+import { runName } from '@/lib/run-names';
+import { useProjectDatasets } from '@/lib/use-project-datasets';
 import { Notice } from './robot-lab-shared';
 import type { RobotLabState } from './robot-lab-state';
 
@@ -25,9 +28,31 @@ export function RobotLabPolicyInstall({ lab, installed }: { lab: RobotLabState; 
       item.metadata?.training_backend === 'lerobot' &&
       item.metadata?.reload_verified === true,
   );
+  // The run's jobs and datasets are read only to name each model: two runs of one recipe
+  // are otherwise listed under the same name.
+  const jobs = useQuery({
+    queryKey: ['jobs', lab.projectId],
+    queryFn: () => api.jobs(lab.projectId!),
+    enabled: !!lab.projectId && lab.online,
+    retry: false,
+    // A run that finished a moment ago must be listed by name as soon as this opens.
+    refetchOnMount: 'always',
+  });
+  const library = useProjectDatasets(lab.projectId, lab.online);
+  const modelName = (item: PolicyArtifact, date: boolean) => {
+    const job = (jobs.data ?? []).find((entry) => entry.project_id === item.project_id && entry.id === item.job_id);
+    if (!job || job.kind !== 'policy.finetune') return item.run_name || item.label;
+    const step = checkpointStep(item);
+    return [
+      runName(job, { jobs: jobs.data ?? [], artifacts: models.data ?? [], library }, { date }),
+      step !== null ? `step ${step.toLocaleString()}` : null,
+    ]
+      .filter(Boolean)
+      .join(' · ');
+  };
   const selectedId = selected || compatible[0]?.id || '';
   const model = compatible.find((item) => item.id === selectedId);
-  const title = name || model?.label || '';
+  const title = (name || (model ? modelName(model, false) : '')).slice(0, 100);
   const rate = fps ? Number(fps) : undefined;
   const validRate = rate === undefined || (Number.isInteger(rate) && rate >= 1 && rate <= 40);
   return (
@@ -61,7 +86,7 @@ export function RobotLabPolicyInstall({ lab, installed }: { lab: RobotLabState; 
             <option value="">Choose a native ACT or SmolVLA model</option>
             {compatible.map((item) => (
               <option key={item.id} value={item.id}>
-                {item.run_name || item.label}
+                {modelName(item, true)}
               </option>
             ))}
           </select>
@@ -118,6 +143,7 @@ export function RobotLabPolicyInstall({ lab, installed }: { lab: RobotLabState; 
           installation.
         </small>
         <button
+          className="secondary-button"
           disabled={
             !lab.canAct ||
             lab.active ||

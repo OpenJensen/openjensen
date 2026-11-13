@@ -58,7 +58,7 @@ export function RobotLabPolicyPreview({
         Preview model output without connecting or moving robot arms. Output values use the model’s own coordinates and
         units.
       </p>
-      <button disabled={!ready} onClick={() => run({ synthetic: true })}>
+      <button className="secondary-button" disabled={!ready} onClick={() => run({ synthetic: true })}>
         Try with test inputs
       </button>
       <small>
@@ -109,6 +109,7 @@ export function RobotLabPolicyPreview({
           <small>Supply state values in this model’s expected order and units.</small>
           <div className="robot-lab-actions">
             <button
+              className="secondary-button"
               disabled={!ready || !image || !values.every(Number.isFinite)}
               onClick={() => {
                 if (image) run({ state: values, jpeg: image });
@@ -117,6 +118,7 @@ export function RobotLabPolicyPreview({
               Preview uploaded observation
             </button>
             <button
+              className="secondary-button"
               disabled={!ready || !lab.availableCameras.length || !values.every(Number.isFinite)}
               onClick={() => run({ state: values, camera_index: lab.cameraIndex, ...(cameras ? { cameras } : {}) })}
             >
@@ -125,7 +127,11 @@ export function RobotLabPolicyPreview({
           </div>
         </div>
       </details>
-      {lab.pending === 'Prediction preview ready.' && <button onClick={lab.stop}>Cancel preview</button>}
+      {lab.pending === 'Prediction preview ready.' && (
+        <button className="secondary-button" onClick={lab.stop}>
+          Cancel preview
+        </button>
+      )}
       {preview && preview.policy_id === policy?.policy_id && (
         <div role="status">
           <strong>Latest prediction · {preview.inference_ms} ms · no movement</strong>

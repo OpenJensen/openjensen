@@ -113,7 +113,9 @@ export function WorkspaceDashboard({
                 ? 'Some models unavailable'
                 : modelsPending
                   ? 'Loading models…'
-                  : `${modelCount} saved models and versions`}
+                  : modelCount === 1
+                    ? '1 saved model'
+                    : `${modelCount} saved models and versions`}
             </p>
           </div>
           <Icon name="arrow" size={20} />
@@ -131,7 +133,7 @@ export function WorkspaceDashboard({
                   ? 'Dataset history unavailable'
                   : datasets.isPending
                     ? 'Loading datasets…'
-                    : `${entries.length} saved datasets`}
+                    : `${entries.length} saved ${entries.length === 1 ? 'dataset' : 'datasets'}`}
             </p>
           </div>
           <Icon name="arrow" size={20} />

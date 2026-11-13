@@ -1,5 +1,7 @@
 'use client';
 
+import { jobStatusWord } from '@/lib/job-status';
+import { JobStatus } from '@/components/ui/job-status';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, artifactDownloadUrl, isActive, isDatasetJob } from '@/lib/api';
@@ -422,7 +424,7 @@ export function NativeReplayPanel({
         <article className="native-simulation-result" aria-label="Observation replay details" data-job-id={selected.id}>
           <div className="native-result-header">
             <h3>CPU observation replay</h3>
-            <span className={`status status-${selected.status}`}>{selected.status}</span>
+            <JobStatus status={selected.status} />
           </div>
           <p className="native-result-summary">
             {isActive(selected) ? (selected.stage ?? selected.status) : 'Recorded job'} · {selected.id}
@@ -543,7 +545,7 @@ export function NativeReplayPanel({
             <option value="">Choose a recorded replay</option>
             {history.map((item) => (
               <option key={item.id} value={item.id}>
-                {item.id.slice(0, 8)} · {item.status}
+                {item.id.slice(0, 8)} · {jobStatusWord(item.status)}
               </option>
             ))}
           </select>

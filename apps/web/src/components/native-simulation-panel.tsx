@@ -1,5 +1,7 @@
 'use client';
 
+import { jobStatusWord } from '@/lib/job-status';
+import { JobStatus } from '@/components/ui/job-status';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, artifactDownloadUrl, isActive } from '@/lib/api';
@@ -504,7 +506,7 @@ export function NativeSimulationPanel({
                 {saved.map((item) => (
                   <option key={item.id} value={item.id}>
                     {item.kind === 'policy.import' ? 'Policy import' : 'Isaac rollout'} · {item.id.slice(0, 8)} ·{' '}
-                    {item.status}
+                    {jobStatusWord(item.status)}
                   </option>
                 ))}
               </select>
@@ -526,10 +528,7 @@ export function NativeSimulationPanel({
                   </span>
                   <h3>{selected.kind === 'policy.import' ? 'Native policy import' : 'Isaac rollout'}</h3>
                 </div>
-                <span className={`status status-${selected.status}`}>
-                  <span className="status-dot" />
-                  {selected.status}
-                </span>
+                <JobStatus status={selected.status} />
               </div>
               {videoReady && !videoFailed && (
                 <figure className="native-recording">

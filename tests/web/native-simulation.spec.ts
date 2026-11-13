@@ -358,7 +358,7 @@ test('native cancellation is confirmed for the selected job and cannot follow a 
   expect(state.cancels).toEqual([]);
   await page.getByRole('button', { name: 'Cancel selected native job' }).click();
   await page.getByRole('button', { name: 'Confirm cancellation' }).click();
-  await expect(page.getByRole('article', { name: 'Native simulation job details' })).toContainText('cancelled');
+  await expect(page.getByRole('article', { name: 'Native simulation job details' })).toContainText('Cancelled');
   expect(state.cancels).toEqual(['second']);
 });
 
@@ -519,7 +519,7 @@ for (const view of ['native', 'cloud'] as const)
       view === 'native'
         ? page.getByRole('article', { name: 'Native simulation job details' })
         : page.getByText('Recorded status', { exact: true }).locator('..');
-    await expect(status).toContainText('succeeded', { timeout: 8000 });
+    await expect(status).toContainText('Completed', { timeout: 8000 });
     await expect(log).toContainText('Generated final integrity receipt', { timeout: 5000 });
     expect(finalReads).toBeGreaterThan(0);
     expect(state.posts).toHaveLength(0);
@@ -1496,7 +1496,7 @@ test('active scene jobs cancel through the shared job endpoint', async ({ page }
   expect(cancels).toHaveLength(1);
   expect(new URL(cancels[0]).pathname).toBe('/api/v1/jobs/running-scene-job/cancel');
   await scene.getByRole('button', { name: '← Back to jobs', exact: true }).click();
-  await expect(scene.locator('[data-job-id="running-scene-job"]')).toContainText('cancelled');
+  await expect(scene.locator('[data-job-id="running-scene-job"]')).toContainText('Cancelled');
 });
 
 test('scene job terminal updates fetch partial media without claiming a successful replay', async ({ page }) => {
@@ -1683,6 +1683,6 @@ test('retrying simulation creates a new job and retains its scene lineage throug
   await scene.getByRole('button', { name: 'Original job', exact: true }).click();
   await expect(scene.getByRole('alert')).toContainText('Simulation worker was interrupted');
   await scene.getByRole('button', { name: '← Back to jobs', exact: true }).click();
-  await expect(scene.locator('[data-job-id="failed-scene-job"]')).toContainText('failed');
-  await expect(scene.locator('[data-job-id="simulation-retry-job"]')).toContainText('running');
+  await expect(scene.locator('[data-job-id="failed-scene-job"]')).toContainText('Failed');
+  await expect(scene.locator('[data-job-id="simulation-retry-job"]')).toContainText('Running');
 });

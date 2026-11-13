@@ -401,7 +401,7 @@ async function workspace(
                 id: 'inspection:dataset',
                 job_id: dataset.id,
                 project_id: projectId,
-                name: dataset.result.repo_id || 'Local dataset',
+                name: dataset.result.repo_id || 'pick-up-duck',
                 source: dataset.result.source,
                 status: 'ready',
                 created_at: dataset.created_at,
@@ -570,11 +570,13 @@ test('Fine-tune opens newest jobs first and opens details only after choosing a 
   const entries = history.locator('.job-history-entry');
   await expect(entries).toHaveCount(2);
   await expect(entries.first()).toHaveAttribute('data-job-id', 'run-001');
-  await expect(entries.first()).toContainText('SmolVLA · LORA');
-  await expect(entries.first()).toContainText('fixture/robot');
+  // A run is named by its model and the dataset it trained on; the method is the line below.
+  await expect(entries.first().locator('strong')).toHaveText('SmolVLA · fixture/robot');
+  await expect(entries.first()).toContainText('LoRA');
   await expect(entries.first()).toContainText('Saved step 20 / 100');
-  await expect(entries.first()).toContainText('running');
-  await expect(entries.last()).toContainText('ACT · FULL');
+  await expect(entries.first()).toContainText('Running');
+  await expect(entries.last().locator('strong')).toHaveText('ACT · fixture/robot');
+  await expect(entries.last()).toContainText('Full training');
   await expect(entries.last()).toContainText('40 steps completed');
   await expect(monitor).toHaveCount(0);
   await expect(page.getByRole('navigation', { name: 'Training setup' })).toHaveCount(0);
@@ -589,6 +591,23 @@ test('Fine-tune opens newest jobs first and opens details only after choosing a 
   await expect(history).toBeVisible();
   await expect(monitor).toHaveCount(0);
   expect(submitted).toEqual([]);
+  expect(unexpected).toEqual([]);
+});
+
+test('a finished run reads Completed in the list and on its own page', async ({ page }) => {
+  const { monitor, telemetry, unexpected } = await workspace(page, 'history', false);
+  await page.route('**/api/v1/jobs/older-run/training', (route) =>
+    route.fulfill({ json: { ...telemetry, job_id: 'older-run', status: 'succeeded', phase: 'completed' } }),
+  );
+  const entries = page.getByRole('region', { name: 'Fine-tuning jobs', exact: true }).locator('.job-history-entry');
+  await expect(entries.first().locator('.status')).toHaveText('Running');
+  await expect(entries.last().locator('.status')).toHaveText('Completed');
+  await entries.last().click();
+  await expect(monitor).toHaveAttribute('data-run-id', 'older-run');
+  // The outcome appears once as a state and once as a sentence, never as two different words.
+  await expect(monitor.locator('.training-monitor-header .status')).toHaveText('Completed');
+  await expect(monitor.getByRole('heading', { name: 'Training complete', exact: true })).toBeVisible();
+  await expect(monitor.locator('.training-monitor-header')).not.toContainText(/succeeded/i);
   expect(unexpected).toEqual([]);
 });
 
@@ -659,9 +678,11 @@ test('empty history offers an explicit new job and repeated dataset shortcuts op
 test('local training copies open the jobs-first wizard and retain native model admission', async ({ page }) => {
   const { submitted, unexpected } = await workspace(page, 'local-snapshot', false);
   await page.getByRole('link', { name: 'Datasets', exact: true }).click();
-  await page.getByRole('button', { name: 'Open dataset Local dataset', exact: true }).click();
+  await page.getByRole('button', { name: 'Open dataset pick-up-duck', exact: true }).click();
   await page.getByRole('button', { name: 'Train on this dataset', exact: true }).click();
-  await expect(page.getByRole('checkbox', { name: 'Local dataset', exact: true })).toBeChecked();
+  // The picker shows the dataset under the name it was saved with.
+  await expect(page.getByRole('checkbox', { name: 'pick-up-duck', exact: true })).toBeChecked();
+  await expect(page.getByText('Local dataset', { exact: true })).toHaveCount(0);
   const setup = page.getByRole('navigation', { name: 'Training setup' });
   await setup.getByRole('button', { name: 'Model', exact: true }).click();
   await chooseOnlyModel(page, 'SmolVLA');
@@ -686,11 +707,11 @@ test('local training copies open the jobs-first wizard and retain native model a
 test('metadata-only local inspections stay removable but cannot be added or submitted', async ({ page }) => {
   const { submitted, unexpected } = await workspace(page, 'local-unprepared', false);
   await page.getByRole('link', { name: 'Datasets', exact: true }).click();
-  await page.getByRole('button', { name: 'Open dataset Local dataset', exact: true }).click();
+  await page.getByRole('button', { name: 'Open dataset pick-up-duck', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Train on this dataset', exact: true })).toHaveCount(0);
   await page.getByRole('link', { name: 'Fine-tune', exact: true }).click();
   await page.getByRole('button', { name: 'Start a new fine-tuning', exact: true }).click();
-  const dataset = page.getByRole('checkbox', { name: 'Local dataset', exact: true });
+  const dataset = page.getByRole('checkbox', { name: 'pick-up-duck', exact: true });
   await expect(dataset).toBeChecked();
   await expect(page.getByRole('button', { name: 'Next', exact: true })).toBeDisabled();
   await dataset.uncheck();
@@ -836,7 +857,8 @@ test('can cancel an active run and preserves its last recorded progress', async 
   const { monitor, cancelled, unexpected } = await workspace(page);
   await monitor.getByRole('button', { name: 'Cancel run' }).click();
   await expect.poll(() => cancelled).toEqual(['run-001']);
-  await expect(monitor.getByRole('heading', { name: 'Cancelled', exact: true })).toBeVisible();
+  await expect(monitor.getByRole('heading', { name: 'Training cancelled', exact: true })).toBeVisible();
+  await expect(monitor.locator('.training-monitor-header .status')).toHaveText('Cancelled');
   await expect(monitor.getByRole('progressbar')).toHaveAttribute('value', '25');
   await expect(monitor.getByRole('button', { name: 'Resume from checkpoint' })).toBeVisible();
   expect(unexpected).toEqual([]);

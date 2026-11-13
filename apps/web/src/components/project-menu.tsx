@@ -186,7 +186,10 @@ export function ProjectMenu({ projects, value, onSelect, onCreate, disabled = fa
       const width = Math.min(Math.max(bounds.width, 260), window.innerWidth - 32);
       const below = window.innerHeight - bounds.bottom - 22;
       const above = bounds.top - 22;
-      const desired = Math.min(320, (projects.length + 1) * 44 + 22);
+      // Measure what the menu holds: an empty list still shows a note, a divider and
+      // "Create project…", which is taller than one row per project plus one.
+      const content = menu.current ? menu.current.scrollHeight + 2 : (projects.length + 1) * 44 + 22;
+      const desired = Math.min(320, content);
       const upwards = below < desired && above > below;
       const height = Math.max(44, Math.min(desired, upwards ? above : below));
       setPlacement({

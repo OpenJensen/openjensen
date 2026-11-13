@@ -1,4 +1,5 @@
-import { trainingRunModelLabel } from '@/lib/checkpoints';
+import { isProjectDataset, type LibraryDataset } from '@/lib/dataset-library';
+import { runName } from '@/lib/run-names';
 import { Icon } from '@/components/icon';
 import { TrainingMonitor } from '@/components/training-monitor';
 import type { TrainingPanelState } from './training-state';
@@ -27,6 +28,7 @@ export function TrainingJobDetail({
     cancel,
     headingRef,
     jobs,
+    library,
     models,
     options,
     projectId,
@@ -34,7 +36,6 @@ export function TrainingJobDetail({
     resumeRun,
     selectedRun,
     showHistory,
-    trainingRuns,
   } = panel;
   return (
     <section className="training-activity training-job-detail" aria-label="Fine-tuning job">
@@ -45,7 +46,18 @@ export function TrainingJobDetail({
       <div className="training-heading">
         <h2 ref={headingRef} tabIndex={-1}>
           {selectedRun
-            ? (trainingRunModelLabel(selectedRun, models, artifacts.data ?? [], trainingRuns) ?? 'Fine-tuning job')
+            ? runName(
+                selectedRun,
+                {
+                  jobs: jobs.data ?? [],
+                  artifacts: artifacts.data ?? [],
+                  library: (library.data ?? []).filter((entry): entry is LibraryDataset =>
+                    isProjectDataset(entry, projectId),
+                  ),
+                  catalog: models,
+                },
+                { date: true },
+              )
             : 'Fine-tuning job'}
         </h2>
         <button type="button" className="text-button" onClick={onDiagnostics}>

@@ -936,7 +936,7 @@ class DatasetLibrary:
                         "id": "inspection:" + job.id,
                         "job_id": job.id,
                         "project_id": project.id,
-                        "name": profile.repo_id or Path(job.request.path or "Local dataset").name,
+                        "name": profile.repo_id or Path(job.request.path or "Unnamed dataset").name,
                         "source": profile.source,
                         "created_at": job.created_at,
                         "status": "ready",

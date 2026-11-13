@@ -88,12 +88,21 @@ test('open an imported two-view fixture, save labels, reopen it and reach the da
   // The full inspection is one link away, and opening it does not inspect again.
   await readiness.getByRole('button', { name: 'Episodes and details', exact: true }).click();
   await expect(page.getByText(/Training copy ready/)).toBeVisible();
+  // One dataset, one name: its details are not titled "Local dataset".
+  await expect(page.getByRole('heading', { name: 'Robot labeling playground', exact: true })).toBeVisible();
+  await expect(page.getByText('Local dataset', { exact: true })).toHaveCount(0);
   expect(await (await page.request.get(`/api/v1/projects/${project.id}/jobs`)).json()).toHaveLength(1);
   await page.getByRole('button', { name: '← Back to datasets', exact: true }).click();
   await page.getByRole('button', { name: 'Open dataset Robot labeling playground' }).click();
   await expect(readiness.getByRole('heading', { name: 'Ready to train', exact: true })).toBeVisible();
   await readiness.getByRole('button', { name: 'Train on this dataset' }).click();
   await expect(page.getByRole('navigation', { name: 'Training setup' })).toBeVisible();
+  await expect(page.getByRole('checkbox', { name: 'Robot labeling playground', exact: true })).toBeChecked();
+  // Every job this dataset caused is listed under the dataset's name.
+  await page.getByRole('link', { name: 'Jobs', exact: true }).click();
+  const jobRows = page.locator('[data-job-id]');
+  await expect(jobRows.filter({ hasText: 'Inspect dataset' })).toContainText('Robot labeling playground');
+  await expect(jobRows.filter({ hasText: 'Local dataset' })).toHaveCount(0);
   await page.getByRole('link', { name: 'Dashboard', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Resources & connections' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Models', exact: true })).toBeVisible();
@@ -134,7 +143,8 @@ test('native folder selection uploads files, detects records and converts for in
   await expect(detected.getByText(/Ready to inspect/)).toBeVisible({ timeout: 30_000 });
   await page.getByRole('button', { name: 'Inspect dataset', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Dataset inspection', exact: true })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Local dataset', exact: true })).toBeVisible();
+  // The inspection is titled with the name the folder was saved under.
+  await expect(page.getByRole('heading', { name: 'source-folder', exact: true })).toBeVisible();
   await page.getByRole('button', { name: '← Back to datasets', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Open dataset source-folder' })).toBeVisible();
 });
@@ -170,7 +180,7 @@ test('a one-episode dataset opens with its frames and says what training still n
   await page.getByRole('checkbox', { name: 'Prepare immutable training copy', exact: true }).check();
   await page.getByRole('button', { name: 'Inspect dataset', exact: true }).click();
   const inspection = page.getByRole('region', { name: 'Dataset inspection', exact: true });
-  await expect(inspection.getByRole('heading', { name: 'Local dataset', exact: true })).toBeVisible({
+  await expect(inspection.getByRole('heading', { name: 'first-take', exact: true })).toBeVisible({
     timeout: 30_000,
   });
   await expect(inspection.getByText('Not ready for training yet.')).toBeVisible();
@@ -891,7 +901,7 @@ test('unknown-owner records are workspace repair notices with no project or disc
   );
   expect(state.deletes).toEqual([]);
   await page.getByRole('link', { name: 'Dashboard', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Datasets', exact: true })).toContainText('1 saved datasets');
+  await expect(page.getByRole('button', { name: 'Datasets', exact: true })).toContainText(/1 saved dataset$/);
 });
 
 test('late label-save acknowledgement does not erase a newer draft after reopening', async ({ page }) => {

@@ -244,7 +244,7 @@ test('replay submits once with full identity and cancellation is explicit', asyn
   await page.getByRole('button', { name: 'Cancel selected replay', exact: true }).click();
   expect(state.cancelled).toHaveLength(0);
   await page.getByRole('button', { name: 'Confirm cancellation', exact: true }).click();
-  await expect(page.getByRole('article', { name: 'Observation replay details' })).toContainText('cancelled');
+  await expect(page.getByRole('article', { name: 'Observation replay details' })).toContainText('Cancelled');
   expect(state.cancelled).toEqual(['replay-001']);
 });
 for (const outcome of ['lost', 'wrong'])
@@ -514,7 +514,7 @@ for (const phase of ['submit', 'cancel-preflight', 'cancel-receipt'] as const)
       await expect(details).toHaveCount(0);
     } else {
       await expect(details).toHaveAttribute('data-job-id', 'replay-001');
-      await expect(details.locator('.status')).toHaveText('running');
+      await expect(details.locator('.status')).toHaveText('Running');
       await expect(page.getByRole('button', { name: 'Confirm cancellation', exact: true })).toHaveCount(0);
       const recovery = await page.evaluate(() =>
         Object.keys(sessionStorage)
