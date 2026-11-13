@@ -76,6 +76,14 @@ OPERATIONS = [
         ("dataset.inspect", "Inspect dataset", "datasets", "/datasets/", "job"),
         ("dataset.import", "Import dataset", "datasets", "/datasets/", "upload"),
         ("dataset.convert", "Convert dataset", "datasets", "/datasets/", "interactive"),
+        (
+            "dataset.publish",
+            "Publish dataset to Hugging Face",
+            "datasets",
+            "/datasets/",
+            "interactive",
+        ),
+        ("dataset.fetch", "Add dataset from Hugging Face", "datasets", "/datasets/", "interactive"),
         ("dataset.augment", "Augment dataset", "augmentation", "/augmentation/", "job"),
         ("scene.generate", "Real to sim", "real-to-sim", "/real-to-sim/", "job"),
         ("policy.finetune", "Fine-tune", "training", "/training/", "job"),
@@ -85,6 +93,8 @@ OPERATIONS = [
         ("policy.run", "Run policy", "simulation", "/simulation/", "job"),
         ("policy.export", "Export model", "models", "/models/", "job"),
         ("policy.import", "Import model", "models", "/models/", "upload"),
+        ("policy.publish", "Publish model to Hugging Face", "models", "/models/", "interactive"),
+        ("policy.fetch", "Add model from Hugging Face", "models", "/models/", "interactive"),
         ("policy.workflow", "Policy workflow", "evaluation", "/evaluation/", "job"),
         ("teaching.capture", "Record teaching", "teaching", "/ai-teleoperation/", "job"),
         ("agent.control", "AI teleoperation", "teaching", "/ai-teleoperation/", "interactive"),
@@ -287,6 +297,38 @@ def dataset_job(record):
     )
 
 
+def share_job(record):
+    """A publish to Hugging Face, or a dataset or model added from a link there."""
+    result = record.get("result") or {}
+    inputs = dict(record["inputs"])
+    if result.get("dataset_id"):
+        inputs["dataset_id"] = result["dataset_id"]
+    return WorkJob(
+        id="share:" + record["id"],
+        source_id=record["id"],
+        project_id=record["project_id"],
+        operation=record["operation"],
+        module=CATALOG[record["operation"]].module,
+        title=record["title"],
+        status=record["status"],
+        source_status=record["status"],
+        created_at=record["created_at"],
+        updated_at=record["updated_at"],
+        stage=record["stage"],
+        message=record.get("error") or record.get("message"),
+        execution=ExecutionBinding(
+            adapter="local", infrastructure="local", target_id="huggingface", label="Hugging Face"
+        ),
+        inputs=inputs,
+        result=record.get("result"),
+        outputs=[JobLink(label="Open on Hugging Face", url=result["url"])]
+        if record["status"] == "succeeded" and result.get("url")
+        else [],
+        can_cancel=record["status"] == "running",
+        events=[WorkEvent(**event) for event in record["events"][-200:]],
+    )
+
+
 def legacy_dataset_job(record):
     converting = bool(record.get("conversion"))
     state = {
@@ -343,6 +385,9 @@ async def list_jobs(state, project_id):
         and record.get("status") != "unavailable"
         and record["id"] not in covered_datasets
     )
+    sharing = getattr(state, "huggingface_sharing", None)
+    if sharing is not None:
+        rows.extend(share_job(record) for record in sharing.jobs.records(project_id))
     return sorted(rows, key=lambda job: (job.created_at, job.id), reverse=True)
 
 
@@ -370,6 +415,9 @@ async def get_job(state, project_id, key):
                 result = (
                     legacy_dataset_job(source) if source.get("status") != "unavailable" else None
                 )
+        elif family == "share":
+            sharing = getattr(state, "huggingface_sharing", None)
+            result = share_job(sharing.jobs.get(ident)) if sharing is not None else None
         else:
             return None
     except SceneError, AgentError, ValueError:

@@ -36,6 +36,8 @@ Inspect a public dataset or import local files. Open an episode to play its came
 
 Open a saved dataset to see whether it is ready to train. **Prepare for training** makes a verified copy on the same page; if something is missing, the page says what, such as needing at least two episodes. When several saved datasets hold one episode each and share cameras and frame rate, **Combine** joins them into one dataset and keeps the originals.
 
+To move a saved dataset to another machine, open it and choose **Publish to Hugging Face**. The page shows the repository it will go to before anything is sent, publishes it privately unless you tick **Make this repository public**, and then shows the link. On the other machine, paste that link, or its `owner/name`, into **Add from a Hugging Face link**: the dataset is fetched, every file is checked against what was published, and it is saved with the same contents. Both use the token saved under **Cloud & APIs → Hugging Face**, or, without one, the account `hf auth login` saved on that computer.
+
 ## Real to sim
 
 Open **Real to sim** under **Data**. Choose **New scene**, then select a dataset, agent model and power before starting. Codex can inspect episodes across the full dataset. Open the saved job for environment images, a recorded-episode replay video and the scene bundle. Use **Retry simulation** to create a new job from the saved scene and evidence without repeating model work. Physical calibration remains a separate validation step.
@@ -71,6 +73,8 @@ Choose **New job** or **Workspace**, enter a state and unique criteria, and star
 ## Models
 
 Open a model version to inspect its lineage or start an available operation. Use Import a model to add a policy archive.
+
+A model moves between machines the same way as a dataset: **Publish to Hugging Face** on a model version, then **Add from a Hugging Face link** on the other machine's Models page. The model arrives with the same files and manifest, so it installs under **Run** as it does where it was trained. A model kept in cloud storage is brought to this machine once for the upload.
 
 ## Cloud runs
 

@@ -83,7 +83,8 @@ def timestamp():
 def job_key(value: str) -> str:
     if not isinstance(value, str) or not ID.fullmatch(value):
         raise ValueError("Invalid diagnostic job identity")
-    return value if value.startswith(("core:", "scene:", "agent:", "dataset:")) else "core:" + value
+    families = ("core:", "scene:", "agent:", "dataset:", "share:")
+    return value if value.startswith(families) else "core:" + value
 
 
 def redact(text: str) -> str:

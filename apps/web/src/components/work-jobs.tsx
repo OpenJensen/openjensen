@@ -20,6 +20,11 @@ import { WorkJobSceneResults } from './work-job-scene-results';
 import { Notice } from './ui/notice';
 import './work-jobs.css';
 
+/** Most outputs are files this application serves; a published repository is elsewhere. */
+function outputLink(url: string) {
+  return /^https:\/\//.test(url) ? { href: url, target: '_blank', rel: 'noreferrer' } : { href: `${apiOrigin}${url}` };
+}
+
 function NewWorkJob({
   choices,
   onBack,
@@ -199,7 +204,7 @@ function JobDetail({
                   <WorkbenchDisclosure title="Files">
                     <div className="workbench-actions">
                       {job.outputs.map((output) => (
-                        <a key={output.url} className="secondary-button" href={`${apiOrigin}${output.url}`}>
+                        <a key={output.url} className="secondary-button" {...outputLink(output.url)}>
                           {output.label}
                         </a>
                       ))}
@@ -210,7 +215,7 @@ function JobDetail({
             ) : job.outputs.length ? (
               <div className="workbench-actions">
                 {job.outputs.map((output) => (
-                  <a key={output.url} className="secondary-button" href={`${apiOrigin}${output.url}`}>
+                  <a key={output.url} className="secondary-button" {...outputLink(output.url)}>
                     {output.label}
                   </a>
                 ))}

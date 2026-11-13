@@ -19,6 +19,7 @@ import {
   type ModelAction,
 } from '@/lib/model-library';
 import { isCloudArtifact } from '@/lib/checkpoints';
+import { AddFromHuggingFace, PublishToHuggingFace } from './huggingface-share';
 import './model-library.css';
 
 const actionNames: Record<ModelAction, string> = {
@@ -316,18 +317,21 @@ function ModelStep({ step, jobs }: { step: LineageStep; jobs: Job[] }) {
   const gpu = environment.gpu_name ?? environment.gpu ?? environment.device_name;
   const baseModel = record(reproducibility.model ?? step.artifact?.metadata?.base_model);
   const affected = job?.kind === 'policy.finetune' || job?.kind === 'policy.distill';
+  // A model added from a link was made on another machine: no job here produced it.
+  const added = !job && !!step.artifact?.id.endsWith(':huggingface');
   return (
     <li>
       <div className="model-lineage-heading">
         <span className="model-lineage-dot" />
         <div>
           <strong>
-            {operationNames[job?.kind ?? ''] ?? 'Saved model'}
+            {added ? 'Added from Hugging Face' : (operationNames[job?.kind ?? ''] ?? 'Saved model')}
             {step.artifact ? ` · ${step.artifact.label}` : ''}
           </strong>
           <span>
-            {date(job?.created_at)}
-            {job ? ` · ${job.status}` : ' · Producing job unavailable'}
+            {added
+              ? 'Made on another machine. Its own records are under Model configuration.'
+              : `${date(job?.created_at)}${job ? ` · ${job.status}` : ' · Producing job unavailable'}`}
           </span>
         </div>
       </div>
@@ -565,6 +569,7 @@ export function ModelLibrary({
           </a>
         </header>
         <ModelRunIdentity artifact={artifact} />
+        <PublishToHuggingFace key={artifact.id} projectId={project.id} kind="model" id={artifact.id} />
         {!chosen.fresh && (
           <p className="warning-box" role="alert">
             This model’s records could not be refreshed. Refresh before continuing with it.
@@ -667,6 +672,13 @@ export function ModelLibrary({
           </button>
         </div>
       </div>
+      {!!currentProjectId && (
+        <AddFromHuggingFace
+          projectId={currentProjectId}
+          kind="model"
+          onOpen={(id) => setSelected({ project: currentProjectId, artifact: id })}
+        />
+      )}
       <div className="model-library-toolbar">
         <label>
           Find a model

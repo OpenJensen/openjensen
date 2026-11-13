@@ -51,6 +51,8 @@ from vla_platform.decision_api import router as decision_router
 from vla_platform.execution import Execution
 from vla_platform.huggingface_api import router as huggingface_router
 from vla_platform.huggingface_connection import HuggingFaceConnection
+from vla_platform.huggingface_sharing import HuggingFaceSharing
+from vla_platform.huggingface_sharing_api import router as huggingface_sharing_router
 from vla_platform.job_observability_api import router as job_observability_router
 from vla_platform.lifecycle import telemetry
 from vla_platform.lifecycle.contracts import (
@@ -165,6 +167,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             app.state.robot_lab = RobotLabBridge(settings.data_dir)
             app.state.cloud_connections = CloudConnections(settings.data_dir)
             app.state.huggingface_connection = HuggingFaceConnection(settings.data_dir)
+            app.state.huggingface_sharing = HuggingFaceSharing(app, settings.data_dir)
             app.state.agent_control = AgentControl(
                 storage,
                 settings,
@@ -204,6 +207,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     try:
                         if hasattr(app.state, "collection_runs"):
                             await app.state.collection_runs.close()
+                        if hasattr(app.state, "huggingface_sharing"):
+                            await app.state.huggingface_sharing.close()
                         if hasattr(app.state, "agent_control"):
                             await app.state.agent_control.close()
                         if hasattr(app.state, "module_installations"):
@@ -258,6 +263,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(cloud_connections_router)
     app.include_router(compute_settings_router)
     app.include_router(huggingface_router)
+    app.include_router(huggingface_sharing_router)
     app.include_router(teaching_router)
     app.include_router(teaching_sessions_router)
     app.include_router(decision_router)

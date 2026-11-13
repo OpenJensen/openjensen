@@ -2681,6 +2681,86 @@
         "title": "DecisionStatus",
         "type": "object"
       },
+      "Destination": {
+        "additionalProperties": false,
+        "properties": {
+          "account": {
+            "$ref": "#/components/schemas/SharingAccount"
+          },
+          "active_job": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Job"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "dataset",
+              "model"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "private": {
+            "default": true,
+            "title": "Private",
+            "type": "boolean"
+          },
+          "published": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Published"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "repo_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repo Id"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "required": [
+          "kind",
+          "id",
+          "name",
+          "account"
+        ],
+        "title": "Destination",
+        "type": "object"
+      },
       "DistillationSplits": {
         "additionalProperties": false,
         "properties": {
@@ -3193,6 +3273,31 @@
           "speed_limit_clipped"
         ],
         "title": "ExecutionEvidence",
+        "type": "object"
+      },
+      "FetchRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "enum": [
+              "dataset",
+              "model"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "link": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Link",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "link"
+        ],
+        "title": "FetchRequest",
         "type": "object"
       },
       "FrameIdentity": {
@@ -6584,6 +6689,82 @@
         "title": "PublicRuntime",
         "type": "object"
       },
+      "PublishRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "dataset",
+              "model"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "private": {
+            "default": true,
+            "title": "Private",
+            "type": "boolean"
+          },
+          "repo_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repo Id"
+          }
+        },
+        "required": [
+          "kind",
+          "id"
+        ],
+        "title": "PublishRequest",
+        "type": "object"
+      },
+      "Published": {
+        "additionalProperties": false,
+        "properties": {
+          "private": {
+            "title": "Private",
+            "type": "boolean"
+          },
+          "published_at": {
+            "title": "Published At",
+            "type": "string"
+          },
+          "repo_id": {
+            "title": "Repo Id",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "repo_id",
+          "url",
+          "private",
+          "revision",
+          "published_at"
+        ],
+        "title": "Published",
+        "type": "object"
+      },
       "Receipt": {
         "additionalProperties": false,
         "properties": {
@@ -8197,6 +8378,57 @@
           "stop_requested"
         ],
         "title": "SessionStatus",
+        "type": "object"
+      },
+      "SharingAccount": {
+        "additionalProperties": false,
+        "properties": {
+          "connected": {
+            "title": "Connected",
+            "type": "boolean"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "enum": [
+                  "settings",
+                  "machine"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username"
+          }
+        },
+        "required": [
+          "connected"
+        ],
+        "title": "SharingAccount",
         "type": "object"
       },
       "SimulationRequest": {
@@ -12256,6 +12488,28 @@
         ]
       }
     },
+    "/api/v1/huggingface-sharing/account": {
+      "get": {
+        "description": "Whose account a publish goes to: the token in Settings, else this computer's login.",
+        "operationId": "account_api_v1_huggingface_sharing_account_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SharingAccount"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Account",
+        "tags": [
+          "Hugging Face sharing"
+        ]
+      }
+    },
     "/api/v1/job-diagnostics-settings": {
       "get": {
         "operationId": "settings_api_v1_job_diagnostics_settings_get",
@@ -13751,6 +14005,179 @@
         "summary": "Example",
         "tags": [
           "Dataset library"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/huggingface-sharing/destination": {
+      "get": {
+        "description": "Where a dataset or model would be published, before anything is sent.",
+        "operationId": "destination_api_v1_projects__project_id__huggingface_sharing_destination_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "required": true,
+            "schema": {
+              "enum": [
+                "dataset",
+                "model"
+              ],
+              "title": "Kind",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "maxLength": 300,
+              "minLength": 1,
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Destination"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Destination",
+        "tags": [
+          "Hugging Face sharing"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/huggingface-sharing/fetch": {
+      "post": {
+        "description": "Start adding a dataset or model from a Hugging Face link or ``owner/name``.",
+        "operationId": "fetch_api_v1_projects__project_id__huggingface_sharing_fetch_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FetchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkJob"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Fetch",
+        "tags": [
+          "Hugging Face sharing"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/huggingface-sharing/publish": {
+      "post": {
+        "description": "Start publishing a saved dataset or a model. The repository is private by default.",
+        "operationId": "publish_api_v1_projects__project_id__huggingface_sharing_publish_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublishRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkJob"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Publish",
+        "tags": [
+          "Hugging Face sharing"
         ]
       }
     },
