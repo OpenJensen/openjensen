@@ -979,8 +979,10 @@ export function useRobotLab() {
       setMotionReady(false);
     }
     if (index >= 3 && step < 3 && !active) {
+      // With no port chosen yet, an empty port must not match a saved profile whose arm
+      // is unplugged (its port is empty too): take the connected follower instead.
       const follower =
-        catalog.find((d) => d.port === followerDevice && d.role === 'follower') ??
+        (followerDevice ? catalog.find((d) => d.port === followerDevice && d.role === 'follower') : undefined) ??
         catalog.find((d) => d.role === 'follower' && d.connected);
       const leader = catalog.find((d) => d.role === 'leader' && d.connected && d.id !== follower?.id);
       if (follower) {

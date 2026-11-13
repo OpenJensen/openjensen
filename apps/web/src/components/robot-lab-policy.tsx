@@ -77,6 +77,33 @@ export function RobotLabPolicy({ lab }: { lab: RobotLabState }) {
     const timer = window.setTimeout(() => setExpiredCheck(checkStamp), remaining ?? 60_000);
     return () => window.clearTimeout(timer);
   }, [checkPassed, checkStamp, checkExpired, remaining]);
+  // What the run is waiting for, in order, so a greyed-out button is never a riddle.
+  const loaded = policy?.phase === 'ready' && policy.policy_id === selectedId;
+  const nextStep = running
+    ? null
+    : !selectedId
+      ? 'Choose an installed policy.'
+      : !loaded
+        ? 'Load the policy.'
+        : !taskReady
+          ? 'Type the task instruction: what the policy should do, in the words used while recording.'
+          : !camerasReady
+            ? 'Connect a camera for each view.'
+            : !preflight || !checkedTheseCameras || checkExpired
+              ? 'Run the camera and inference check.'
+              : preflight.planning_pause_needed && !planningPause
+                ? 'Tick “Allow planning pauses for this run” and run the check again.'
+                : !preflight.passed
+                  ? 'The check did not pass; see its message above, then run it again.'
+                  : !lab.active && lab.canAct && !lab.canUseArm
+                    ? 'Choose the connected follower device at the top.'
+                    : !lab.active && !lab.calibrated
+                      ? 'Calibrate the follower arm under Devices.'
+                      : !attending
+                        ? 'Confirm that you are present and the arm’s path is clear.'
+                        : !prepared
+                          ? 'Enable policy control.'
+                          : 'Run policy.';
   const loadPolicy = (
     <button
       className="secondary-button"
@@ -304,6 +331,11 @@ export function RobotLabPolicy({ lab }: { lab: RobotLabState }) {
                 </label>
                 {lab.active && !prepared && !running && (
                   <Notice kind="warning">Stop the current session before preparing policy control.</Notice>
+                )}
+                {nextStep && (
+                  <p className="robot-lab-subtle" role="status" aria-label="Next step">
+                    Next: {nextStep}
+                  </p>
                 )}
                 <div className="robot-lab-actions" role="group" aria-label="Policy run controls">
                   {loadPolicy}

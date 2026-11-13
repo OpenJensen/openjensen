@@ -2912,6 +2912,50 @@ test('a policy trained on two views is checked and run with a camera for each', 
   expect(state.errors).toEqual([]);
 });
 
+test('Run policy names what each greyed-out step is waiting for', async ({ page }) => {
+  const state = await fixture(page, true, 'Darwin', false);
+  state.policyKind = 'smolvla';
+  await page.reload();
+  await openTab(page, 'Run policy');
+  const next = page.getByRole('status', { name: 'Next step' });
+  const check = page.getByRole('button', { name: 'Check camera and inference rate', exact: true });
+  await expect(next).toHaveText('Next: Load the policy.');
+  await page.getByRole('button', { name: 'Load policy', exact: true }).click();
+  // The check stays greyed out until the task is typed, and now the page says so.
+  await expect(next).toContainText('Type the task instruction');
+  await expect(check).toBeDisabled();
+  await page.getByLabel('Task instruction', { exact: true }).fill('Pick up the duck.');
+  await expect(next).toHaveText('Next: Run the camera and inference check.');
+  await check.click();
+  await expect(next).toContainText('Confirm that you are present');
+  await page.getByRole('checkbox', { name: /I am present; the arm is secured/ }).check();
+  await expect(next).toHaveText('Next: Enable policy control.');
+  await page.getByRole('button', { name: 'Enable policy control', exact: true }).click();
+  await expect(next).toHaveText('Next: Run policy.');
+  await page.getByRole('button', { name: 'Stop arm and disable torque' }).click();
+  expect(state.errors).toEqual([]);
+});
+
+test('an unplugged saved follower profile is not preselected over the connected arm', async ({ page }) => {
+  const state = await fixture(page, true, 'Darwin', false);
+  // A saved profile whose arm is unplugged has an empty port, as an unchosen device does.
+  state.catalog.unshift({
+    id: 'profile-old-follower',
+    port: '',
+    name: 'so101_follower',
+    robot_id: 'so101_follower',
+    role: 'follower',
+    profile_role: 'follower',
+    serial_number: null,
+    connected: false,
+    description: 'Saved device',
+  });
+  await page.reload();
+  await openTab(page, 'Run policy');
+  await expect(page.locator('label', { hasText: 'Follower device' }).locator('select')).toHaveValue('arm-a');
+  expect(state.errors).toEqual([]);
+});
+
 test('a policy that plans slowly runs only after the operator allows planning pauses', async ({ page }, testInfo) => {
   const state = await fixture(page, true, 'Darwin', false);
   state.policyPlanningMs = 680;
