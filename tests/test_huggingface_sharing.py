@@ -899,3 +899,9 @@ def test_an_inventory_is_the_identity_the_dataset_reader_gives_the_same_folder(t
     identity, files = sharing.inventory(folder)
     assert identity == run_worker(folder, "detect")["sha256"]
     assert [row[0] for row in files][:2] == ["a/early.txt", "a-b/late.txt"]
+
+
+def test_sizes_are_written_the_way_a_person_reads_them():
+    assert sharing.size_text(300) == "1 KB" and sharing.size_text(133_000) == "130 KB"
+    assert sharing.size_text(483 * 1024**2) == "483.0 MB"
+    assert sharing.size_text(1_329_790_998) == "1.24 GB"
