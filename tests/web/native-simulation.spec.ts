@@ -651,6 +651,8 @@ for (const width of [320, 390])
     await page.keyboard.press('Tab');
     await expect(navigation.getByRole('link', { name: 'Models', exact: true })).toBeFocused();
     await page.keyboard.press('Tab');
+    await expect(navigation.getByRole('link', { name: 'Jobs', exact: true })).toBeFocused();
+    await page.keyboard.press('Tab');
     const cloud = page.getByRole('link', { name: 'Cloud runs', exact: true });
     await expect(cloud).toBeFocused();
     for (const name of ['Modules', 'Cloud & APIs', 'Settings']) {

@@ -1181,7 +1181,7 @@ test('ACT export-only computer never appears as an engine execution target', asy
       await expect(page.getByRole('button', { name: 'ACT', exact: true })).toHaveCount(0);
       continue;
     }
-    if (stage !== 'Run') await page.getByRole('button', { name: create, exact: true }).click();
+    if (stage !== 'Simulate') await page.getByRole('button', { name: create, exact: true }).click();
     const target = page.getByRole('group', { name: 'Compute', exact: true });
     await expect(target).not.toContainText('Local CPU export');
     if (stage !== 'Quantize') await expect(target.getByRole('radio')).toHaveCount(0);

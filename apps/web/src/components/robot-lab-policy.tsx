@@ -21,6 +21,8 @@ const stages = [
 type Stage = (typeof stages)[number]['id'];
 const lengths = [10, 30, 60, 120, 300, 600];
 const lengthLabel = (seconds: number) => (seconds < 60 ? `${seconds} s` : `${seconds / 60} min`);
+const countdown = (seconds: number) =>
+  seconds < 60 ? `${seconds} s` : `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 const taskKey = 'openjensen.robot-lab.policy-tasks';
 
 function savedTasks(): Record<string, string> {
@@ -60,6 +62,9 @@ export function RobotLabPolicy({ lab }: { lab: RobotLabState }) {
   const choice = installed.find((item) => item.id === selectedId);
   const running = lab.session?.mode === 'policy';
   const maxDuration = policy?.limits?.max_run_seconds ?? 120;
+  // The service decides the longest run; a choice above it falls back to the longest offered.
+  const offered = lengths.filter((seconds) => seconds <= maxDuration);
+  const runSeconds = offered.includes(duration) ? duration : (offered.at(-1) ?? Math.max(1, Math.floor(maxDuration)));
   const offline = choice?.offline_only ?? false;
   const requiresTask = choice?.task_required ?? false;
   const taskReady = !requiresTask || !!lab.task.trim();
@@ -199,14 +204,14 @@ export function RobotLabPolicy({ lab }: { lab: RobotLabState }) {
             camera_index: lab.cameraIndex,
             ...(views.length > 1 ? { cameras } : {}),
             ...(allowPause ? { allow_planning_pause: true } : {}),
-            duration_seconds: duration,
+            duration_seconds: runSeconds,
             ...(task ? { task } : {}),
           });
           if (!current()) {
             void robotApi.stop().catch(() => undefined);
             return abandon();
           }
-          setFinishAt(Date.now() + duration * 1000);
+          setFinishAt(Date.now() + runSeconds * 1000);
           setNow(Date.now());
           return status;
         } catch (error) {
@@ -244,14 +249,7 @@ export function RobotLabPolicy({ lab }: { lab: RobotLabState }) {
                 : !attending
                   ? 'Tick the box above once you are at the arm.'
                   : null;
-  const canStart =
-    !!choice?.compatible &&
-    !!catalog.data?.runtime.configured &&
-    !blocker &&
-    !lab.active &&
-    !lab.busy &&
-    duration >= 1 &&
-    duration <= maxDuration;
+  const canStart = !!choice?.compatible && !!catalog.data?.runtime.configured && !blocker && !lab.active && !lab.busy;
   const stageIndex = running ? 3 : stage ? stages.findIndex((item) => item.id === stage) : -1;
   const failedIndex = failure ? stages.findIndex((item) => item.id === failure.stage) : -1;
   const remaining = running && finishAt ? Math.max(0, Math.ceil((finishAt - now) / 1000)) : null;
@@ -321,7 +319,7 @@ export function RobotLabPolicy({ lab }: { lab: RobotLabState }) {
             )}
             {choice && !offline && (
               <>
-                <RobotLabControlDevices lab={lab} leader={false} />
+                <RobotLabControlDevices lab={lab} leader={false} hideLeaders />
                 {views.map((view) => (
                   <div className="robot-lab-field" key={view}>
                     <span className="robot-lab-field-label">
@@ -367,12 +365,13 @@ export function RobotLabPolicy({ lab }: { lab: RobotLabState }) {
                   <span className="robot-lab-field-label">Run for</span>
                   <Segmented
                     label="Policy run duration"
-                    value={duration}
+                    value={runSeconds}
                     disabled={lab.busy || lab.active}
                     onChange={setDuration}
-                    options={lengths
-                      .filter((seconds) => seconds <= maxDuration)
-                      .map((seconds) => ({ value: seconds, label: lengthLabel(seconds) }))}
+                    options={(offered.length ? offered : [runSeconds]).map((seconds) => ({
+                      value: seconds,
+                      label: lengthLabel(seconds),
+                    }))}
                   />
                 </div>
                 <label className="robot-lab-check">
@@ -443,7 +442,7 @@ export function RobotLabPolicy({ lab }: { lab: RobotLabState }) {
                     <div>
                       <strong>
                         {remaining !== null
-                          ? `Running · ${lengthLabel(remaining)} left`
+                          ? `Running · ${countdown(remaining)} left`
                           : `Running ${policy?.name ?? ''}`}
                       </strong>
                       <small>

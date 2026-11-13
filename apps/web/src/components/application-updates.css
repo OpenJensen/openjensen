@@ -78,3 +78,12 @@
   gap: 8px;
   margin-top: 24px;
 }
+
+/* A long development label is cut short on a phone instead of pushing the header off the screen. */
+@media (max-width: 760px) {
+  .application-version.development {
+    max-width: 96px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}

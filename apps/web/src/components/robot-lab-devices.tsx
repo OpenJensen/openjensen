@@ -263,9 +263,12 @@ function RoleButtons({ lab }: { lab: RobotLabState }) {
 export function RobotLabControlDevices({
   lab,
   leader = lab.mode === 'leader',
+  hideLeaders = false,
 }: {
   lab: RobotLabState;
   leader?: boolean;
+  /** Leave out arms set up as leaders: a policy drives the follower, and a leader only adds a wrong choice. */
+  hideLeaders?: boolean;
 }) {
   const locked = lab.active || lab.busy || !!lab.recording?.active;
   const card = (device: RobotLabState['catalog'][number]) => ({
@@ -284,7 +287,9 @@ export function RobotLabControlDevices({
   // Only arms that are plugged in can be used, so only those are offered; one in use stays listed.
   const usable = (device: RobotLabState['catalog'][number], chosen: string | null) =>
     device.connected || (locked && device.id === chosen);
-  const followers = lab.catalog.filter((d) => usable(d, follower));
+  const followers = lab.catalog.filter(
+    (d) => usable(d, follower) && (!hideLeaders || d.role !== 'leader' || d.id === follower),
+  );
   const leaderId = lab.catalog.find((d) => d.port === lab.leaderPort && d.robot_id === lab.leaderId)?.id ?? null;
   const leaders = lab.catalog.filter((d) => d.port !== lab.port && usable(d, leaderId));
   return (

@@ -2814,6 +2814,9 @@ test('one Start loads the policy, checks it, holds the arm and runs, then renews
   const state = await fixture(page, true, 'Darwin', false);
   await openRunPolicy(page);
   await expect(chosen(page, 'Installed policy')).toContainText('Pen ACT');
+  // A policy drives the follower: the arm set up as a leader is not offered here.
+  await expect(chosen(page, 'Follower device')).toHaveAttribute('data-value', 'arm-a');
+  await expect(choice(page, 'Follower device', 'arm-b')).toHaveCount(0);
   const next = page.getByRole('status', { name: 'Next step' });
   await expect(startRun(page)).toBeDisabled();
   await expect(next).toHaveText('Tick the box above once you are at the arm.');
