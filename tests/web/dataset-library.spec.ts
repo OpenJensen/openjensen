@@ -891,7 +891,7 @@ test('unknown-owner records are workspace repair notices with no project or disc
   );
   expect(state.deletes).toEqual([]);
   await page.getByRole('link', { name: 'Dashboard', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Datasets', exact: true })).toContainText('1 saved datasets');
+  await expect(page.getByRole('button', { name: 'Datasets', exact: true })).toContainText(/1 saved dataset$/);
 });
 
 test('late label-save acknowledgement does not erase a newer draft after reopening', async ({ page }) => {
