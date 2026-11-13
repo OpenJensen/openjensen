@@ -39,7 +39,9 @@ PREDICTION_TOLERANCE = 5.0
 # A policy that plans a whole chunk of actions at once may need longer than the usual
 # prediction limit on a laptop. The operator can allow that for one run; the arm holds
 # its last target while the policy plans, and a longer pause still disables torque.
-PLANNING_PAUSE_SECONDS = 1.5
+# Planning that takes 0.6 s on an idle laptop GPU was measured at 1.7 s while other
+# programs used the same GPU, so the allowance leaves room for that.
+PLANNING_PAUSE_SECONDS = 3.0
 
 
 def prediction_limit(fps, planning_pause=False):
@@ -270,6 +272,8 @@ class PolicyRunner:
         self.generation = None
         self.check = None
         self.planning_pause = False
+        # Steps the loaded policy will answer from its plan without looking at the cameras.
+        self.replay = 0
         self.preview = None
         self.task = ""
         self.operation = 0
@@ -393,6 +397,7 @@ class PolicyRunner:
             runtime = self.process_factory(
                 python, model["checkpoint"], device, self.root / "runtime.log", model["camera_key"]
             )
+            self.replay = 0  # A newly loaded policy has no plan.
             if runtime.info.get("camera_key") != model["camera_key"]:
                 runtime.close()
                 raise ValueError("Loaded policy camera differs from its admitted manifest")
@@ -449,8 +454,29 @@ class PolicyRunner:
             raise ValueError("Choose a different available camera for each policy camera input")
         return {key: chosen[key] for key in keys}
 
+    def _reset_policy(self):
+        """Clear the policy's plan; its next step plans again and needs the cameras."""
+        self.runtime.request({"reset": True})
+        self.replay = 0
+
+    def _predict(self, message, timeout):
+        """One step of the policy, remembering how many replay steps follow it."""
+        reply = self.runtime.request(message, timeout=timeout)
+        queued = reply.get("queued") if isinstance(reply, dict) else None
+        self.replay = queued if type(queued) is int and queued > 0 else 0
+        return reply
+
     def _observation(self, cameras, state, task, max_age):
         """One request for the inference process and the capture time of each camera."""
+        if self.replay:
+            # The policy answers this step from its plan and does not look at the
+            # cameras, so the images are not encoded or sent. Each camera's latest frame
+            # time is still read: that is what the freshness rule watches on every step.
+            stamps = {
+                index: self.lab.camera.read_latest_timed(index, max_age)[1]
+                for index in cameras.values()
+            }
+            return {"state": state, "task": task}, stamps
         captures = {
             key: self.lab.camera.latest_timed_jpeg(index, max_age=max_age)
             for key, index in cameras.items()
@@ -528,7 +554,7 @@ class PolicyRunner:
                 source = "Uploaded image and supplied model state"
             if images is None and views > 1:
                 source += f"; the same image shown to all {views} camera inputs"
-            self.runtime.request({"reset": True})
+            self._reset_policy()
             before = time.monotonic()
             result = self.runtime.request(
                 {"state": state, "task": task}
@@ -613,7 +639,7 @@ class PolicyRunner:
                                 "Policy camera did not provide a fresh frame"
                             ) from None
                         time.sleep(0.02)
-            self.runtime.request({"reset": True})
+            self._reset_policy()
             samples, starts, stamps = [], [], {index: [] for index in cameras.values()}
             ages = {index: [] for index in cameras.values()}
             count = max(16, 2 * fps)
@@ -634,7 +660,7 @@ class PolicyRunner:
                 )
                 # No motor is involved here, so wait long enough to measure a slow
                 # prediction instead of ending the check with a timeout.
-                reply = self.runtime.request(message, timeout=PLANNING_PAUSE_SECONDS + 0.5)
+                reply = self._predict(message, PLANNING_PAUSE_SECONDS + 0.5)
                 action = reply.get("action")
                 if (
                     not isinstance(action, list)
@@ -649,7 +675,7 @@ class PolicyRunner:
                     ages[index].append(started - stamp)
                 due += 1 / fps
                 time.sleep(max(0, due - time.monotonic()))
-            self.runtime.request({"reset": True})
+            self._reset_policy()
             # The rate between slow steps; how many slow steps there may be is checked too.
             actual = (count - 1) / max(1e-6, starts[-1] - starts[0] - lost)
             # Every camera must keep up; the slowest one decides. A camera keeps up when
@@ -668,12 +694,16 @@ class PolicyRunner:
                     max((later - earlier for earlier, later in zip(seen, seen[1:])), default=0)
                     * 1000
                 )
-            mean = sum(samples) / count
             longest = max(samples)
+            # The steps where the policy plans are judged by ``longest`` and by how many
+            # there are. The ordinary steps between them must fit the frame period.
+            ordinary = [sample for sample in samples if sample <= max(0.15, 2 / fps)]
+            mean = sum(ordinary) / len(ordinary) if ordinary else longest
             steady = (
                 actual >= fps * 0.95
                 and mean <= 0.85 / fps
                 and late <= max(1, count // 20)
+                and count - len(ordinary) <= max(1, count // 20)
                 and unique >= count * 0.9
             )
             passed = steady and longest <= prediction_limit(fps, pause)
@@ -934,7 +964,7 @@ class PolicyRunner:
         try:
             if not isinstance(cameras, dict):  # One camera, given by its index.
                 cameras = {self.model["camera_key"]: cameras}
-            self.runtime.request({"reset": True})
+            self._reset_policy()
             deadline, due = time.monotonic() + duration, time.monotonic()
             window = max(16, 2 * self.model["fps"])
             camera_stamps = {index: deque(maxlen=window) for index in cameras.values()}
@@ -970,8 +1000,8 @@ class PolicyRunner:
                 if set(positions) != set(JOINTS) or time.monotonic() - self.last_health > 0.15:
                     raise ValueError("Fresh full-arm encoder observations are unavailable")
                 before = time.monotonic()
-                result = self.runtime.request(
-                    message, timeout=prediction_limit(self.model["fps"], self.planning_pause)
+                result = self._predict(
+                    message, prediction_limit(self.model["fps"], self.planning_pause)
                 )
                 action = result.get("action")
                 if (

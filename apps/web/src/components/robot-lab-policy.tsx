@@ -61,7 +61,7 @@ export function RobotLabPolicy({ lab }: { lab: RobotLabState }) {
     preflight?.camera_index === lab.cameraIndex &&
     (!cameras || sameCameras(preflight.cameras, cameras)) &&
     !!preflight.planning_pause === planningPause;
-  const pauseSeconds = policy?.limits?.planning_pause_seconds ?? 1.5;
+  const pauseSeconds = policy?.limits?.planning_pause_seconds ?? 3;
   const checkStamp = preflight?.checked_at;
   const remaining = preflight?.valid_for_ms;
   const checkPassed = preflight?.passed === true;

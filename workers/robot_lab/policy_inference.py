@@ -80,6 +80,25 @@ def main():
             tensor = torch.from_numpy(np.asarray(image).copy()).permute(2, 0, 1).float() / 255
             return tensor.unsqueeze(0)
 
+        def planned():
+            """Actions the policy has planned and not yet returned, when it replays a plan.
+
+            ACT and SmolVLA predict a chunk of actions from one observation and then
+            return them one step at a time without looking at later observations.
+            ``None`` for a policy that needs every observation (several observation steps,
+            or ACT's temporal ensembling, which never fills this queue).
+            """
+            if getattr(policy.config, "n_obs_steps", 1) != 1:
+                return None
+            queue = getattr(policy, "_action_queue", None)
+            if queue is None:
+                queues = getattr(policy, "_queues", None)
+                queue = queues.get("action") if isinstance(queues, dict) else None
+            return queue if hasattr(queue, "popleft") else None
+
+        def remaining():
+            return len(planned() or ())
+
         def infer(message):
             state = message.get("state")
             if (
@@ -88,6 +107,17 @@ def main():
                 or any(type(v) not in {int, float} or not math.isfinite(v) for v in state)
             ):
                 raise ValueError("Policy observation needs six finite joint values")
+            plan = planned()
+            if plan:
+                # A replay step: the policy would pop this same action whatever it is
+                # shown, so decoding the images and moving them to the device is wasted
+                # work, and on a laptop short of memory it is the work that stalls.
+                before = time.monotonic()
+                with torch.inference_mode():
+                    action = post(plan.popleft()).detach().cpu().reshape(-1).tolist()
+                if len(action) != 6 or not all(math.isfinite(x) for x in action):
+                    raise ValueError("Policy produced a non-finite or incompatible action")
+                return action, (time.monotonic() - before) * 1000
             images = message.get("images")
             if images is None and (len(cameras) == 1 or message.get("repeat") is True):
                 # A one-camera policy, or an offline preview that knowingly shows one
@@ -150,7 +180,12 @@ def main():
                     reply = {"reset": True}
                 else:
                     action, elapsed = infer(message)
-                    reply = {"action": action, "inference_ms": round(elapsed, 1)}
+                    # ``queued`` tells the caller how many following steps need no images.
+                    reply = {
+                        "action": action,
+                        "inference_ms": round(elapsed, 1),
+                        "queued": remaining(),
+                    }
         except (ValueError, TypeError, KeyError, OSError) as error:
             policy.reset()
             reply = {"error": str(error)[:300]}

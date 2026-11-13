@@ -14,7 +14,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import test_robot_lab as fixtures
 from hardware import JOINTS, HardwareError, normalized
 from motion import control_limits
-from policy import MAX_ACCELERATION, MAX_SPEED, PREDICTION_TOLERANCE, UNITS, admit
+from policy import (
+    MAX_ACCELERATION,
+    MAX_SPEED,
+    PLANNING_PAUSE_SECONDS,
+    PREDICTION_TOLERANCE,
+    UNITS,
+    admit,
+)
 from policy_contract import PIPELINES
 
 FRONT, SIDE = "observation.images.front", "observation.images.camera_4"
@@ -42,6 +49,10 @@ class Camera(fixtures.FakeCamera):
 
     def latest_timed_jpeg(self, index, max_age=0.15):
         return {"jpeg": b"test-observation", "captured_monotonic": self.stamp or time.monotonic()}
+
+    def read_latest_timed(self, index, max_age=0.5):
+        # The frame itself is not needed by the caller, only when it was captured.
+        return None, self.latest_timed_jpeg(index, max_age)["captured_monotonic"]
 
 
 class PolicyTests(unittest.TestCase):
@@ -568,7 +579,7 @@ class PolicyTests(unittest.TestCase):
         self.assertTrue(check["passed"], check)
         self.assertTrue(check["planning_pause"])
         self.assertFalse(check["planning_pause_needed"])
-        self.assertEqual(check["prediction_limit_ms"], 1500)
+        self.assertEqual(check["prediction_limit_ms"], PLANNING_PAUSE_SECONDS * 1000)
         self.assertEqual(self.buses, [])
         with self.assertRaisesRegex(ValueError, "Choose a camera"):
             runner.preflight({"camera_index": 0, "allow_planning_pause": "yes"})
@@ -578,11 +589,15 @@ class PolicyTests(unittest.TestCase):
         runner.load({"policy_id": "pen"})
         self.lab.camera = Camera()
         self.planning_takes(runner, 1.6)
-        for payload in ({"camera_index": 0}, {"camera_index": 0, "allow_planning_pause": True}):
-            runner.preflight(payload)
-            self.assertFalse(runner.check["passed"])
-            self.assertFalse(runner.check["planning_pause_needed"])
-            self.assertIn("cannot sustain", runner.check["message"])
+        with patch("policy.PLANNING_PAUSE_SECONDS", 1.5):
+            for payload in (
+                {"camera_index": 0},
+                {"camera_index": 0, "allow_planning_pause": True},
+            ):
+                runner.preflight(payload)
+                self.assertFalse(runner.check["passed"])
+                self.assertFalse(runner.check["planning_pause_needed"])
+                self.assertIn("cannot sustain", runner.check["message"])
 
     def test_a_run_pauses_for_planning_only_when_its_check_allowed_it(self):
         runner = self.prepare()
@@ -714,6 +729,86 @@ class PolicyTests(unittest.TestCase):
         self.assertEqual(self.lab.mode, "idle")
         self.assertFalse(self.lab.torque)
         self.assertIn("camera fell below the trained frame rate", self.lab.error)
+
+    def chunked(self, runner, size):
+        """Make the fake policy plan ``size`` actions at a time, like ACT and SmolVLA: the
+        first step after a reset plans, the following ones replay and say how many remain."""
+        sent, state = [], {"queued": 0}
+        answer = runner.runtime.request
+
+        def request(message, timeout=2):
+            if message.get("reset"):
+                state["queued"] = 0
+                return answer(message)
+            sent.append(message)
+            if state["queued"] == 0:
+                if "jpeg" not in message and "images" not in message:
+                    return {"error": "Policy observation needs one image for every trained camera"}
+                state["queued"] = size
+            state["queued"] -= 1
+            return answer(message) | {"queued": state["queued"]}
+
+        runner.runtime.request = request
+        return sent
+
+    def test_images_are_sent_only_on_the_steps_where_the_policy_plans(self):
+        runner, _, _ = self.install()
+        runner.load({"policy_id": "pen"})
+        self.lab.camera = Camera()
+        encoded = []
+        latest = self.lab.camera.latest_timed_jpeg
+        self.lab.camera.latest_timed_jpeg = lambda index, max_age=0.15: (
+            encoded.append(index),
+            latest(index, max_age),
+        )[1]
+        self.lab.camera.read_latest_timed = lambda index, max_age=0.5: (None, time.monotonic())
+        sent = self.chunked(runner, 10)
+        runner.preflight({"camera_index": 0})
+        self.assertTrue(runner.check["passed"], runner.check)
+        planning = [number for number, message in enumerate(sent) if "jpeg" in message]
+        self.assertEqual(planning, list(range(0, len(sent), 10)))
+        for message in sent:
+            self.assertEqual(len(message["state"]), 6)
+        # Every step still watched the camera; only the planning steps encoded a frame.
+        self.assertEqual(runner.check["fresh_frames"], runner.check["samples"])
+        self.assertEqual(len(encoded), 1 + len(planning))  # One more while the camera warms up.
+        # The check ends by clearing the plan, so whatever comes next plans first.
+        self.assertEqual(runner.replay, 0)
+
+    def test_a_slow_camera_still_stops_a_run_on_steps_that_only_replay(self):
+        runner = self.prepare()
+        self.camera_at(8)
+        self.chunked(runner, 1000)
+        runner.start(self.run_payload())
+
+        def control_loop():
+            while self.lab.mode == "policy":
+                try:
+                    runner.apply(dict(self.lab.positions), time.monotonic())
+                except HardwareError as error:
+                    self.lab.stop(str(error))
+                    return
+                time.sleep(0.01)
+
+        threading.Thread(target=control_loop, daemon=True).start()
+        deadline = time.monotonic() + 5
+        while self.lab.mode != "idle" and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.assertEqual(self.lab.mode, "idle")
+        self.assertIn("camera fell below the trained frame rate", self.lab.error)
+
+    def test_a_policy_that_does_not_report_a_plan_gets_images_on_every_step(self):
+        runner, _, _ = self.install()
+        runner.load({"policy_id": "pen"})
+        self.lab.camera = Camera()
+        sent = []
+        answer = runner.runtime.request
+        runner.runtime.request = lambda message, timeout=2: (sent.append(message), answer(message))[
+            1
+        ]
+        runner.preflight({"camera_index": 0})
+        steps = [message for message in sent if not message.get("reset")]
+        self.assertTrue(steps and all("jpeg" in message for message in steps))
 
     def test_preflight_measures_native_camera_path_without_arming(self):
         runner, _, _ = self.install()
