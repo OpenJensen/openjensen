@@ -16,7 +16,8 @@ damage a repository before it is fetched. Every call is appended to ``calls.json
 
 Knobs for failure cases: a token containing ``readonly`` may not write and one
 containing ``invalid`` is rejected; ``FAKE_HUB_STOP_AFTER_BEGIN`` names a repository
-whose upload dies after its first file; ``FAKE_HUB_DELAY`` slows every transfer.
+whose upload dies after its first file; ``FAKE_HUB_DELAY`` slows every transfer before
+it starts and ``FAKE_HUB_UPLOAD_DELAY`` slows an upload once it is under way.
 """
 
 import fnmatch
@@ -136,6 +137,7 @@ def main():
         if os.environ.get("FAKE_HUB_STOP_AFTER_BEGIN") == repo:
             answer({"error": "Could not reach Hugging Face. Check the connection and try again."})
         print(json.dumps({"progress": {"stage": "uploading"}}), flush=True)
+        time.sleep(float(os.environ.get("FAKE_HUB_UPLOAD_DELAY", "0")))
         for name, path in files_of(Path(request["folder"])).items():
             if any(fnmatch.fnmatch(name, pattern) for pattern in NEVER_UPLOADED):
                 continue

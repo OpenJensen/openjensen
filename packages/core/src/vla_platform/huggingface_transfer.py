@@ -195,6 +195,7 @@ async def push(
     expect: list[str] | None = None,
     tag: str | None = None,
     progress=None,
+    timeout: float = 3600,
 ) -> dict:
     """Publish ``folder``. ``token=None`` uses the login saved on this computer.
 
@@ -223,6 +224,7 @@ async def push(
         },
         token,
         progress=progress,
+        timeout=timeout,
     )
 
 
@@ -236,6 +238,7 @@ async def pull(
     max_files: int = 4096,
     max_bytes: int = 2 * 1024**3,
     progress=None,
+    timeout: float = 3600,
 ) -> dict:
     if not REPOSITORY.fullmatch(repo_id):
         raise TransferError("Use a repository name such as you/pick-pen.")
@@ -251,4 +254,5 @@ async def pull(
         },
         token,
         progress=progress,
+        timeout=timeout,
     )

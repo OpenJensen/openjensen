@@ -20,6 +20,7 @@ import re
 import shutil
 import tarfile
 import tempfile
+import time
 from pathlib import Path, PurePosixPath
 from typing import Literal
 from uuid import uuid4
@@ -42,6 +43,10 @@ IDENTITY = r"^[a-f0-9]{32}$"
 TERMINAL = {"succeeded", "failed", "cancelled", "interrupted"}
 DISK_HEADROOM = 1024**3
 MODEL_BYTES = 2 * 1024**3
+# A transfer is a job that reports where it is and can be cancelled, so it may take as
+# long as a slow connection needs: 2 GiB up at 0.1 MB/s is close to six hours.
+TRANSFER_SECONDS = 6 * 3600
+HEARTBEAT_SECONDS = 30
 MODEL_FILES = 4096
 MAX_RECORD = 1024**2
 MAX_MARKER = 8 * 1024**2
@@ -290,8 +295,11 @@ def _extract(reader, destination: Path, limit: int):
         pass
 
 
-async def unpack(source, destination: Path, limit: int):
-    """Write a ``policy/`` archive stream out as a folder, without keeping the archive."""
+async def unpack(source, destination: Path, limit: int, received=None):
+    """Write a ``policy/`` archive stream out as a folder, without keeping the archive.
+
+    ``received`` is told how many bytes have arrived so far, after every piece.
+    """
     chunks: queue.Queue = queue.Queue(maxsize=8)
     destination.mkdir(parents=True)
     worker = asyncio.create_task(
@@ -307,11 +315,14 @@ async def unpack(source, destination: Path, limit: int):
                 await asyncio.sleep(0.01)
         return False
 
-    failed = True
+    failed, arrived = True, 0
     try:
         async for chunk in source:
             if not await send(chunk):
                 break
+            arrived += len(chunk)
+            if received is not None:
+                received(arrived)
         failed = False
     finally:
         closing = getattr(source, "aclose", None)
@@ -736,32 +747,48 @@ class HuggingFaceSharing:
         ident, inputs = record["id"], record["inputs"]
         size = sum((folder / name).stat().st_size for name in expect)
 
-        def progress(report):
-            if report.get("stage") == "uploading":
+        uploading = f"Uploading {len(expect)} files ({megabytes(size)}) to {inputs['repo_id']}"
+        state = {"task": None}
+
+        async def elapsed():
+            # The client reports no byte counts for an upload, so say how long it has run.
+            started = time.monotonic()
+            while True:
+                await asyncio.sleep(HEARTBEAT_SECONDS)
+                minutes = max(1, round((time.monotonic() - started) / 60))
                 self.jobs.progress(
-                    ident,
-                    "uploading",
-                    f"Uploading {len(expect)} files ({megabytes(size)}) to {inputs['repo_id']}",
+                    ident, "uploading", f"{uploading} · {minutes} min so far", event=False
                 )
+
+        def progress(report):
+            if report.get("stage") == "uploading" and state["task"] is None:
+                self.jobs.progress(ident, "uploading", uploading)
+                state["task"] = asyncio.create_task(elapsed())
 
         published = {**marker, "state": "published", "published_at": now()}
         files = {MARKER: json.dumps(published, indent=1) + "\n"}
         if "README.md" not in expect:
             files["README.md"] = card
-        result = await transfer.push(
-            kind,
-            folder,
-            inputs["repo_id"],
-            self.token(),
-            private=inputs["private"],
-            message=f"Publish {record['title']} from OpenJensen",
-            begin={MARKER: json.dumps({**marker, "state": "publishing"}, indent=1) + "\n"},
-            files=files,
-            marker=MARKER,
-            expect=expect,
-            tag=tag,
-            progress=progress,
-        )
+        try:
+            result = await transfer.push(
+                kind,
+                folder,
+                inputs["repo_id"],
+                self.token(),
+                private=inputs["private"],
+                message=f"Publish {record['title']} from OpenJensen",
+                begin={MARKER: json.dumps({**marker, "state": "publishing"}, indent=1) + "\n"},
+                files=files,
+                marker=MARKER,
+                expect=expect,
+                tag=tag,
+                progress=progress,
+                timeout=TRANSFER_SECONDS,
+            )
+        finally:
+            if state["task"] is not None:
+                state["task"].cancel()
+                await asyncio.gather(state["task"], return_exceptions=True)
         return {**result, "files": len(expect), "bytes": size}
 
     async def _publish_dataset(self, record):
@@ -805,8 +832,8 @@ class HuggingFaceSharing:
         return {**result, "sha256": identity}
 
     async def _publish_model(self, record):
+        from vla_platform import robot_policy_install
         from vla_platform.lifecycle.service import validate_bundle
-        from vla_platform.robot_policy_install import recorded_control
 
         ident, inputs, project_id = record["id"], record["inputs"], record["project_id"]
         lifecycle = self.app.state.execution.lifecycle
@@ -816,15 +843,32 @@ class HuggingFaceSharing:
             # The files live in cloud storage: bring them here once, straight to a folder.
             if shutil.disk_usage(self.data_dir).free < artifact.file_bytes + DISK_HEADROOM:
                 raise ValueError("Not enough free storage to bring this model here for publishing")
-            self.jobs.progress(
-                ident,
-                "collecting",
-                f"Bringing the model from cloud storage ({megabytes(artifact.file_bytes)})",
-            )
-            source = await lifecycle.download(project_id, artifact.id)
+            bringing = f"Bringing the model from cloud storage ({megabytes(artifact.file_bytes)})"
+            self.jobs.progress(ident, "collecting", bringing)
             directory = self.work / ident / "bundle"
             directory.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-            await unpack(source, directory, artifact.file_bytes + MAX_MARKER)
+            reported = [time.monotonic()]
+
+            def received(arrived):
+                if time.monotonic() - reported[0] >= 2:
+                    reported[0] = time.monotonic()
+                    share = min(99, arrived * 100 // max(1, artifact.file_bytes))
+                    self.jobs.progress(ident, "collecting", f"{bringing} · {share}%", event=False)
+
+            # The same allowance as installing a model, which fetches the same archive.
+            allowed = robot_policy_install.DOWNLOAD_SECONDS
+            try:
+                async with asyncio.timeout(allowed) as limit:
+                    source = await lifecycle.download(project_id, artifact.id)
+                    await unpack(source, directory, artifact.file_bytes + MAX_MARKER, received)
+            except TimeoutError:
+                if not limit.expired():
+                    raise
+                raise ValueError(
+                    "The model could not be fetched from storage within "
+                    f"{max(1, round(allowed / 60))} minutes. Check the connection and publish "
+                    "it again."
+                ) from None
         self.jobs.progress(ident, "preparing", "Checking every file against the model's manifest")
         manifest, sha, total = await asyncio.to_thread(validate_bundle, directory, directory.parent)
         if sha != artifact.manifest_sha256:
@@ -843,7 +887,9 @@ class HuggingFaceSharing:
                 "run_name": artifact.run_name,
                 # What the training recording proves about units and joint order travels
                 # with the model, so it installs on another machine as it does here.
-                "recorded_control": await recorded_control(self.app, project_id, artifact),
+                "recorded_control": await robot_policy_install.recorded_control(
+                    self.app, project_id, artifact
+                ),
             },
         )
         result = await self._push(
@@ -913,6 +959,7 @@ class HuggingFaceSharing:
                 max_files=max_files,
                 max_bytes=max_bytes,
                 progress=progress,
+                timeout=TRANSFER_SECONDS,
             )
         finally:
             await stop()

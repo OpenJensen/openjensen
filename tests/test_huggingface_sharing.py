@@ -7,6 +7,7 @@ bundle, the jobs, the files on disk and the installation on the robot's companio
 Requests go through the routes in ``huggingface_sharing_api.py``.
 """
 
+import asyncio
 import base64
 import hashlib
 import io
@@ -593,6 +594,12 @@ def test_a_trained_smolvla_checkpoint_installs_on_another_machine_after_a_round_
             )
             assert stream is None or stream.closed
         assert published["operation"] == "policy.publish" and published["module"] == "models"
+        assert [event["stage"] for event in published["events"]] == [
+            *(["collecting"] if cloud else []),
+            "preparing",
+            "uploading",
+            "succeeded",
+        ]
         assert published["result"]["private"] is True
         assert published["result"]["manifest_sha256"] == artifact.manifest_sha256
         repository = hub / "model/you/pen-v3"
@@ -697,6 +704,58 @@ def test_a_model_that_changed_on_the_hub_or_was_published_elsewhere_is_not_added
             json={"kind": "model", "id": "no-such-model"},
         )
         assert missing.status_code == 404
+
+
+def test_a_slow_upload_says_it_is_alive_and_a_stalled_cloud_fetch_gives_up_with_a_reason(
+    hub, tmp_path, monkeypatch
+):
+    class Stalled(CloudStream):
+        async def __aiter__(self):
+            yield self.archive[:4096]
+            await asyncio.sleep(30)
+
+    monkeypatch.setattr(sharing, "HEARTBEAT_SECONDS", 0.05)
+    monkeypatch.setenv("FAKE_HUB_UPLOAD_DELAY", "1")
+    with machine(tmp_path, "laptop") as laptop:
+        pid = project(laptop)
+        artifact, _, archive = trained_model(laptop, pid, units=True, cloud=True)
+        lifecycle = laptop.app.state.execution.lifecycle
+
+        # The connection is slow, not broken: the job keeps reporting while it uploads.
+        async def download(project_id, artifact_id):
+            return CloudStream(archive)
+
+        monkeypatch.setattr(lifecycle, "download", download)
+        started = share(laptop, pid, "publish", kind="model", id=artifact.id)
+        seen = set()
+        deadline = time.monotonic() + 20
+        while time.monotonic() < deadline:
+            value = laptop.get(f"/api/v1/projects/{pid}/work-jobs/{started['id']}").json()
+            seen.add(value["message"])
+            if value["status"] != "running":
+                break
+            time.sleep(0.02)
+        assert value["status"] == "succeeded", value
+        assert any(message and message.endswith("min so far") for message in seen), seen
+
+        # Cloud storage stops answering part way: the job ends with what to do next.
+        stalled = Stalled(archive)
+
+        async def stall(project_id, artifact_id):
+            return stalled
+
+        monkeypatch.setattr(lifecycle, "download", stall)
+        monkeypatch.setattr("vla_platform.robot_policy_install.DOWNLOAD_SECONDS", 0.3)
+        failed = finished(
+            laptop,
+            pid,
+            share(laptop, pid, "publish", kind="model", id=artifact.id, repo_id="you/second"),
+            "failed",
+        )
+        assert "could not be fetched from storage" in failed["message"]
+        assert "publish it again" in failed["message"] and stalled.closed
+        assert not (hub / "model/you/second").exists()
+        assert not (tmp_path / "laptop/huggingface-work").exists()
 
 
 def test_a_transfer_can_be_cancelled_and_one_cut_off_by_a_restart_says_so(
