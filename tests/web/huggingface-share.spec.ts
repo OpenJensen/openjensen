@@ -35,10 +35,10 @@ test('a saved dataset is published privately and added from its link in another 
   page,
 }, testInfo) => {
   const run = testInfo.project.name;
-  const laptop = await project(page, `Laptop ${run}`);
-  const macbook = await project(page, `MacBook ${run}`);
-  expect((await page.request.post(`/api/v1/projects/${laptop}/datasets/example`)).status()).toBe(202);
-  await enter(page, laptop, '/datasets/');
+  const sender = await project(page, `Sender ${run}`);
+  const receiver = await project(page, `Receiver ${run}`);
+  expect((await page.request.post(`/api/v1/projects/${sender}/datasets/example`)).status()).toBe(202);
+  await enter(page, sender, '/datasets/');
   await page.getByRole('button', { name: 'Open dataset Robot labeling playground' }).click();
   const labels = page.getByRole('region', { name: 'Dataset labeling' });
   await expect(labels.getByRole('link', { name: 'Export dataset' })).toBeVisible({ timeout: 60_000 });
@@ -54,16 +54,16 @@ test('a saved dataset is published privately and added from its link in another 
   await destination.fill(repository);
   const link = `https://huggingface.co/datasets/${repository}`;
   await expect(publish.getByText(link, { exact: true })).toBeVisible();
-  expect(await shareJobs(page, laptop)).toEqual([]);
+  expect(await shareJobs(page, sender)).toEqual([]);
   await page.screenshot({ path: testInfo.outputPath('publish-dataset.png'), fullPage: true });
 
   await publish.getByRole('button', { name: 'Publish privately', exact: true }).click();
   await expect(publish.getByText('Published privately.', { exact: true })).toBeVisible({ timeout: 45_000 });
   await expect(publish.getByRole('textbox', { name: 'Link to copy' })).toHaveValue(link);
   await expect(publish.getByRole('button', { name: 'Copy link', exact: true })).toBeVisible();
-  const [published] = await shareJobs(page, laptop);
+  const [published] = await shareJobs(page, sender);
   expect(published.operation).toBe('dataset.publish');
-  const sent = await (await page.request.get(`/api/v1/projects/${laptop}/work-jobs/${published.id}`)).json();
+  const sent = await (await page.request.get(`/api/v1/projects/${sender}/work-jobs/${published.id}`)).json();
   expect(sent.result.private).toBe(true);
   expect(sent.inputs).toMatchObject({ repo_id: repository, private: true });
   expect(JSON.stringify(sent)).not.toContain('hf_');
@@ -73,16 +73,16 @@ test('a saved dataset is published privately and added from its link in another 
   await expect(publish.getByRole('textbox', { name: 'Link to copy' })).toHaveValue(link);
 
   // The other machine: paste the link.
-  await selectProject(page, macbook);
+  await selectProject(page, receiver);
   await page.goto('/datasets/');
   const add = page.getByRole('form', { name: 'Add from a Hugging Face link' });
   await add.getByRole('textbox', { name: 'Add from a Hugging Face link' }).fill(link);
   await add.getByRole('button', { name: 'Add dataset', exact: true }).click();
   await expect(add.getByText('Added Robot labeling playground.')).toBeVisible({ timeout: 60_000 });
   await page.screenshot({ path: testInfo.outputPath('added-dataset.png'), fullPage: true });
-  const saved = await (await page.request.get(`/api/v1/datasets?project_id=${macbook}`)).json();
+  const saved = await (await page.request.get(`/api/v1/datasets?project_id=${receiver}`)).json();
   expect(saved).toHaveLength(1);
-  expect(saved[0]).toMatchObject({ status: 'ready', name: 'Robot labeling playground', project_id: macbook });
+  expect(saved[0]).toMatchObject({ status: 'ready', name: 'Robot labeling playground', project_id: receiver });
   expect(saved[0].detection.sha256).toBe(sent.result.sha256);
   await add.getByRole('button', { name: 'Open dataset', exact: true }).click();
   await expect(
@@ -104,15 +104,15 @@ test('a model is published only after an explicit privacy choice and added from 
   page,
 }, testInfo) => {
   const run = testInfo.project.name;
-  const laptop = await project(page, `Model laptop ${run}`);
-  const macbook = await project(page, `Model MacBook ${run}`);
-  const accepted = await page.request.post(`/api/v1/projects/${laptop}/policy-jobs`, {
+  const sender = await project(page, `Model sender ${run}`);
+  const receiver = await project(page, `Model Receiver ${run}`);
+  const accepted = await page.request.post(`/api/v1/projects/${sender}/policy-jobs`, {
     data: { operation: 'policy.import', runtime_id: 'browser-success', source_id: 'synthetic-source' },
   });
   expect(accepted.status()).toBe(202);
   await waitForJob(page.request, (await accepted.json()).id, 'succeeded');
-  const [original] = await (await page.request.get(`/api/v1/projects/${laptop}/artifacts`)).json();
-  await enter(page, laptop, '/models/');
+  const [original] = await (await page.request.get(`/api/v1/projects/${sender}/artifacts`)).json();
+  await enter(page, sender, '/models/');
   await page.getByRole('button', { name: `Open model ${original.label} · ${original.id}`, exact: true }).click();
   await page.getByRole('button', { name: 'Publish to Hugging Face', exact: true }).click();
   const publish = page.getByRole('region', { name: 'Publish to Hugging Face' });
@@ -137,7 +137,7 @@ test('a model is published only after an explicit privacy choice and added from 
   await expect(publish.getByRole('textbox', { name: 'Link to copy' })).toHaveValue(link);
   await page.screenshot({ path: testInfo.outputPath('published-model.png'), fullPage: true });
 
-  await selectProject(page, macbook);
+  await selectProject(page, receiver);
   await page.goto('/models/');
   const add = page.getByRole('form', { name: 'Add from a Hugging Face link' });
   const field = add.getByRole('textbox', { name: 'Add from a Hugging Face link' });
@@ -145,14 +145,14 @@ test('a model is published only after an explicit privacy choice and added from 
   await field.fill('browser-fixture/no-such-model');
   await add.getByRole('button', { name: 'Add model', exact: true }).click();
   await expect(add.getByRole('alert')).toContainText('was not found', { timeout: 30_000 });
-  expect(await (await page.request.get(`/api/v1/projects/${macbook}/artifacts`)).json()).toEqual([]);
+  expect(await (await page.request.get(`/api/v1/projects/${receiver}/artifacts`)).json()).toEqual([]);
   // Only the owner/name is needed.
   await field.fill(repository);
   await add.getByRole('button', { name: 'Add model', exact: true }).click();
   await expect(add.getByText(`Added ${original.label}.`)).toBeVisible({ timeout: 45_000 });
-  const [copy] = await (await page.request.get(`/api/v1/projects/${macbook}/artifacts`)).json();
+  const [copy] = await (await page.request.get(`/api/v1/projects/${receiver}/artifacts`)).json();
   expect(copy).toMatchObject({
-    project_id: macbook,
+    project_id: receiver,
     label: original.label,
     format: original.format,
     manifest_sha256: original.manifest_sha256,
@@ -171,12 +171,12 @@ test('a model is published only after an explicit privacy choice and added from 
 test('without a connected account the page says how to connect and offers nothing to send', async ({
   page,
 }, testInfo) => {
-  const laptop = await project(page, `No account ${testInfo.project.name}`);
-  const accepted = await page.request.post(`/api/v1/projects/${laptop}/policy-jobs`, {
+  const sender = await project(page, `No account ${testInfo.project.name}`);
+  const accepted = await page.request.post(`/api/v1/projects/${sender}/policy-jobs`, {
     data: { operation: 'policy.import', runtime_id: 'browser-success', source_id: 'synthetic-source' },
   });
   await waitForJob(page.request, (await accepted.json()).id, 'succeeded');
-  const [original] = await (await page.request.get(`/api/v1/projects/${laptop}/artifacts`)).json();
+  const [original] = await (await page.request.get(`/api/v1/projects/${sender}/artifacts`)).json();
   // This computer has neither a saved token nor an hf login.
   await page.route('**/huggingface-sharing/destination**', (route) =>
     route.fulfill({
@@ -199,11 +199,11 @@ test('without a connected account the page says how to connect and offers nothin
       },
     }),
   );
-  await enter(page, laptop, '/models/');
+  await enter(page, sender, '/models/');
   await page.getByRole('button', { name: `Open model ${original.label} · ${original.id}`, exact: true }).click();
   await page.getByRole('button', { name: 'Publish to Hugging Face', exact: true }).click();
   const publish = page.getByRole('region', { name: 'Publish to Hugging Face' });
   await expect(publish.getByRole('alert')).toContainText('run hf auth login on this computer');
   await expect(publish.getByRole('button', { name: /^Publish (privately|publicly)$/ })).toHaveCount(0);
-  expect(await shareJobs(page, laptop)).toEqual([]);
+  expect(await shareJobs(page, sender)).toEqual([]);
 });

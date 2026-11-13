@@ -126,10 +126,10 @@ def nowhere_but_the_credential(root, secret):
 def test_a_dataset_published_on_one_machine_is_the_same_dataset_on_another(hub, tmp_path):
     recording = tmp_path / "recording"
     build_dataset(recording, episodes=3)
-    with machine(tmp_path, "laptop") as laptop, machine(tmp_path, "macbook") as macbook:
-        pid = project(laptop)
-        original = save_dataset(laptop, pid, recording, "Pick up the pen!")
-        labelled = laptop.put(
+    with machine(tmp_path, "sender") as sender, machine(tmp_path, "receiver") as receiver:
+        pid = project(sender)
+        original = save_dataset(sender, pid, recording, "Pick up the pen!")
+        labelled = sender.put(
             f"/api/v1/datasets/{original['id']}/annotations",
             json={"revision": 0, "views": {CAMERA: "Front camera"}, "frames": {}},
         )
@@ -137,7 +137,7 @@ def test_a_dataset_published_on_one_machine_is_the_same_dataset_on_another(hub, 
 
         # The page shows where the dataset will go, and that it will be private, before
         # anything is sent.
-        destination = laptop.get(
+        destination = sender.get(
             f"/api/v1/projects/{pid}/huggingface-sharing/destination",
             params={"kind": "dataset", "id": original["id"]},
         ).json()
@@ -151,7 +151,7 @@ def test_a_dataset_published_on_one_machine_is_the_same_dataset_on_another(hub, 
         assert destination["published"] is None and not (hub / "calls.jsonl").exists()
 
         published = finished(
-            laptop, pid, share(laptop, pid, "publish", kind="dataset", id=original["id"])
+            sender, pid, share(sender, pid, "publish", kind="dataset", id=original["id"])
         )
         assert published["operation"] == "dataset.publish" and published["module"] == "datasets"
         link = published["result"]["url"]
@@ -170,48 +170,48 @@ def test_a_dataset_published_on_one_machine_is_the_same_dataset_on_another(hub, 
         assert (hub / "dataset/you/pick-up-the-pen.tag").read_text() == "v3.0"
         assert hashes(recording).items() <= hashes(repository).items()
         assert "LeRobot" in (repository / "README.md").read_text()
-        again = laptop.get(
+        again = sender.get(
             f"/api/v1/projects/{pid}/huggingface-sharing/destination",
             params={"kind": "dataset", "id": original["id"]},
         ).json()
         assert again["published"]["url"] == link and again["published"]["private"] is True
 
         # The other machine has never seen this dataset: one pasted link brings it over.
-        other = project(macbook, "Run on the arm")
+        other = project(receiver, "Run on the arm")
         fetched = finished(
-            macbook, other, share(macbook, other, "fetch", kind="dataset", link=link)
+            receiver, other, share(receiver, other, "fetch", kind="dataset", link=link)
         )
         result = fetched["result"]
         assert result["verified"] is True and result["already_saved"] is False
-        copy = macbook.get(f"/api/v1/datasets/{result['dataset_id']}").json()
+        copy = receiver.get(f"/api/v1/datasets/{result['dataset_id']}").json()
         assert copy["status"] == "ready" and copy["name"] == "Pick up the pen!"
         assert copy["project_id"] == other
         assert copy["detection"]["sha256"] == original["detection"]["sha256"]
         assert copy["annotations"]["views"] == {CAMERA: "Front camera"}
         assert copy["huggingface"]["repo_id"] == "you/pick-up-the-pen"
-        saved = macbook.app.state.dataset_library.resolve(result["dataset_id"], other)
+        saved = receiver.app.state.dataset_library.resolve(result["dataset_id"], other)
         assert hashes(saved) == hashes(recording)
-        listed = macbook.get("/api/v1/datasets", params={"project_id": other}).json()
+        listed = receiver.get("/api/v1/datasets", params={"project_id": other}).json()
         assert [row["id"] for row in listed] == [result["dataset_id"]]
 
         # Pasting the same link again gives the dataset that is already there.
         second = finished(
-            macbook,
+            receiver,
             other,
-            share(macbook, other, "fetch", kind="dataset", link="you/pick-up-the-pen"),
+            share(receiver, other, "fetch", kind="dataset", link="you/pick-up-the-pen"),
         )
         assert second["result"]["dataset_id"] == result["dataset_id"]
         assert second["result"]["already_saved"] is True
-        assert len(macbook.get("/api/v1/datasets", params={"project_id": other}).json()) == 1
+        assert len(receiver.get("/api/v1/datasets", params={"project_id": other}).json()) == 1
 
-        history = macbook.get(f"/api/v1/projects/{other}/work-jobs").json()
+        history = receiver.get(f"/api/v1/projects/{other}/work-jobs").json()
         assert {"dataset.fetch", "dataset.import"} == {row["operation"] for row in history}
-        assert not (tmp_path / "macbook/huggingface-work").exists()
+        assert not (tmp_path / "receiver/huggingface-work").exists()
 
     # The token reached the client through its environment and is written nowhere.
     assert all(call["token"] == TOKEN for call in calls(hub))
     assert TOKEN not in json.dumps([[call["argv"], call["request"]] for call in calls(hub)])
-    for name in ("laptop", "macbook"):
+    for name in ("sender", "receiver"):
         assert nowhere_but_the_credential(tmp_path / name, TOKEN) == []
 
 
@@ -220,63 +220,63 @@ def test_a_damaged_or_unfinished_repository_is_refused_and_leaves_nothing_behind
 ):
     recording = tmp_path / "recording"
     build_dataset(recording, episodes=2)
-    with machine(tmp_path, "laptop") as laptop, machine(tmp_path, "macbook") as macbook:
-        pid, other = project(laptop), project(macbook)
-        original = save_dataset(laptop, pid, recording, "First take")
+    with machine(tmp_path, "sender") as sender, machine(tmp_path, "receiver") as receiver:
+        pid, other = project(sender), project(receiver)
+        original = save_dataset(sender, pid, recording, "First take")
 
         # The connection drops after the first file: the publish fails and says so.
         monkeypatch.setenv("FAKE_HUB_STOP_AFTER_BEGIN", "you/first-take")
         failed = finished(
-            laptop, pid, share(laptop, pid, "publish", kind="dataset", id=original["id"]), "failed"
+            sender, pid, share(sender, pid, "publish", kind="dataset", id=original["id"]), "failed"
         )
         assert "Could not reach Hugging Face" in failed["message"]
         half = finished(
-            macbook,
+            receiver,
             other,
-            share(macbook, other, "fetch", kind="dataset", link="you/first-take"),
+            share(receiver, other, "fetch", kind="dataset", link="you/first-take"),
             "failed",
         )
         assert "did not finish" in half["message"]
 
         # Publishing again completes the same repository.
         monkeypatch.delenv("FAKE_HUB_STOP_AFTER_BEGIN")
-        finished(laptop, pid, share(laptop, pid, "publish", kind="dataset", id=original["id"]))
+        finished(sender, pid, share(sender, pid, "publish", kind="dataset", id=original["id"]))
 
         # Someone changes a file and adds another on the Hub afterwards.
         data = hub / "dataset/you/first-take/data/chunk-000/file-000.parquet"
         intact = data.read_bytes()
         data.write_bytes(intact + b"changed")
         damaged = finished(
-            macbook,
+            receiver,
             other,
-            share(macbook, other, "fetch", kind="dataset", link="you/first-take"),
+            share(receiver, other, "fetch", kind="dataset", link="you/first-take"),
             "failed",
         )
         assert (
             "differs from what was published (data/chunk-000/file-000.parquet)"
             in damaged["message"]
         )
-        assert macbook.get("/api/v1/datasets", params={"project_id": other}).json() == []
-        assert not (tmp_path / "macbook/huggingface-work").exists()
+        assert receiver.get("/api/v1/datasets", params={"project_id": other}).json() == []
+        assert not (tmp_path / "receiver/huggingface-work").exists()
 
         # An extra file that was never published is simply not part of the dataset.
         data.write_bytes(intact)
         (hub / "dataset/you/first-take/notes.txt").write_text("added on the website")
         fetched = finished(
-            macbook, other, share(macbook, other, "fetch", kind="dataset", link="you/first-take")
+            receiver, other, share(receiver, other, "fetch", kind="dataset", link="you/first-take")
         )
-        saved = macbook.app.state.dataset_library.resolve(fetched["result"]["dataset_id"], other)
+        saved = receiver.app.state.dataset_library.resolve(fetched["result"]["dataset_id"], other)
         assert hashes(saved) == hashes(recording)
 
         # A link to nothing, and text that is no link at all.
         missing = finished(
-            macbook,
+            receiver,
             other,
-            share(macbook, other, "fetch", kind="dataset", link="you/nothing"),
+            share(receiver, other, "fetch", kind="dataset", link="you/nothing"),
             "failed",
         )
         assert "was not found" in missing["message"]
-        refused = macbook.post(
+        refused = receiver.post(
             f"/api/v1/projects/{other}/huggingface-sharing/fetch",
             json={"kind": "dataset", "link": "https://example.com/you/first-take"},
         )
@@ -286,9 +286,9 @@ def test_a_damaged_or_unfinished_repository_is_refused_and_leaves_nothing_behind
 def test_publishing_is_private_unless_public_is_chosen_and_never_touches_other_work(hub, tmp_path):
     recording = tmp_path / "recording"
     build_dataset(recording, episodes=2)
-    with machine(tmp_path, "laptop") as laptop:
-        pid = project(laptop)
-        original = save_dataset(laptop, pid, recording, "Second take")
+    with machine(tmp_path, "sender") as sender:
+        pid = project(sender)
+        original = save_dataset(sender, pid, recording, "Second take")
 
         # A repository of that name already holds something else: it is left alone.
         other_work = hub / "dataset/you/second-take"
@@ -296,7 +296,7 @@ def test_publishing_is_private_unless_public_is_chosen_and_never_touches_other_w
         (other_work / "thesis.pdf").write_bytes(b"not a dataset")
         (hub / "dataset/you/second-take.settings.json").write_text('{"private": true}')
         refused = finished(
-            laptop, pid, share(laptop, pid, "publish", kind="dataset", id=original["id"]), "failed"
+            sender, pid, share(sender, pid, "publish", kind="dataset", id=original["id"]), "failed"
         )
         assert "was not published from OpenJensen" in refused["message"]
         assert sorted(path.name for path in other_work.iterdir()) == ["thesis.pdf"]
@@ -306,10 +306,10 @@ def test_publishing_is_private_unless_public_is_chosen_and_never_touches_other_w
         public.mkdir(parents=True)
         (hub / "dataset/you/open-take.settings.json").write_text('{"private": false}')
         kept = finished(
-            laptop,
+            sender,
             pid,
             share(
-                laptop, pid, "publish", kind="dataset", id=original["id"], repo_id="you/open-take"
+                sender, pid, "publish", kind="dataset", id=original["id"], repo_id="you/open-take"
             ),
             "failed",
         )
@@ -317,10 +317,10 @@ def test_publishing_is_private_unless_public_is_chosen_and_never_touches_other_w
 
         # Public is a separate, explicit choice.
         chosen = finished(
-            laptop,
+            sender,
             pid,
             share(
-                laptop,
+                sender,
                 pid,
                 "publish",
                 kind="dataset",
@@ -334,10 +334,10 @@ def test_publishing_is_private_unless_public_is_chosen_and_never_touches_other_w
 
         # Someone else's account: the token may not write there.
         denied = finished(
-            laptop,
+            sender,
             pid,
             share(
-                laptop,
+                sender,
                 pid,
                 "publish",
                 kind="dataset",
@@ -347,7 +347,7 @@ def test_publishing_is_private_unless_public_is_chosen_and_never_touches_other_w
             "failed",
         )
         assert "cannot write here" in denied["message"]
-        invalid = laptop.post(
+        invalid = sender.post(
             f"/api/v1/projects/{pid}/huggingface-sharing/publish",
             json={"kind": "dataset", "id": original["id"], "repo_id": "not a name"},
         )
@@ -359,22 +359,22 @@ def test_without_a_saved_token_the_login_of_this_computer_is_used(hub, tmp_path,
     build_dataset(recording, episodes=2)
     login = tmp_path / "hf-login" / "token"
     monkeypatch.setenv("HF_TOKEN_PATH", str(login))
-    with machine(tmp_path, "laptop", token=None) as laptop:
-        pid = project(laptop)
-        original = save_dataset(laptop, pid, recording, "Third take")
+    with machine(tmp_path, "sender", token=None) as sender:
+        pid = project(sender)
+        original = save_dataset(sender, pid, recording, "Third take")
         where = f"/api/v1/projects/{pid}/huggingface-sharing/destination"
         query = {"kind": "dataset", "id": original["id"]}
 
         # Nobody is signed in anywhere: the page can say how to connect, and nothing starts.
-        nobody = laptop.get(where, params=query).json()
+        nobody = sender.get(where, params=query).json()
         assert nobody["account"]["connected"] is False and nobody["repo_id"] is None
         assert "save a token in Settings" in nobody["account"]["message"]
-        refused = laptop.post(
+        refused = sender.post(
             f"/api/v1/projects/{pid}/huggingface-sharing/publish",
             json={"kind": "dataset", "id": original["id"]},
         )
         assert refused.status_code == 409 and "hf auth login" in refused.json()["detail"]
-        assert laptop.get(f"/api/v1/projects/{pid}/work-jobs").json()[0]["operation"] != (
+        assert sender.get(f"/api/v1/projects/{pid}/work-jobs").json()[0]["operation"] != (
             "dataset.publish"
         )
 
@@ -382,32 +382,32 @@ def test_without_a_saved_token_the_login_of_this_computer_is_used(hub, tmp_path,
         # application never reads or passes the token itself.
         login.parent.mkdir()
         login.write_text("hf_" + "m" * 30)
-        signed_in = laptop.get(where, params=query).json()
+        signed_in = sender.get(where, params=query).json()
         assert signed_in["account"]["source"] == "machine"
         assert signed_in["repo_id"] == "machine-login/third-take"
-        assert laptop.get("/api/v1/huggingface-sharing/account").json()["username"] == (
+        assert sender.get("/api/v1/huggingface-sharing/account").json()["username"] == (
             "machine-login"
         )
         done = finished(
-            laptop, pid, share(laptop, pid, "publish", kind="dataset", id=original["id"])
+            sender, pid, share(sender, pid, "publish", kind="dataset", id=original["id"])
         )
         assert done["result"]["url"].endswith("/datasets/machine-login/third-take")
         assert [call["token"] for call in calls(hub)] == [None, None]
-        assert nowhere_but_the_credential(tmp_path / "laptop", "hf_" + "m" * 30) == []
+        assert nowhere_but_the_credential(tmp_path / "sender", "hf_" + "m" * 30) == []
 
 
 def test_a_token_that_cannot_write_fails_the_job_with_the_reason(hub, tmp_path):
     recording = tmp_path / "recording"
     build_dataset(recording, episodes=2)
-    with machine(tmp_path, "laptop", token="hf_readonly" + "r" * 20) as laptop:
-        pid = project(laptop)
-        original = save_dataset(laptop, pid, recording, "Fourth take")
+    with machine(tmp_path, "sender", token="hf_readonly" + "r" * 20) as sender:
+        pid = project(sender)
+        original = save_dataset(sender, pid, recording, "Fourth take")
         failed = finished(
-            laptop, pid, share(laptop, pid, "publish", kind="dataset", id=original["id"]), "failed"
+            sender, pid, share(sender, pid, "publish", kind="dataset", id=original["id"]), "failed"
         )
         assert "cannot write here" in failed["message"]
         assert "Create a token with write access" in failed["message"]
-        problem = laptop.get(f"/api/v1/projects/{pid}/work-jobs/{failed['id']}/failure").json()
+        problem = sender.get(f"/api/v1/projects/{pid}/work-jobs/{failed['id']}/failure").json()
         assert problem["code"] == "HUGGINGFACE_TRANSFER_FAILED"
 
 
@@ -563,13 +563,13 @@ def test_a_trained_smolvla_checkpoint_installs_on_another_machine_after_a_round_
         "action_names": [joint + ".pos" for joint in JOINTS],
         "dataset_fps": 23,
     }
-    with machine(tmp_path, "laptop") as laptop, machine(tmp_path, "macbook") as macbook:
-        pid, other = project(laptop), project(macbook, "Run on the arm")
-        artifact, contents, archive = trained_model(laptop, pid, cloud=cloud)
-        laptop.put(
+    with machine(tmp_path, "sender") as sender, machine(tmp_path, "receiver") as receiver:
+        pid, other = project(sender), project(receiver, "Run on the arm")
+        artifact, contents, archive = trained_model(sender, pid, cloud=cloud)
+        sender.put(
             f"/api/v1/projects/{pid}/model-runs/{artifact.job_id}/name", json={"name": "Pen v3"}
         )
-        destination = laptop.get(
+        destination = sender.get(
             f"/api/v1/projects/{pid}/huggingface-sharing/destination",
             params={"kind": "model", "id": artifact.id},
         ).json()
@@ -588,9 +588,9 @@ def test_a_trained_smolvla_checkpoint_installs_on_another_machine_after_a_round_
                 async def download(project_id, artifact_id):
                     return stream
 
-                patch.setattr(laptop.app.state.execution.lifecycle, "download", download)
+                patch.setattr(sender.app.state.execution.lifecycle, "download", download)
             published = finished(
-                laptop, pid, share(laptop, pid, "publish", kind="model", id=artifact.id)
+                sender, pid, share(sender, pid, "publish", kind="model", id=artifact.id)
             )
             assert stream is None or stream.closed
         assert published["operation"] == "policy.publish" and published["module"] == "models"
@@ -607,21 +607,21 @@ def test_a_trained_smolvla_checkpoint_installs_on_another_machine_after_a_round_
         for name, content in contents.items():
             assert sent[name] == hashlib.sha256(content).hexdigest()
         assert sent["manifest.json"] == artifact.manifest_sha256
-        assert not (tmp_path / "laptop/huggingface-work").exists()
+        assert not (tmp_path / "sender/huggingface-work").exists()
 
         fetched = finished(
-            macbook,
+            receiver,
             other,
-            share(macbook, other, "fetch", kind="model", link=published["result"]["url"]),
+            share(receiver, other, "fetch", kind="model", link=published["result"]["url"]),
         )
         assert fetched["operation"] == "policy.fetch"
-        (model,) = macbook.get(f"/api/v1/projects/{other}/artifacts").json()
+        (model,) = receiver.get(f"/api/v1/projects/{other}/artifacts").json()
         assert model["id"] == fetched["result"]["artifact_id"]
         assert model["manifest_sha256"] == artifact.manifest_sha256
         assert model["metadata"] == artifact.metadata and model["format"] == "training_checkpoint"
         assert model["label"] == "SmolVLA checkpoint" and model["run_name"] == "Pen v3"
         assert model["file_bytes"] == artifact.file_bytes and model["project_id"] == other
-        saved = tmp_path / "macbook" / model["path"]
+        saved = tmp_path / "receiver" / model["path"]
         assert hashes(saved) == {
             **{name: hashlib.sha256(content).hexdigest() for name, content in contents.items()},
             "manifest.json": artifact.manifest_sha256,
@@ -630,22 +630,22 @@ def test_a_trained_smolvla_checkpoint_installs_on_another_machine_after_a_round_
         assert (saved / "checkpoint/pretrained_model/tokenizer/tokenizer.json").is_file()
 
         # It can be renamed, and the same link added again is the same model.
-        renamed = macbook.put(
+        renamed = receiver.put(
             f"/api/v1/projects/{other}/model-runs/{model['job_id']}/name", json={"name": "Pen"}
         )
         assert renamed.status_code == 200, renamed.text
         twice = finished(
-            macbook, other, share(macbook, other, "fetch", kind="model", link="you/pen-v3")
+            receiver, other, share(receiver, other, "fetch", kind="model", link="you/pen-v3")
         )
         assert twice["result"]["artifact_id"] == model["id"]
         assert twice["result"]["already_saved"] is True
-        assert len(macbook.get(f"/api/v1/projects/{other}/artifacts").json()) == 1
+        assert len(receiver.get(f"/api/v1/projects/{other}/artifacts").json()) == 1
 
         # Run policy: the model installs on the arm's computer, byte for byte, and with
         # the units the training recording proved, although that recording is not here.
         received = {}
-        companion(macbook, received)
-        installed = macbook.post(
+        companion(receiver, received)
+        installed = receiver.post(
             f"/api/v1/projects/{other}/robot-lab/policies/{model['id']}/install",
             json={"name": "Pen policy"},
         )
@@ -656,31 +656,31 @@ def test_a_trained_smolvla_checkpoint_installs_on_another_machine_after_a_round_
         assert descriptor["source_manifest_sha256"] == artifact.manifest_sha256
         assert received["files"] == {"policy/" + name: sha for name, sha in hashes(saved).items()}
         assert (
-            macbook.portal.call(
+            receiver.portal.call(
                 recorded_control,
-                macbook.app,
+                receiver.app,
                 other,
                 PolicyArtifact.model_validate({**model, "run_name": None}),
             )
             == evidence
         )
-        macbook.portal.call(macbook.app.state.robot_lab.close)
+        receiver.portal.call(receiver.app.state.robot_lab.close)
 
-    for name in ("laptop", "macbook"):
+    for name in ("sender", "receiver"):
         assert nowhere_but_the_credential(tmp_path / name, TOKEN) == []
 
 
 def test_a_model_that_changed_on_the_hub_or_was_published_elsewhere_is_not_added(hub, tmp_path):
-    with machine(tmp_path, "laptop") as laptop, machine(tmp_path, "macbook") as macbook:
-        pid, other = project(laptop), project(macbook)
-        artifact, _, _ = trained_model(laptop, pid, units=True)
-        finished(laptop, pid, share(laptop, pid, "publish", kind="model", id=artifact.id))
+    with machine(tmp_path, "sender") as sender, machine(tmp_path, "receiver") as receiver:
+        pid, other = project(sender), project(receiver)
+        artifact, _, _ = trained_model(sender, pid, units=True)
+        finished(sender, pid, share(sender, pid, "publish", kind="model", id=artifact.id))
         weights = hub / "model/you/smolvla-8000-sft/checkpoint/pretrained_model/model.safetensors"
         weights.write_bytes(weights.read_bytes()[:-1] + b"!")
         changed = finished(
-            macbook,
+            receiver,
             other,
-            share(macbook, other, "fetch", kind="model", link="you/smolvla-8000-sft"),
+            share(receiver, other, "fetch", kind="model", link="you/smolvla-8000-sft"),
             "failed",
         )
         assert "differs from what was published" in changed["message"]
@@ -691,15 +691,15 @@ def test_a_model_that_changed_on_the_hub_or_was_published_elsewhere_is_not_added
         ordinary.mkdir(parents=True)
         (ordinary / "config.json").write_text("{}")
         foreign = finished(
-            macbook,
+            receiver,
             other,
-            share(macbook, other, "fetch", kind="model", link="lerobot/smolvla_base"),
+            share(receiver, other, "fetch", kind="model", link="lerobot/smolvla_base"),
             "failed",
         )
         assert "was not published from OpenJensen" in foreign["message"]
-        assert macbook.get(f"/api/v1/projects/{other}/artifacts").json() == []
-        assert not (tmp_path / "macbook/jobs").exists()
-        missing = laptop.post(
+        assert receiver.get(f"/api/v1/projects/{other}/artifacts").json() == []
+        assert not (tmp_path / "receiver/jobs").exists()
+        missing = sender.post(
             f"/api/v1/projects/{pid}/huggingface-sharing/publish",
             json={"kind": "model", "id": "no-such-model"},
         )
@@ -716,21 +716,21 @@ def test_a_slow_upload_says_it_is_alive_and_a_stalled_cloud_fetch_gives_up_with_
 
     monkeypatch.setattr(sharing, "HEARTBEAT_SECONDS", 0.05)
     monkeypatch.setenv("FAKE_HUB_UPLOAD_DELAY", "1")
-    with machine(tmp_path, "laptop") as laptop:
-        pid = project(laptop)
-        artifact, _, archive = trained_model(laptop, pid, units=True, cloud=True)
-        lifecycle = laptop.app.state.execution.lifecycle
+    with machine(tmp_path, "sender") as sender:
+        pid = project(sender)
+        artifact, _, archive = trained_model(sender, pid, units=True, cloud=True)
+        lifecycle = sender.app.state.execution.lifecycle
 
         # The connection is slow, not broken: the job keeps reporting while it uploads.
         async def download(project_id, artifact_id):
             return CloudStream(archive)
 
         monkeypatch.setattr(lifecycle, "download", download)
-        started = share(laptop, pid, "publish", kind="model", id=artifact.id)
+        started = share(sender, pid, "publish", kind="model", id=artifact.id)
         seen = set()
         deadline = time.monotonic() + 20
         while time.monotonic() < deadline:
-            value = laptop.get(f"/api/v1/projects/{pid}/work-jobs/{started['id']}").json()
+            value = sender.get(f"/api/v1/projects/{pid}/work-jobs/{started['id']}").json()
             seen.add(value["message"])
             if value["status"] != "running":
                 break
@@ -747,15 +747,15 @@ def test_a_slow_upload_says_it_is_alive_and_a_stalled_cloud_fetch_gives_up_with_
         monkeypatch.setattr(lifecycle, "download", stall)
         monkeypatch.setattr("vla_platform.robot_policy_install.DOWNLOAD_SECONDS", 0.3)
         failed = finished(
-            laptop,
+            sender,
             pid,
-            share(laptop, pid, "publish", kind="model", id=artifact.id, repo_id="you/second"),
+            share(sender, pid, "publish", kind="model", id=artifact.id, repo_id="you/second"),
             "failed",
         )
         assert "could not be fetched from storage" in failed["message"]
         assert "publish it again" in failed["message"] and stalled.closed
         assert not (hub / "model/you/second").exists()
-        assert not (tmp_path / "laptop/huggingface-work").exists()
+        assert not (tmp_path / "sender/huggingface-work").exists()
 
 
 def test_a_transfer_can_be_cancelled_and_one_cut_off_by_a_restart_says_so(
@@ -763,31 +763,31 @@ def test_a_transfer_can_be_cancelled_and_one_cut_off_by_a_restart_says_so(
 ):
     monkeypatch.setenv("FAKE_HUB_DELAY", "30")
     (hub / "dataset/you/slow").mkdir(parents=True)
-    with machine(tmp_path, "macbook") as macbook:
-        pid = project(macbook)
-        started = share(macbook, pid, "fetch", kind="dataset", link="you/slow")
+    with machine(tmp_path, "receiver") as receiver:
+        pid = project(receiver)
+        started = share(receiver, pid, "fetch", kind="dataset", link="you/slow")
         assert started["status"] == "running" and started["can_cancel"] is True
         # A second click joins the transfer that is already under way.
-        assert share(macbook, pid, "fetch", kind="dataset", link="you/slow")["id"] == started["id"]
-        cancelled = macbook.post(f"/api/v1/projects/{pid}/work-jobs/{started['id']}/cancel")
+        assert share(receiver, pid, "fetch", kind="dataset", link="you/slow")["id"] == started["id"]
+        cancelled = receiver.post(f"/api/v1/projects/{pid}/work-jobs/{started['id']}/cancel")
         assert cancelled.status_code == 200 and cancelled.json()["status"] == "cancelled"
         assert (
-            macbook.post(f"/api/v1/projects/{pid}/work-jobs/{started['id']}/cancel").status_code
+            receiver.post(f"/api/v1/projects/{pid}/work-jobs/{started['id']}/cancel").status_code
             == 409
         )
-        left_running = share(macbook, pid, "fetch", kind="dataset", link="you/slow")
+        left_running = share(receiver, pid, "fetch", kind="dataset", link="you/slow")
     # The application was closed while that one was still running.
-    journal = sharing.ShareJobs(tmp_path / "macbook")
+    journal = sharing.ShareJobs(tmp_path / "receiver")
     stopped = journal.get(left_running["source_id"])
     assert stopped["status"] == "interrupted" and "Start it again" in stopped["error"]
     # A crash leaves no chance to say so: the next start finds the record and closes it.
     crashed = journal.create(pid, "policy.fetch", "you/pen", {"repo_id": "you/pen"})
-    (tmp_path / "macbook/huggingface-work" / crashed["id"]).mkdir(parents=True)
-    with TestClient(create_app(Settings(data_dir=tmp_path / "macbook"))) as restarted:
+    (tmp_path / "receiver/huggingface-work" / crashed["id"]).mkdir(parents=True)
+    with TestClient(create_app(Settings(data_dir=tmp_path / "receiver"))) as restarted:
         found = restarted.get(f"/api/v1/projects/{pid}/work-jobs/share:{crashed['id']}").json()
         assert found["status"] == "interrupted" and found["can_cancel"] is False
         assert "Start it again" in found["message"]
-    assert not (tmp_path / "macbook/huggingface-work").exists()
+    assert not (tmp_path / "receiver/huggingface-work").exists()
 
 
 # --- The client process itself -------------------------------------------------------------
