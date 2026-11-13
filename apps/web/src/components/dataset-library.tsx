@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   datasetDownload,
   datasetLibrary,
+  datasetStateLabel,
   combinableDatasets,
   formatName,
   sampleImage,
@@ -341,21 +342,7 @@ function DatasetCard({ entry, onOpen, active }: { entry: LibraryDataset; onOpen:
           )}
         </div>
         <div className="dataset-card-footer">
-          <span>
-            {entry.status === 'uploading'
-              ? 'Review unfinished upload'
-              : entry.status === 'converting'
-                ? 'Converting…'
-                : entry.status === 'failed' || entry.status === 'unavailable'
-                  ? 'Needs attention'
-                  : entry.training_copy
-                    ? 'Training copy saved'
-                    : entry.profile?.source === 'huggingface'
-                      ? 'Inspection saved'
-                      : entry.status === 'ready'
-                        ? 'Files saved'
-                        : 'Ready to convert'}
-          </span>
+          <span>{entry.status === 'uploading' ? 'Review unfinished upload' : datasetStateLabel(entry)}</span>
           <Icon name="arrow" size={15} />
         </div>
       </div>
@@ -624,7 +611,7 @@ export function LocalDatasetImport({
           {conversionObserved && current.status !== 'converting' && <p role="status">Checking conversion status…</p>}
           {current.status === 'ready' ? (
             <p className="local-import-ready" role="status">
-              <Icon name="check" size={16} /> Ready to inspect ·{' '}
+              <Icon name="check" size={16} /> Imported ·{' '}
               {formatName(current.converted?.format ?? current.detection?.format)}
             </p>
           ) : (

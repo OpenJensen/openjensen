@@ -37,6 +37,18 @@ export type LibraryDataset = {
   /** The saved datasets this one was combined from. */
   combined_from?: { id: string; name: string }[];
 };
+/**
+ * A saved dataset's state, in the words every page uses: Imported, then Ready to train
+ * once it has been prepared, or Needs attention. Pages used to call the prepared state
+ * "Training copy saved", "Training copy ready", "snapshot" and "inspected" in turn.
+ */
+export function datasetStateLabel(entry: Pick<LibraryDataset, 'status' | 'training_copy'>): string {
+  if (entry.status === 'uploading') return 'Upload unfinished';
+  if (entry.status === 'converting') return 'Converting…';
+  if (entry.status === 'failed' || entry.status === 'unavailable') return 'Needs attention';
+  if (entry.training_copy) return 'Ready to train';
+  return entry.status === 'ready' ? 'Imported' : 'Needs converting';
+}
 export type DatasetRepairNotice = {
   id: string;
   project_id: null;

@@ -94,7 +94,7 @@ async function fixture(
 test('intake checks durable support and submits one saved immutable source', async ({ page }) => {
   const state = await fixture(page);
   const source = await page.getByLabel('Dataset repository').inputValue();
-  await page.getByRole('button', { name: 'Inspect dataset', exact: true }).click();
+  await page.getByRole('button', { name: 'Import dataset', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Waiting to inspect' })).toBeVisible();
   expect(state.writes).toHaveLength(1);
   expect(state.writes[0].key).toMatch(/^[a-f0-9-]{36}$/);
@@ -105,11 +105,11 @@ test('intake checks durable support and submits one saved immutable source', asy
 
 test('lost intake response survives reload and resolves by key without a second POST', async ({ page }) => {
   const state = await fixture(page, 'lost-ack');
-  await page.getByRole('button', { name: 'Inspect dataset', exact: true }).click();
+  await page.getByRole('button', { name: 'Import dataset', exact: true }).click();
   const recovery = page.getByRole('complementary', { name: 'Request recovery' });
   await expect(recovery.getByRole('button', { name: 'Check saved request' })).toBeEnabled();
   await page.reload();
-  await expect(page.getByRole('button', { name: 'Inspect dataset', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Import dataset', exact: true })).toBeDisabled();
   await recovery.getByRole('button', { name: 'Check saved request' }).click();
   await expect(page.getByRole('heading', { name: 'Waiting to inspect' })).toBeVisible();
   expect(state.writes).toHaveLength(1);
@@ -120,12 +120,12 @@ test('missing intake remains blocked until explicit retry of its original key an
   page,
 }) => {
   const state = await fixture(page, 'lost-before-commit');
-  await page.getByRole('button', { name: 'Inspect dataset', exact: true }).click();
+  await page.getByRole('button', { name: 'Import dataset', exact: true }).click();
   const recovery = page.getByRole('complementary', { name: 'Request recovery' });
   await expect(recovery.getByRole('button', { name: 'Check saved request' })).toBeEnabled();
   await page.getByLabel('Dataset repository').fill('edited/source');
   await recovery.getByRole('button', { name: 'Check saved request' }).click();
-  await expect(page.getByRole('button', { name: 'Inspect dataset', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Import dataset', exact: true })).toBeDisabled();
   await expect(recovery.getByRole('button', { name: 'Retry same request' })).toBeEnabled();
   expect(state.writes).toHaveLength(1);
   await recovery.getByRole('button', { name: 'Retry same request' }).click();
@@ -136,11 +136,11 @@ test('missing intake remains blocked until explicit retry of its original key an
 
 test('older intake backend receives no POST and cannot clear an unresolved request', async ({ page }) => {
   const state = await fixture(page, 'unsupported');
-  await page.getByRole('button', { name: 'Inspect dataset', exact: true }).click();
+  await page.getByRole('button', { name: 'Import dataset', exact: true }).click();
   await expect(page.getByRole('complementary', { name: 'Request recovery' })).toContainText(
     'did not verify durable submission support',
   );
-  await expect(page.getByRole('button', { name: 'Inspect dataset', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Import dataset', exact: true })).toBeDisabled();
   expect(state.writes).toEqual([]);
 });
 
@@ -148,7 +148,7 @@ test('wrong source acknowledgement cannot select another dataset and is resolved
   page,
 }) => {
   const state = await fixture(page, 'wrong-ack');
-  await page.getByRole('button', { name: 'Inspect dataset', exact: true }).click();
+  await page.getByRole('button', { name: 'Import dataset', exact: true }).click();
   const recovery = page.getByRole('complementary', { name: 'Request recovery' });
   await expect(recovery.getByRole('button', { name: 'Check saved request' })).toBeEnabled();
   await recovery.getByRole('button', { name: 'Check saved request' }).click();
@@ -166,7 +166,7 @@ test('denied recovery storage prevents any intake submission', async ({ page }) 
     };
   });
   const state = await fixture(page);
-  await page.getByRole('button', { name: 'Inspect dataset', exact: true }).click();
+  await page.getByRole('button', { name: 'Import dataset', exact: true }).click();
   await expect(page.getByText(/Submission recovery storage is unavailable/)).toBeVisible();
   expect(state.reads).toEqual([]);
   expect(state.writes).toEqual([]);
@@ -236,7 +236,7 @@ test('intake acknowledgement allows host resolution but rejects changed immutabl
 
 test('late intake acknowledgement records the job without replacing later stage navigation', async ({ page }) => {
   const state = await fixture(page, 'delayed-ack');
-  await page.getByRole('button', { name: 'Inspect dataset', exact: true }).click();
+  await page.getByRole('button', { name: 'Import dataset', exact: true }).click();
   await expect.poll(() => state.writes.length).toBe(1);
   await page.getByRole('link', { name: 'Fine-tune', exact: true }).click();
   state.releaseAck();

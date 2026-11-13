@@ -31,6 +31,10 @@ test('open an imported two-view fixture, save labels, reopen it and reach the da
   await expect(page.getByText('Try the labeling playground', { exact: true })).toHaveCount(0);
   // The legacy API supplies an isolated test fixture; it has no product promotion.
   expect((await page.request.post(`/api/v1/projects/${project.id}/datasets/example`)).status()).toBe(202);
+  // Saved but not yet prepared: the card says Imported.
+  await expect(page.getByRole('button', { name: 'Open dataset Robot labeling playground' })).toContainText('Imported', {
+    timeout: 30_000,
+  });
   await page.getByRole('button', { name: 'Open dataset Robot labeling playground' }).click();
   const labels = page.getByRole('region', { name: 'Dataset labeling' });
   await expect(labels.getByRole('heading', { name: 'Robot labeling playground' })).toBeVisible();
@@ -87,13 +91,17 @@ test('open an imported two-view fixture, save labels, reopen it and reach the da
   await expect(readiness.getByRole('button', { name: 'Train on this dataset' })).toBeEnabled();
   // The full inspection is one link away, and opening it does not inspect again.
   await readiness.getByRole('button', { name: 'Episodes and details', exact: true }).click();
-  await expect(page.getByText(/Training copy ready/)).toBeVisible();
+  await expect(page.getByText(/Ready to train · \d+ files checked/)).toBeVisible();
   // One dataset, one name: its details are not titled "Local dataset".
   await expect(page.getByRole('heading', { name: 'Robot labeling playground', exact: true })).toBeVisible();
   await expect(page.getByText('Local dataset', { exact: true })).toHaveCount(0);
   expect(await (await page.request.get(`/api/v1/projects/${project.id}/jobs`)).json()).toHaveLength(1);
   await page.getByRole('button', { name: '← Back to datasets', exact: true }).click();
-  await page.getByRole('button', { name: 'Open dataset Robot labeling playground' }).click();
+  // The list, the dataset's page and its details use the same words for the same state.
+  const card = page.getByRole('button', { name: 'Open dataset Robot labeling playground' });
+  await expect(card).toContainText('Ready to train', { timeout: 20_000 });
+  await expect(page.getByText(/Training copy (saved|ready)|Files saved/)).toHaveCount(0);
+  await card.click();
   await expect(readiness.getByRole('heading', { name: 'Ready to train', exact: true })).toBeVisible();
   await readiness.getByRole('button', { name: 'Train on this dataset' }).click();
   await expect(page.getByRole('navigation', { name: 'Training setup' })).toBeVisible();
@@ -140,8 +148,8 @@ test('native folder selection uploads files, detects records and converts for in
   await page.getByLabel('Frame rate (FPS)', { exact: true }).fill('6');
   await page.getByLabel('Task description', { exact: true }).fill('Move the block');
   await page.getByRole('button', { name: 'Convert to LeRobot' }).click();
-  await expect(detected.getByText(/Ready to inspect/)).toBeVisible({ timeout: 30_000 });
-  await page.getByRole('button', { name: 'Inspect dataset', exact: true }).click();
+  await expect(detected.getByText(/Imported ·/)).toBeVisible({ timeout: 30_000 });
+  await page.getByRole('button', { name: 'Import dataset', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Dataset inspection', exact: true })).toBeVisible();
   // The inspection is titled with the name the folder was saved under.
   await expect(page.getByRole('heading', { name: 'source-folder', exact: true })).toBeVisible();
@@ -175,10 +183,10 @@ test('a one-episode dataset opens with its frames and says what training still n
   await page.getByLabel('Frame rate (FPS)', { exact: true }).fill('6');
   await page.getByLabel('Task description', { exact: true }).fill('Move the block');
   await page.getByRole('button', { name: 'Convert to LeRobot' }).click();
-  await expect(detected.getByText(/Ready to inspect/)).toBeVisible({ timeout: 30_000 });
+  await expect(detected.getByText(/Imported ·/)).toBeVisible({ timeout: 30_000 });
   // The default a saved dataset gets: ask for a training copy.
-  await page.getByRole('checkbox', { name: 'Prepare immutable training copy', exact: true }).check();
-  await page.getByRole('button', { name: 'Inspect dataset', exact: true }).click();
+  await page.getByRole('checkbox', { name: 'Prepare for training', exact: true }).check();
+  await page.getByRole('button', { name: 'Import dataset', exact: true }).click();
   const inspection = page.getByRole('region', { name: 'Dataset inspection', exact: true });
   await expect(inspection.getByRole('heading', { name: 'first-take', exact: true })).toBeVisible({
     timeout: 30_000,
@@ -666,13 +674,13 @@ test('dashboard resource checks stay in the same position on a fresh visit and a
   await page.screenshot({ path: testInfo.outputPath('stable-resource-check.png'), fullPage: true });
 });
 
-test('immutable training copy keeps its checkbox aligned and explains storage and complete episodes on demand', async ({
+test('Prepare for training keeps its checkbox aligned and explains the copy and complete episodes on demand', async ({
   page,
 }, testInfo) => {
   await ownProject(page, `Training copy help ${testInfo.project.name}`);
   await page.getByRole('radio', { name: 'Local files', exact: true }).check();
-  const option = page.getByRole('checkbox', { name: 'Prepare immutable training copy', exact: true });
-  const help = page.getByRole('button', { name: 'Help for immutable training copy', exact: true });
+  const option = page.getByRole('checkbox', { name: 'Prepare for training', exact: true });
+  const help = page.getByRole('button', { name: 'Help for Prepare for training', exact: true });
   const tooltip = page.getByRole('tooltip');
   await expect(tooltip).toBeHidden();
   await expect(option).not.toBeChecked();
@@ -681,7 +689,7 @@ test('immutable training copy keeps its checkbox aligned and explains storage an
     .toBeLessThanOrEqual(1);
   await help.focus();
   await expect(tooltip).toBeVisible();
-  await expect(tooltip).toContainText('app host’s dataset-snapshots/ folder');
+  await expect(tooltip).toContainText('keeps a copy for training in the workspace’s dataset-snapshots/ folder');
   await expect(tooltip).toContainText('Training needs at least two complete episodes.');
   await expect(option).not.toBeChecked();
   const input = (await option.boundingBox())!,
@@ -854,7 +862,7 @@ test('unfinished uploads are visible and explicit discard targets only that proj
   await expect(card).toContainText('3 files uploaded');
   await card.click();
   await expect(page.getByRole('region', { name: 'Detected dataset' })).toContainText('This upload is unfinished');
-  await expect(page.getByRole('button', { name: 'Inspect dataset', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Import dataset', exact: true })).toBeDisabled();
   await page.getByRole('button', { name: 'Discard unfinished upload', exact: true }).click();
   expect(state.deletes).toEqual([]);
   await page.getByRole('button', { name: 'Keep upload', exact: true }).click();
@@ -976,10 +984,10 @@ test('accepted conversion survives an earlier GET and keeps observing until read
     await page.getByRole('button', { name: 'Convert to LeRobot', exact: true }).click();
     await expect.poll(() => reads).toBeGreaterThanOrEqual(2);
     releaseEarlier();
-    await expect(page.getByRole('region', { name: 'Detected dataset' }).getByText(/Ready to inspect/)).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Detected dataset' }).getByText(/Imported ·/)).toBeVisible();
     expect(reads).toBeGreaterThanOrEqual(3);
     expect(posts).toBe(1);
-    await expect(page.getByRole('button', { name: 'Inspect dataset', exact: true })).toBeEnabled();
+    await expect(page.getByRole('button', { name: 'Import dataset', exact: true })).toBeEnabled();
   } finally {
     releaseEarlier();
   }
@@ -1099,7 +1107,7 @@ test('upload detection initializes mapping and FPS once without replacing edits 
       'position.x, position.y',
     );
     await page.getByRole('button', { name: 'Convert to LeRobot', exact: true }).click();
-    await expect(region.getByText(/Ready to inspect/)).toBeVisible();
+    await expect(region.getByText(/Imported ·/)).toBeVisible();
     expect(conversions).toEqual([
       {
         fps: 9,

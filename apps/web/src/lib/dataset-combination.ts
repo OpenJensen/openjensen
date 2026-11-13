@@ -52,11 +52,11 @@ export function datasetCombinationIssue(
   mapping = combinationCameraMapping(reference, candidate, cameraKeys),
 ): string | null {
   if ([reference, candidate].some((profile) => profile.source !== 'huggingface'))
-    return 'Local training copies must be trained separately. Combined training supports Hub datasets.';
+    return 'Datasets saved on this computer are trained one at a time. Combined training supports Hub datasets.';
   if ([reference, candidate].some((profile) => profile.format !== 'lerobot_v3'))
     return 'Combined training requires LeRobot v3 datasets. These dataset versions cannot be combined.';
   if ([reference, candidate].some((profile) => !/^[0-9a-f]{40}$/i.test(profile.revision)))
-    return 'Inspect a pinned, immutable revision before combining this dataset.';
+    return 'Import a pinned revision before combining this dataset.';
   if (reference.repo_id === candidate.repo_id && reference.revision === candidate.revision)
     return 'This exact dataset revision is already selected.';
   if (reference.fps !== candidate.fps)

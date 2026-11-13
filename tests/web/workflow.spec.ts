@@ -89,7 +89,7 @@ test('browser intake reads local metadata and preserves its limits after reload'
   const created = page.waitForResponse(
     (response) => response.url().endsWith('/intakes') && response.request().method() === 'POST',
   );
-  await page.getByRole('button', { name: 'Inspect dataset', exact: true }).click();
+  await page.getByRole('button', { name: 'Import dataset', exact: true }).click();
   const response = await created;
   expect(response.status()).toBe(202);
   const history = await request.get(`/api/v1/projects/${project.id}/jobs`);

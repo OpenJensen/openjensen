@@ -1569,7 +1569,7 @@ test('dataset intake waits for a confirmed project and preserves its draft durin
   await page.goto('/datasets/');
   const repository = page.getByLabel('Dataset repository', { exact: true });
   const revision = page.getByLabel('Revision', { exact: true });
-  const inspect = page.getByRole('button', { name: 'Inspect dataset', exact: true });
+  const inspect = page.getByRole('button', { name: 'Import dataset', exact: true });
   await expect(repository).toBeDisabled();
   await page.locator('.intake-advanced > summary').click();
   await expect(revision).toBeDisabled();
@@ -1734,11 +1734,11 @@ test('blank dataset revision uses latest and reused inspections keep one history
   await page.locator('.intake-advanced > summary').click();
   await expect(page.getByLabel('Revision', { exact: true })).toHaveValue('');
   await expect(page.getByLabel('Revision', { exact: true })).not.toHaveAttribute('required', '');
-  await page.getByRole('button', { name: 'Inspect dataset', exact: true }).click();
+  await page.getByRole('button', { name: 'Import dataset', exact: true }).click();
   await expect(page.getByRole('heading', { name: repoId, exact: true })).toBeVisible();
   await expect.poll(() => previews).toEqual(['index', 'episode']);
   await page.getByRole('button', { name: '← Back to datasets', exact: true }).click();
-  await page.getByRole('button', { name: 'Inspect dataset', exact: true }).click();
+  await page.getByRole('button', { name: 'Import dataset', exact: true }).click();
   await expect(page.getByRole('heading', { name: repoId, exact: true })).toBeVisible();
   await expect(page.getByRole('navigation', { name: 'Dataset views' })).toHaveCount(0);
   await expect(page.getByLabel('History', { exact: true })).toHaveCount(0);

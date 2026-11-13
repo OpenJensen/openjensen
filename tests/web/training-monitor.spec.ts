@@ -718,7 +718,9 @@ test('metadata-only local inspections stay removable but cannot be added or subm
   await expect(dataset).not.toBeChecked();
   await expect(dataset).toBeDisabled();
   await dataset.locator('..').focus();
-  await expect(page.getByText('Prepare an immutable training copy when importing this local dataset.')).toBeVisible();
+  await expect(
+    page.getByText('Prepare this dataset for training first: open it in Datasets and choose Prepare for training.'),
+  ).toBeVisible();
   expect(submitted).toEqual([]);
   expect(unexpected).toEqual([]);
 });

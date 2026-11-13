@@ -29,7 +29,7 @@ function DatasetResult({ profile, name, history }: { profile: DatasetProfile; na
     <section className="result inspection-overview" aria-labelledby="result-title">
       {profile.snapshot && (
         <p role="status">
-          Training copy ready · {profile.snapshot.file_count} files ·{' '}
+          Ready to train · {profile.snapshot.file_count} files checked ·{' '}
           {profile.snapshot.lineage_validated
             ? 'Source history retained'
             : 'Source history unknown; use separate data for evaluation'}
@@ -311,12 +311,12 @@ function IntakeForm({
                   aria-describedby="training-copy-help"
                   onChange={(event) => setSnapshotForTraining(event.target.checked)}
                 />{' '}
-                Prepare immutable training copy
+                Prepare for training
               </label>
-              <TrainingHelp label="immutable training copy" id="training-copy-help" wide>
+              <TrainingHelp label="Prepare for training" id="training-copy-help" wide>
                 <p>
-                  Copies and verifies the dataset in the app host’s <code>dataset-snapshots/</code> folder, so later
-                  edits to the source can’t change saved training runs. Your original files stay unchanged.
+                  Checks every episode and keeps a copy for training in the workspace’s <code>dataset-snapshots/</code>{' '}
+                  folder, so later edits to the source cannot change a training run. Your original files stay unchanged.
                 </p>
                 <p>
                   Training needs at least two complete episodes. A smaller dataset still opens, with a note saying what
@@ -362,7 +362,7 @@ function IntakeForm({
             blocked || mutation.isPending || (source === 'local' && (!library ? !path : library.status !== 'ready'))
           }
         >
-          {mutation.isPending || submission.busy ? 'Checking dataset…' : 'Inspect dataset'}
+          {mutation.isPending || submission.busy ? 'Checking dataset…' : 'Import dataset'}
           <Icon name="arrow" size={17} />
         </button>
       </form>
@@ -443,14 +443,14 @@ function TrainingReadiness({
         </h3>
         <p role="status">
           {ready
-            ? (facts ?? 'A verified training copy is saved.')
+            ? (facts ?? 'Checked and saved for training.')
             : busy
               ? 'Copying and checking every episode. You can leave this page.'
               : (blocker ??
                 failure ??
                 (converting
                   ? 'Wait for the conversion to finish.'
-                  : `${facts ? facts + '. ' : ''}Preparing makes a verified copy, so later edits cannot change a training run.`))}
+                  : `${facts ? facts + '. ' : ''}Preparing checks every episode and keeps a copy, so later edits cannot change a training run.`))}
         </p>
       </div>
       <div className="dataset-readiness-actions">

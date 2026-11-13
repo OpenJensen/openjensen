@@ -72,9 +72,9 @@ export function cameras(profile?: DatasetProfile) {
 }
 export function datasetIssue(profile: DatasetProfile) {
   if (profile.source === 'local' && !profile.snapshot)
-    return 'Prepare an immutable training copy when importing this local dataset.';
+    return 'Prepare this dataset for training first: open it in Datasets and choose Prepare for training.';
   if (profile.source === 'huggingface' && !/^[0-9a-f]{40}$/i.test(profile.revision))
-    return 'Inspect an immutable dataset revision before training.';
+    return 'Import a pinned revision of this dataset before training.';
   if (profile.total_episodes < 2) return 'At least two episodes are needed for training and validation.';
   if (!cameras(profile).length) return 'No image or video camera was found.';
   for (const key of ['observation.state' in profile.features ? 'observation.state' : 'states', 'action']) {

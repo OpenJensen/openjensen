@@ -6,6 +6,8 @@ import { TrainingHelp } from './training-help';
 import { TrainingAdvancedSettings } from './training-advanced-settings';
 import { defaultBatchSize, defaultRecipe } from '@/lib/training-recipe';
 import { number } from './training-shared';
+import { datasetName } from '@/lib/dataset-names';
+import { isProjectDataset, type LibraryDataset } from '@/lib/dataset-library';
 import type { TrainingPanelState } from './training-state';
 
 /** Setup step 3: the recipe review, GPU choice, advanced settings and the start button. */
@@ -85,13 +87,20 @@ export function TrainingComputeStep({
           <div>
             <dt>Dataset</dt>
             <dd>
-              {activeDataset?.result.repo_id ?? (activeDataset ? 'Local training snapshot' : 'Choose a dataset')}
+              {activeDataset
+                ? datasetName(
+                    activeDataset,
+                    (panel.library.data ?? []).filter((entry): entry is LibraryDataset =>
+                      isProjectDataset(entry, panel.projectId),
+                    ),
+                  )
+                : 'Choose a dataset'}
               {activeDataset && (
                 <small
                   className="training-recipe-identity"
                   title={activeDataset.result.snapshot?.manifest_sha256 ?? activeDataset.result.revision}
                 >
-                  {activeDataset.result.snapshot ? 'Snapshot' : 'Pinned revision'}{' '}
+                  {activeDataset.result.snapshot ? 'Prepared copy' : 'Pinned revision'}{' '}
                   {(activeDataset.result.snapshot?.manifest_sha256 ?? activeDataset.result.revision).slice(0, 12)}
                 </small>
               )}

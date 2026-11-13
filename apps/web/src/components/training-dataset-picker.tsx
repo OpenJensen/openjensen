@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import type { DatasetJob, DatasetProfile } from '@/lib/api';
-import type { LibraryDataset } from '@/lib/dataset-library';
+import { datasetStateLabel, type LibraryDataset } from '@/lib/dataset-library';
 import { datasetStarters } from '@/lib/dataset-starters';
 import { datasetName as savedName } from '@/lib/dataset-names';
 import { Icon } from './icon';
@@ -139,7 +139,7 @@ export function TrainingDatasetPicker(props: Props) {
       .includes(query),
   );
   const matchingPending = pending.filter((entry) =>
-    `${entry.name} ${entry.source} ${entry.status}`.toLocaleLowerCase().includes(query),
+    `${entry.name} ${entry.source} ${datasetStateLabel(entry)}`.toLocaleLowerCase().includes(query),
   );
   const recent = datasets.slice(0, 3);
   const olderSelected = datasets.filter((job) => selectedIds.includes(job.id) && !recent.includes(job));
@@ -171,7 +171,7 @@ export function TrainingDatasetPicker(props: Props) {
           <section aria-label="Recent datasets">
             <div className="training-picker-heading">
               <h3>Latest datasets</h3>
-              <span>Recently inspected in this project</span>
+              <span>Recently imported in this project</span>
             </div>
             <div className="training-datasets">{recent.map((job) => card(job, selectedIds, false))}</div>
           </section>
@@ -279,12 +279,13 @@ export function TrainingDatasetPicker(props: Props) {
                     <span className="training-dataset-copy">
                       <strong>{entry.name}</strong>
                       <small>
-                        {entry.source === 'huggingface' ? 'Hugging Face' : 'Local files'} · {entry.status}
+                        {entry.source === 'huggingface' ? 'Hugging Face' : 'Local files'} · {datasetStateLabel(entry)}
                       </small>
                       <small className="training-picker-reason" id={`${id}-${entry.id}-pending`}>
                         {entry.status === 'uploading'
                           ? 'Finish importing before training.'
-                          : (entry.error ?? 'Inspect this dataset and prepare a training copy before selecting it.')}
+                          : (entry.error ??
+                            'Open this dataset in Datasets and choose Prepare for training before selecting it.')}
                       </small>
                     </span>
                   </label>
