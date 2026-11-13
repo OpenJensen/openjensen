@@ -3257,6 +3257,41 @@ test('Run policy supplies a task only for the language-conditioned offline adapt
   expect(state.errors).toEqual([]);
 });
 
+test('Home lists the steps in order and each opens its Robot Lab tab', async ({ page }) => {
+  const state = await fixture(page, true, 'Darwin', false);
+  await page.goto('/dashboard/');
+  const journey = page.getByRole('region', { name: 'From robot to trained policy', exact: true });
+  await expect(journey.getByRole('listitem').locator('strong')).toHaveText([
+    'Set up the robot',
+    'Record data',
+    'Run it on the arm',
+  ]);
+  // Each step says where it stands, from the same service Robot Lab talks to.
+  await expect(journey.getByRole('button', { name: /Set up the robot/ })).toContainText('2 arms plugged in');
+  await journey.getByRole('button', { name: /Run it on the arm/ }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Robot Lab', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 2, name: 'Run policy', exact: true })).toBeVisible();
+  await expect(chosen(page, 'Follower device')).toHaveAttribute('data-value', 'arm-a');
+  await page.goto('/dashboard/');
+  await journey.getByRole('button', { name: /Record data/ }).click();
+  await expect(page.getByRole('heading', { level: 2, name: 'Recording', exact: true })).toBeVisible();
+  // Opening a page never commands a motor.
+  expect(state.writes).toEqual([]);
+  expect(state.errors).toEqual([]);
+});
+
+test('a link names the Robot Lab tab to open, also while the page is already showing', async ({ page }) => {
+  const state = await fixture(page, true, 'Darwin', false);
+  await page.goto('/robot-lab/#run-policy');
+  await expect(page.getByRole('heading', { level: 2, name: 'Run policy', exact: true })).toBeVisible();
+  await page.evaluate(() => {
+    window.location.hash = 'teleoperation';
+  });
+  await expect(page.getByRole('heading', { level: 2, name: 'Teleoperation', exact: true })).toBeVisible();
+  expect(state.writes).toEqual([]);
+  expect(state.errors).toEqual([]);
+});
+
 test('AI collection runs with the model the operator picks and asks for no typed phrase', async ({
   page,
 }, testInfo) => {

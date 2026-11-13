@@ -426,12 +426,18 @@ export function useRobotLab() {
       /* Preferences are optional. */
     }
     // Home and saved links open a task tab directly.
-    const tab = takeRobotLabTab();
-    if (tab && robotLabTabs[tab] >= 3) {
+    const openRequested = () => {
+      const tab = takeRobotLabTab();
+      // A link never pulls the page away from an arm that is in use.
+      const mode = lastConnectedState.current?.session?.mode;
+      if (!tab || robotLabTabs[tab] < 3 || (mode && mode !== 'idle')) return;
       setRole('follower');
       setStep(robotLabTabs[tab]);
-    }
+    };
+    openRequested();
+    window.addEventListener('hashchange', openRequested);
     return () => {
+      window.removeEventListener('hashchange', openRequested);
       mounted.current = false;
       if (ownedRef.current && !localCalibrationRef.current)
         void robotApi
