@@ -95,9 +95,16 @@
   flex-wrap: wrap;
   gap: 8px;
 }
+/* The lists this sits in are not panels, so the field carries the panel field style. */
 .hf-add-row input {
   flex: 1 1 320px;
   min-width: 0;
+  min-height: 44px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: var(--ink);
+  background: var(--surface);
 }
 .hf-add-done {
   display: flex;
