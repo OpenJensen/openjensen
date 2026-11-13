@@ -1,0 +1,19 @@
+{
+  "name": "@openjensen/pi-collection",
+  "version": "1.0.0",
+  "description": "Restricted Pi runtime for supervised SO101 collection",
+  "scripts": {
+    "check": "node --check worker.mjs"
+  },
+  "license": "Apache-2.0",
+  "type": "module",
+  "dependencies": {
+    "@earendil-works/pi-agent-core": "1.5.1",
+    "@earendil-works/pi-ai": "1.5.1",
+    "@sinclair/typebox": "0.34.41"
+  },
+  "private": true,
+  "engines": {
+    "node": ">=24 <25"
+  }
+}

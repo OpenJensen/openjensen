@@ -1833,6 +1833,97 @@
         "title": "CloudRunsFeed",
         "type": "object"
       },
+      "CollectionInput": {
+        "additionalProperties": false,
+        "properties": {
+          "camera_indices": {
+            "default": [
+              0,
+              1
+            ],
+            "items": {
+              "type": "integer"
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "title": "Camera Indices",
+            "type": "array"
+          },
+          "confirm": {
+            "default": "",
+            "title": "Confirm",
+            "type": "string"
+          },
+          "expected_generation": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Expected Generation",
+            "type": "integer"
+          },
+          "fps": {
+            "default": 10,
+            "maximum": 20.0,
+            "minimum": 1.0,
+            "title": "Fps",
+            "type": "integer"
+          },
+          "max_seconds": {
+            "default": 120,
+            "maximum": 300.0,
+            "minimum": 10.0,
+            "title": "Max Seconds",
+            "type": "integer"
+          },
+          "max_steps": {
+            "default": 16,
+            "maximum": 40.0,
+            "minimum": 1.0,
+            "title": "Max Steps",
+            "type": "integer"
+          },
+          "max_tokens": {
+            "default": 16000,
+            "maximum": 64000.0,
+            "minimum": 1024.0,
+            "title": "Max Tokens",
+            "type": "integer"
+          },
+          "mode": {
+            "default": "mock",
+            "enum": [
+              "mock",
+              "physical"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "model": {
+            "const": "gpt-6-astra",
+            "default": "gpt-6-astra",
+            "title": "Model",
+            "type": "string"
+          },
+          "operator_present": {
+            "default": false,
+            "title": "Operator Present",
+            "type": "boolean"
+          },
+          "task": {
+            "default": "Place one object into the tray",
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Task",
+            "type": "string"
+          },
+          "workspace_clear": {
+            "default": false,
+            "title": "Workspace Clear",
+            "type": "boolean"
+          }
+        },
+        "title": "CollectionInput",
+        "type": "object"
+      },
       "Combination": {
         "additionalProperties": false,
         "properties": {
@@ -14038,6 +14129,259 @@
           }
         },
         "summary": "Recording Options"
+      }
+    },
+    "/api/v1/projects/{project_id}/robot-lab/collection-runs": {
+      "get": {
+        "operationId": "runs_api_v1_projects__project_id__robot_lab_collection_runs_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Runs",
+        "tags": [
+          "Agent collection"
+        ]
+      },
+      "post": {
+        "operationId": "start_api_v1_projects__project_id__robot_lab_collection_runs_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CollectionInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start",
+        "tags": [
+          "Agent collection"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/robot-lab/collection-runs/{ident}/image/{role}": {
+      "get": {
+        "operationId": "image_api_v1_projects__project_id__robot_lab_collection_runs__ident__image__role__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "ident",
+            "required": true,
+            "schema": {
+              "title": "Ident",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "role",
+            "required": true,
+            "schema": {
+              "title": "Role",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Image",
+        "tags": [
+          "Agent collection"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/robot-lab/collection-runs/{ident}/trace": {
+      "get": {
+        "operationId": "trace_api_v1_projects__project_id__robot_lab_collection_runs__ident__trace_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "ident",
+            "required": true,
+            "schema": {
+              "title": "Ident",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Trace",
+        "tags": [
+          "Agent collection"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/robot-lab/collection-runs/{ident}/{action}": {
+      "post": {
+        "operationId": "action_api_v1_projects__project_id__robot_lab_collection_runs__ident___action__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "ident",
+            "required": true,
+            "schema": {
+              "title": "Ident",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "action",
+            "required": true,
+            "schema": {
+              "title": "Action",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Action",
+        "tags": [
+          "Agent collection"
+        ]
       }
     },
     "/api/v1/projects/{project_id}/robot-lab/datasets/{dataset_id}/import": {

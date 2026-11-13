@@ -1104,6 +1104,7 @@
 .robot-lab-main-tabs,
 .robot-lab-device-sections {
   display: flex;
+  flex-wrap: wrap;
   gap: 4px;
   border-bottom: 1px solid var(--border);
   margin: 0 0 24px;
@@ -1534,7 +1535,8 @@
 @media (max-width: 900px) {
   .robot-lab-camera-workspace > .robot-lab-grid {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(240px, 50vh) minmax(0, 1fr);
+    grid-template-rows: minmax(240px, 50vh) auto;
+    align-content: start;
     overflow-y: auto;
   }
   .robot-lab-camera-workspace .robot-lab-side {

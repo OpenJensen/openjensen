@@ -491,7 +491,15 @@ class AgentExecutor:
                 raise HardwareError("Incomplete encoder sample")
             self.measured(before)
             before_ns = time.monotonic_ns()
-        capture = lab.camera.capture_timed(self.camera_index)
+        collection = getattr(lab, "agent_collection", None)
+        capture = (
+            lab.camera.latest_timed_jpeg(self.camera_index)
+            if collection and collection.state.get("status") == "recording"
+            else lab.camera.capture_timed(self.camera_index)
+        )
+        if "captured_monotonic" in capture:
+            capture["read_start_monotonic_ns"] = int(capture["captured_monotonic"] * 1e9)
+            capture["read_end_monotonic_ns"] = capture["read_start_monotonic_ns"]
         with bus.lock:
             self.validate_owner(self.owner, self.epoch)
             after = bus.positions()
