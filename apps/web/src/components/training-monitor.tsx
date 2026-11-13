@@ -15,6 +15,8 @@ import {
   type TrainingTelemetry,
 } from '@/lib/api';
 import { conciseRunError, observedProgress, runSummary } from '@/lib/run-summary';
+import { JobStatus } from '@/components/ui/job-status';
+import { jobStatusLabel } from '@/lib/job-status';
 import './training-monitor.css';
 import { checkpointLabel, isCloudArtifact, quantizationIssue, sortCheckpoints } from '@/lib/checkpoints';
 import { ActExportControl } from './act-export-control';
@@ -268,15 +270,21 @@ export function TrainingMonitor({
     ? reproducibility.limitations.filter((item): item is string => typeof item === 'string')
     : [];
 
+  // While it runs, the heading says what the run is doing. Once it has ended, or while the
+  // phase and the badge would be the same word, the heading says it in a sentence instead.
+  const phaseLabel = phaseNames[phase] ?? phase.replaceAll('_', ' ');
+  const heading = running && phaseLabel !== jobStatusLabel(status) ? phaseLabel : runSummary(run, phase, status);
+  const currentAction = data?.current_action ?? runSummary(run, phase, status);
+
   return (
     <article className="training-monitor" aria-label="Training run monitor" data-run-id={run.id}>
       <header className="training-monitor-header">
         <div>
           <span className="training-monitor-eyebrow">Run {run.id.slice(0, 8)}</span>
-          <h3>{phaseNames[phase] ?? phase.replaceAll('_', ' ')}</h3>
+          <h3>{heading}</h3>
         </div>
         <div className="training-monitor-actions">
-          <span className={`status status-${status}`}>{status}</span>
+          <JobStatus status={status} />
           {running && (
             <button type="button" className="secondary-button" disabled={cancelling} onClick={onCancel}>
               {cancelling ? 'Cancelling…' : 'Cancel run'}
@@ -294,9 +302,11 @@ export function TrainingMonitor({
           )}
         </div>
       </header>
-      <p className="training-current-action" role="status">
-        {running && data?.current_action ? data.current_action : runSummary(run, phase, status)}
-      </p>
+      {running && currentAction !== heading && (
+        <p className="training-current-action" role="status">
+          {currentAction}
+        </p>
+      )}
       <ol className="training-timeline" aria-label="Training progress timeline">
         {trainingProgress(status, phase, data?.current_action, events).map((stage, index) => (
           <li
@@ -319,7 +329,7 @@ export function TrainingMonitor({
                 {stage.state === 'pending'
                   ? 'Waiting'
                   : stage.state === 'stopped'
-                    ? `${status} · ${stage.message ?? 'Open activity for details'}`
+                    ? `${jobStatusLabel(status)} · ${stage.message ?? 'Open activity for details'}`
                     : (stage.message ?? (stage.state === 'complete' ? 'Complete' : 'Waiting for worker activity'))}
               </small>
               {stage.timestamp && <time dateTime={stage.timestamp}>{time(stage.timestamp)}</time>}

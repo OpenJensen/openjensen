@@ -1429,14 +1429,14 @@ test('a saved account starts training in one click while setup happens in the qu
   run.status = 'running';
   run.stage = 'operation';
   await expect(
-    page.getByRole('region', { name: 'Fine-tuning job', exact: true }).getByText('running', { exact: true }),
+    page.getByRole('region', { name: 'Fine-tuning job', exact: true }).getByText('Running', { exact: true }),
   ).toBeVisible();
   expect(submitted).toHaveLength(1);
   run.status = 'succeeded';
   run.stage = null;
   run.result = { artifacts: [], reports: [], decision: 'completed' };
   await expect(
-    page.getByRole('region', { name: 'Fine-tuning job', exact: true }).getByText('succeeded', { exact: true }),
+    page.getByRole('region', { name: 'Fine-tuning job', exact: true }).getByText('Completed', { exact: true }),
   ).toBeVisible();
   await page.getByRole('button', { name: 'Back to jobs', exact: true }).click();
   await page.getByRole('button', { name: 'Start a new fine-tuning', exact: true }).click();
@@ -1916,7 +1916,7 @@ test('training summarizes the latest checkpoint and keeps full activity behind d
   await page.getByRole('button', { name: 'Start fine-tuning', exact: true }).click();
   await expect.poll(() => submitted.length).toBe(1);
   const runs = page.getByRole('region', { name: 'Fine-tuning job', exact: true });
-  await expect(runs.locator('.training-current-action')).toHaveText('Training complete');
+  await expect(runs.getByRole('heading', { name: 'Training complete', exact: true })).toBeVisible();
   await expect(runs.getByText('Latest checkpoint: step 10', { exact: true })).toBeVisible();
   await expect(runs.getByLabel('Persisted training activity')).toHaveCount(0);
   await runs.locator('.training-details > summary').click();

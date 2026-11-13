@@ -1065,7 +1065,7 @@ for (const mode of ['quantize', 'replay'] as const)
       .click();
     expect(state.mutations).toHaveLength(0);
     await page.getByRole('button', { name: 'Confirm cancellation', exact: true }).click();
-    await expect(details).toContainText('cancelled');
+    await expect(details).toContainText('Cancelled');
     expect(state.mutations).toEqual([{ path: `/api/v1/jobs/${job.id}/cancel`, body: {} }]);
   });
 

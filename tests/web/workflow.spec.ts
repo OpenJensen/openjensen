@@ -213,7 +213,7 @@ test('cancelling a started worker remains cancelled after browser reload and in 
   expect(await cli('jobs', 'show', submitted.id)).toEqual(cancelled);
   await page.reload();
   await page.getByRole('link', { name: 'Quantize', exact: true }).click();
-  await expect(page.locator(`.job-history-entry[data-job-id="${submitted.id}"]`)).toContainText('cancelled');
+  await expect(page.locator(`.job-history-entry[data-job-id="${submitted.id}"]`)).toContainText('Cancelled');
   await page.locator(`.job-history-entry[data-job-id="${submitted.id}"]`).click();
   await expect(page.getByRole('button', { name: 'Cancel run', exact: true })).toHaveCount(0);
   await expect(page.getByRole('link', { name: /^Download / })).toHaveCount(0);

@@ -1,5 +1,7 @@
 'use client';
 
+import { jobStatusWord } from '@/lib/job-status';
+import { JobStatus } from '@/components/ui/job-status';
 import { isActive } from '@/lib/api';
 import { conciseRunError, runLabel, runSummary } from '@/lib/run-summary';
 import type { Preferences } from '@/lib/workflow-preferences';
@@ -131,7 +133,7 @@ function DiagnosticRuns({ workflow }: { workflow: WorkflowState }) {
         <select value={selected?.id ?? ''} onChange={(e) => setSelectedJobId(e.target.value)}>
           {policyJobs.map((job) => (
             <option key={job.id} value={job.id}>
-              {runLabel(job)} · {job.status} · {new Date(job.created_at).toLocaleString()}
+              {runLabel(job)} · {jobStatusWord(job.status)} · {new Date(job.created_at).toLocaleString()}
             </option>
           ))}
         </select>
@@ -148,7 +150,11 @@ function DiagnosticRuns({ workflow }: { workflow: WorkflowState }) {
           {conciseRunError(selected.error)}
         </p>
       )}
-      {selected && <p className={`status status-${selected.status}`}>{selected.status}</p>}
+      {selected && (
+        <p>
+          <JobStatus status={selected.status} />
+        </p>
+      )}
       {selected && isActive(selected) && (
         <button className="secondary-button" disabled={cancel.isPending} onClick={() => cancel.mutate()}>
           Cancel run

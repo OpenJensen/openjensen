@@ -2,6 +2,7 @@
 
 import type { WorkJob } from '@/lib/work-jobs';
 import { Icon } from '@/components/icon';
+import { JobStatus } from '@/components/ui/job-status';
 import './job-history.css';
 
 export type JobHistoryEntry = {
@@ -71,10 +72,7 @@ export function JobHistory({
                   {entry.progress && <span className="job-history-progress">{entry.progress}</span>}
                 </span>
                 <span className="job-history-meta">
-                  <span className={`status status-${entry.status}`}>
-                    <span className="status-dot" />
-                    {entry.statusLabel ?? entry.status}
-                  </span>
+                  <JobStatus status={entry.status} label={entry.statusLabel} />
                   <time dateTime={entry.createdAt}>{new Date(entry.createdAt).toLocaleString()}</time>
                 </span>
                 <Icon name="arrow" size={16} />

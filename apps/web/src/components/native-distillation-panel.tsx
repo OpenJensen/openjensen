@@ -1,5 +1,6 @@
 'use client';
 
+import { JobStatus } from '@/components/ui/job-status';
 import './native-distillation.css';
 
 import { useEffect, useRef, useState } from 'react';
@@ -439,7 +440,7 @@ export function NativeDistillationPanel({
         <article className="native-simulation-result" aria-label="Distillation job details" data-job-id={selected.id}>
           <div className="native-result-header">
             <h3>ACT256 student</h3>
-            <span className={`status status-${selected.status}`}>{selected.status}</span>
+            <JobStatus status={selected.status} />
           </div>
           <p className="native-result-summary">
             {isActive(selected) ? (selected.stage ?? selected.status) : 'Recorded job'} · {selected.id}

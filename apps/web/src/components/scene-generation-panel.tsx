@@ -1,5 +1,6 @@
 'use client';
 
+import { JobStatus } from '@/components/ui/job-status';
 import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AgentRequestError, agentRequest } from '@/lib/agent-api';
@@ -537,7 +538,7 @@ export function SceneGenerationPanel({
                     : datasetName(legacyScene.request.source_job_id)
                   : 'Job'}
             </h2>
-            {selectedJob && <span className={`status status-${selectedJob.status}`}>{selectedJob.status}</span>}
+            {selectedJob && <JobStatus status={selectedJob.status} />}
             {run && !selectedJob && <StatusBadge tone="warning">{run.status.replaceAll('_', ' ')}</StatusBadge>}
           </div>
           {selectedJob && isActive(selectedJob) && (

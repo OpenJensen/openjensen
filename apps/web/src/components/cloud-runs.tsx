@@ -1,5 +1,6 @@
 'use client';
 
+import { jobStatusLabel, jobStatusWord } from '@/lib/job-status';
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api, isActive } from '@/lib/api';
@@ -99,7 +100,7 @@ export function CloudRuns({
               <select id="managed-cloud-job" value={job.id} onChange={(event) => setJobId(event.target.value)}>
                 {managed.map((item) => (
                   <option key={item.id} value={item.id}>
-                    {runLabel(item)} · {item.id.slice(0, 8)} · {item.status}
+                    {runLabel(item)} · {item.id.slice(0, 8)} · {jobStatusWord(item.status)}
                   </option>
                 ))}
               </select>
@@ -112,7 +113,7 @@ export function CloudRuns({
               </div>
               <div>
                 <dt>Recorded status</dt>
-                <dd>{job.status}</dd>
+                <dd>{jobStatusLabel(job.status)}</dd>
               </div>
               <div>
                 <dt>Execution target</dt>

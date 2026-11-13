@@ -14,17 +14,10 @@ import { DatasetSubmissionRecovery } from '@/components/dataset-submission-recov
 import { TrainingHelp } from '@/components/training-help';
 import './datasets.css';
 import { ErrorNotice, displayDate } from '@/components/workspace-ui';
+import { JobStatus } from '@/components/ui/job-status';
+import { jobStatusWord } from '@/lib/job-status';
 
 import { useWorkspace } from '@/components/workspace-context';
-function JobStatus({ status }: { status: Job['status'] }) {
-  return (
-    <span className={`status status-${status}`}>
-      <span className="status-dot" />
-      {status}
-    </span>
-  );
-}
-
 function formatNumber(value: number) {
   return new Intl.NumberFormat('en-US').format(value);
 }
@@ -662,7 +655,8 @@ export default function DatasetsSection() {
                         >
                           {sortedJobs.map((job) => (
                             <option key={job.id} value={job.id}>
-                              {job.request.repo_id || 'Local dataset'} · {displayDate(job.created_at)} · {job.status}
+                              {job.request.repo_id || 'Local dataset'} · {displayDate(job.created_at)} ·{' '}
+                              {jobStatusWord(job.status)}
                             </option>
                           ))}
                         </select>

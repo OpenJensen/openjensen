@@ -573,7 +573,7 @@ test('Fine-tune opens newest jobs first and opens details only after choosing a 
   await expect(entries.first()).toContainText('SmolVLA · LORA');
   await expect(entries.first()).toContainText('fixture/robot');
   await expect(entries.first()).toContainText('Saved step 20 / 100');
-  await expect(entries.first()).toContainText('running');
+  await expect(entries.first()).toContainText('Running');
   await expect(entries.last()).toContainText('ACT · FULL');
   await expect(entries.last()).toContainText('40 steps completed');
   await expect(monitor).toHaveCount(0);
@@ -589,6 +589,23 @@ test('Fine-tune opens newest jobs first and opens details only after choosing a 
   await expect(history).toBeVisible();
   await expect(monitor).toHaveCount(0);
   expect(submitted).toEqual([]);
+  expect(unexpected).toEqual([]);
+});
+
+test('a finished run reads Completed in the list and on its own page', async ({ page }) => {
+  const { monitor, telemetry, unexpected } = await workspace(page, 'history', false);
+  await page.route('**/api/v1/jobs/older-run/training', (route) =>
+    route.fulfill({ json: { ...telemetry, job_id: 'older-run', status: 'succeeded', phase: 'completed' } }),
+  );
+  const entries = page.getByRole('region', { name: 'Fine-tuning jobs', exact: true }).locator('.job-history-entry');
+  await expect(entries.first().locator('.status')).toHaveText('Running');
+  await expect(entries.last().locator('.status')).toHaveText('Completed');
+  await entries.last().click();
+  await expect(monitor).toHaveAttribute('data-run-id', 'older-run');
+  // The outcome appears once as a state and once as a sentence, never as two different words.
+  await expect(monitor.locator('.training-monitor-header .status')).toHaveText('Completed');
+  await expect(monitor.getByRole('heading', { name: 'Training complete', exact: true })).toBeVisible();
+  await expect(monitor.locator('.training-monitor-header')).not.toContainText(/succeeded/i);
   expect(unexpected).toEqual([]);
 });
 
@@ -836,7 +853,8 @@ test('can cancel an active run and preserves its last recorded progress', async 
   const { monitor, cancelled, unexpected } = await workspace(page);
   await monitor.getByRole('button', { name: 'Cancel run' }).click();
   await expect.poll(() => cancelled).toEqual(['run-001']);
-  await expect(monitor.getByRole('heading', { name: 'Cancelled', exact: true })).toBeVisible();
+  await expect(monitor.getByRole('heading', { name: 'Training cancelled', exact: true })).toBeVisible();
+  await expect(monitor.locator('.training-monitor-header .status')).toHaveText('Cancelled');
   await expect(monitor.getByRole('progressbar')).toHaveAttribute('value', '25');
   await expect(monitor.getByRole('button', { name: 'Resume from checkpoint' })).toBeVisible();
   expect(unexpected).toEqual([]);

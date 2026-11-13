@@ -1,5 +1,6 @@
 import type { components } from './api.generated';
 import { apiOrigin } from './api';
+import { jobStatusLabels } from './job-status';
 
 type WorkJobSchema = components['schemas']['WorkJob'];
 export type WorkJob = Omit<WorkJobSchema, 'inputs' | 'outputs' | 'parent_ids' | 'events'> &
@@ -36,17 +37,7 @@ const jobResultLabels: Record<string, string> = {
 };
 export const jobResultLabel = (operation: string) => jobResultLabels[operation] ?? 'View result';
 
-export const workStatusLabels: Record<string, string> = {
-  queued: 'Queued',
-  running: 'Running',
-  waiting: 'Needs attention',
-  succeeded: 'Completed',
-  failed: 'Failed',
-  cancelled: 'Cancelled',
-  interrupted: 'Interrupted',
-  cancelling: 'Cancelling',
-  preparing: 'Preparing',
-};
+export const workStatusLabels = jobStatusLabels;
 export const isWorkActive = (job: WorkJob) => ['queued', 'preparing', 'running', 'cancelling'].includes(job.status);
 
 export class WorkJobHttpError extends Error {

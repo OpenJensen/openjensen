@@ -1,5 +1,6 @@
 'use client';
 
+import { jobStatusLabel } from '@/lib/job-status';
 import { useEffect, useState } from 'react';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, artifactDownloadUrl, isDatasetJob, type Job, type PolicyArtifact, type Project } from '@/lib/api';
@@ -327,7 +328,7 @@ function ModelStep({ step, jobs }: { step: LineageStep; jobs: Job[] }) {
           </strong>
           <span>
             {date(job?.created_at)}
-            {job ? ` · ${job.status}` : ' · Producing job unavailable'}
+            {job ? ` · ${jobStatusLabel(job.status)}` : ' · Producing job unavailable'}
           </span>
         </div>
       </div>
@@ -638,7 +639,7 @@ export function ModelLibrary({
                 <li key={job.id}>
                   <strong>{operationNames[job.kind] ?? job.kind}</strong>
                   <span>
-                    {date(job.created_at)} · {job.status} · Run {job.id}
+                    {date(job.created_at)} · {jobStatusLabel(job.status)} · Run {job.id}
                   </span>
                   {job.error && <p>{job.error}</p>}
                 </li>
