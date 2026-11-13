@@ -1022,6 +1022,235 @@ def test_reconnecting_gives_up_after_many_quick_drops_in_a_row(tmp_path, monkeyp
     assert len(events) == limit and max(pauses) == sky_runner.LOG_RECONNECT_PAUSE_SECONDS
 
 
+def machine(monkeypatch, stage, *, status=0, block=None):
+    """A cluster that answers the runner's commands; ``block`` names the one that never returns."""
+    calls = []
+
+    async def command(argv, directory, **kwargs):
+        assert directory == stage and argv[0] == "/fixture/sky"
+        name = next(
+            (item for item in ("--follow", "--status") if item in argv), " ".join(argv[1:3])
+        )
+        calls.append(name.split()[0] if name.startswith(("launch", "down", "cancel")) else name)
+        if calls[-1] == block:
+            await asyncio.Event().wait()
+        if name == "api status":
+            return 0, "[]"
+        if calls[-1] == "launch":
+            return 0, "Submitted sky.launch request: aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee\n"
+        if name == "--status":
+            return status, ""
+        return 0, ""
+
+    async def sync(sky, directory, state, callback, *, final=False):
+        if final:
+            calls.append("collect")
+            (directory / "result.json").write_text("{}")
+
+    monkeypatch.setattr(sky_runner, "_command", command)
+    monkeypatch.setattr(sky_runner, "sync_checkpoints", sync)
+    monkeypatch.setattr(sky_runner, "collect", lambda directory, cluster: None)
+    return calls
+
+
+def training_dispatch(payload, target, stage, phase="training"):
+    """The record a run leaves once its machine is training, or in another ``phase``."""
+    _, state = sky_runner.prepare(payload, stage, target)
+    state.update(phase=phase, request_id="aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
+    sky_runner._write_json(stage / sky_runner.STATE_NAME, state)
+    return state
+
+
+@pytest.mark.parametrize(
+    "block,stopping,kept",
+    [
+        ("--follow", True, True),  # the application stops while the machine trains
+        ("--follow", False, False),  # the user cancels, or the job's deadline passes
+        ("api logs", True, False),  # the application stops while the machine is provisioned
+    ],
+)
+def test_only_a_stopping_application_leaves_a_training_machine_running(
+    payload, target, tmp_path, monkeypatch, block, stopping, kept
+):
+    stage = tmp_path / "jobs" / payload["job_id"] / "operation"
+    calls = machine(monkeypatch, stage, block=block)
+    events = []
+
+    async def event(message):
+        events.append(message)
+
+    async def exercise():
+        with sky_runner.detach_when(lambda: stopping):
+            run = asyncio.create_task(sky_runner.run(payload, stage, target, event))
+            while block not in calls:
+                await asyncio.sleep(0)
+            run.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await run
+
+    asyncio.run(exercise())
+    state = json.loads((stage / sky_runner.STATE_NAME).read_text())
+    assert ("down" not in calls and "cancel" not in calls) is kept
+    assert state["phase"] == ("training" if kept else "cleaned_up")
+    assert any("keeps training" in item for item in events) is kept
+
+
+@pytest.mark.parametrize("status", [0, 100])
+def test_reattaching_follows_collects_and_tears_down_without_launching(
+    payload, target, tmp_path, monkeypatch, status
+):
+    stage = tmp_path / "jobs" / payload["job_id"] / "operation"
+    training_dispatch(payload, target, stage)
+    calls = machine(monkeypatch, stage, status=status)
+    events = []
+
+    async def event(message):
+        events.append(message)
+
+    assert asyncio.run(sky_runner.reattach(payload, stage, event)) == status
+    assert "launch" not in calls
+    assert calls[:3] == ["--follow", "--status", "--status"]
+    assert calls.index("collect") < calls.index("down") and calls[-1] == "down"
+    assert json.loads((stage / sky_runner.STATE_NAME).read_text())["phase"] == "cleaned_up"
+    assert "Following the cloud run again after an application restart" in events
+
+
+@pytest.mark.parametrize("phase", ["prepared", "launching", "collecting", "cleaning_up"])
+def test_reattaching_refuses_a_dispatch_that_was_not_training(
+    payload, target, tmp_path, monkeypatch, phase
+):
+    stage = tmp_path / "jobs" / payload["job_id"] / "operation"
+    training_dispatch(payload, target, stage, phase=phase)
+    calls = machine(monkeypatch, stage)
+
+    async def event(message):
+        pass
+
+    with pytest.raises(ValueError, match="no cloud run that can be followed"):
+        asyncio.run(sky_runner.reattach(payload, stage, event))
+    assert calls == []
+
+
+@pytest.mark.parametrize(
+    "status,kept",
+    [(101, True), (0, True), (100, True), (102, False), (103, False), (1, False), (255, False)],
+)
+def test_a_training_machine_is_kept_only_when_its_cluster_answers_for_the_job(
+    payload, target, tmp_path, monkeypatch, status, kept
+):
+    stage = tmp_path / "jobs" / payload["job_id"] / "operation"
+    training_dispatch(payload, target, stage)
+    calls = machine(monkeypatch, stage, status=status)
+    stages = {payload["job_id"]: "operation", "job-without-a-dispatch": "operation"}
+    found = asyncio.run(sky_runner.attachable(tmp_path, stages))
+    assert found == ({payload["job_id"]: "operation"} if kept else {})
+    assert calls == ["--status"]
+
+
+@pytest.mark.parametrize("phase", ["prepared", "launching", "collecting", "cleanup_failed"])
+def test_a_machine_that_was_not_training_is_never_kept_or_asked(
+    payload, target, tmp_path, monkeypatch, phase
+):
+    stage = tmp_path / "jobs" / payload["job_id"] / "operation"
+    training_dispatch(payload, target, stage, phase=phase)
+    calls = machine(monkeypatch, stage, status=101)
+    stages = {payload["job_id"]: "operation"}
+    assert asyncio.run(sky_runner.attachable(tmp_path, stages)) == {}
+    assert asyncio.run(sky_runner.attachable(tmp_path, stages, probe=False)) == {}
+    assert calls == []
+
+
+def test_a_stopping_application_keeps_a_training_machine_without_asking_it(
+    payload, target, tmp_path, monkeypatch
+):
+    stage = tmp_path / "jobs" / payload["job_id"] / "operation"
+    training_dispatch(payload, target, stage)
+    calls = machine(monkeypatch, stage, block="--status")
+    stages = {payload["job_id"]: "operation"}
+    assert asyncio.run(sky_runner.attachable(tmp_path, stages, probe=False)) == stages
+    assert calls == []
+
+
+def test_an_unanswered_status_request_gives_up_within_its_budget(
+    payload, target, tmp_path, monkeypatch
+):
+    stage = tmp_path / "jobs" / payload["job_id"] / "operation"
+    training_dispatch(payload, target, stage)
+    machine(monkeypatch, stage, block="--status")
+    unanswered = sky_runner._command
+
+    async def command(argv, directory, *, timeout, **kwargs):
+        # The real command enforces its own timeout; the double has to as well.
+        async with asyncio.timeout(timeout):
+            return await unanswered(argv, directory, **kwargs)
+
+    monkeypatch.setattr(sky_runner, "_command", command)
+    monkeypatch.setattr(sky_runner, "REATTACH_PROBE_SECONDS", 0.02)
+
+    async def exercise():
+        async with asyncio.timeout(5):
+            return await sky_runner.attachable(tmp_path, {payload["job_id"]: "operation"})
+
+    assert asyncio.run(exercise()) == {}
+
+
+def test_recovery_leaves_a_kept_machine_alone_and_tears_down_the_rest(
+    payload, target, tmp_path, monkeypatch
+):
+    kept = tmp_path / "jobs" / payload["job_id"] / "operation"
+    state = training_dispatch(payload, target, kept)
+    other = {**payload, "job_id": "other-job"}
+    abandoned = tmp_path / "jobs" / other["job_id"] / "operation"
+    training_dispatch(other, target, abandoned)
+    torn_down = []
+
+    async def command(argv, directory, **kwargs):
+        torn_down.append((directory, argv[1]))
+        return (0, "[]") if argv[1:3] == ["api", "status"] else (0, "")
+
+    async def sync(*args, **kwargs):
+        pass
+
+    monkeypatch.setattr(sky_runner, "_command", command)
+    monkeypatch.setattr(sky_runner, "sync_checkpoints", sync)
+    failures = asyncio.run(sky_runner.recover(tmp_path, keep={payload["job_id"]: "operation"}))
+    assert failures == []
+    assert {directory for directory, _ in torn_down} == {abandoned}
+    assert (abandoned, "down") in torn_down
+    assert json.loads((kept / sky_runner.STATE_NAME).read_text()) == state
+    # Keeping names one stage of one job: the same job's other dispatches are not kept.
+    torn_down.clear()
+    asyncio.run(sky_runner.recover(tmp_path, keep={payload["job_id"]: "training"}))
+    assert (kept, "down") in torn_down
+
+
+@pytest.mark.parametrize("phase,stopped", [("training", True), ("cleaned_up", False)])
+def test_releasing_a_run_stops_its_machine_once(
+    payload, target, tmp_path, monkeypatch, phase, stopped
+):
+    stage = tmp_path / "jobs" / payload["job_id"] / "operation"
+    training_dispatch(payload, target, stage, phase=phase)
+    calls = machine(monkeypatch, stage)
+    assert asyncio.run(sky_runner.release(stage)) is None
+    assert ("down" in calls) is stopped
+    assert json.loads((stage / sky_runner.STATE_NAME).read_text())["phase"] == "cleaned_up"
+
+
+def test_releasing_a_run_reports_a_machine_it_could_not_stop(
+    payload, target, tmp_path, monkeypatch
+):
+    stage = tmp_path / "jobs" / payload["job_id"] / "operation"
+    state = training_dispatch(payload, target, stage)
+
+    async def command(argv, directory, **kwargs):
+        return 1, "unreachable"
+
+    monkeypatch.setattr(sky_runner, "_command", command)
+    problem = asyncio.run(sky_runner.release(stage))
+    assert f"sky down -y {state['cluster']}" in problem
+    assert json.loads((stage / sky_runner.STATE_NAME).read_text())["phase"] == "cleanup_failed"
+
+
 def test_too_many_checkpoints_rejected_before_provisioning(payload, target, tmp_path):
     payload["parameters"]["training"] = {"steps": 20000, "save_every": 1}
     with pytest.raises(ValueError, match="at most 10000"):

@@ -180,7 +180,7 @@ def test_only_launch_receives_secret_and_no_job_task_bundle_or_archive_contains_
             )
         return 0, "fixture output"
 
-    async def follow(sky, directory, state, timeout, event):
+    async def follow(sky, directory, state, timeout, event, lines):
         await sky_runner._command([sky, "logs", state["cluster"], "1"], directory, timeout=1)
 
     async def sync(sky, directory, state, event, *, final):
