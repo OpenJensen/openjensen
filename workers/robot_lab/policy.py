@@ -466,6 +466,23 @@ class PolicyRunner:
         self.replay = queued if type(queued) is int and queued > 0 else 0
         return reply
 
+    def _camera_rate(self, index, since, until):
+        """Frames a second the camera delivered between two moments, or None if unknown.
+
+        The camera pool records when every frame arrived. That is the direct answer to
+        whether a camera keeps up with the policy; what a step happens to see is not,
+        because frames arrive unevenly while the computer is busy.
+        """
+        times = getattr(self.lab.camera, "capture_times", None)
+        lock = getattr(self.lab.camera, "frame_lock", None)
+        if not isinstance(times, dict) or lock is None:
+            return None
+        with lock:
+            arrived = [stamp for stamp in times.get(index, ()) if since <= stamp <= until]
+        if len(arrived) < 2 or arrived[-1] <= arrived[0]:
+            return None
+        return (len(arrived) - 1) / (arrived[-1] - arrived[0])
+
     def _observation(self, cameras, state, task, max_age):
         """One request for the inference process and the capture time of each camera."""
         if self.replay:
@@ -686,6 +703,15 @@ class PolicyRunner:
                 key: sum(age <= 1 / fps for age in ages[index]) for key, index in cameras.items()
             }
             unique = min(fresh.values())
+            # Where the camera pool can say how many frames arrived, that decides.
+            rates = {
+                key: self._camera_rate(index, starts[0], time.monotonic())
+                for key, index in cameras.items()
+            }
+            if all(rate is not None for rate in rates.values()):
+                cameras_keep_up = min(rates.values()) >= fps * 0.9
+            else:
+                cameras_keep_up = unique >= count * 0.9
             # The longest wait between two different frames of each camera, as seen here.
             waits = {}
             for key, index in cameras.items():
@@ -704,7 +730,7 @@ class PolicyRunner:
                 and mean <= 0.85 / fps
                 and late <= max(1, count // 20)
                 and count - len(ordinary) <= max(1, count // 20)
-                and unique >= count * 0.9
+                and cameras_keep_up
             )
             passed = steady and longest <= prediction_limit(fps, pause)
             # Everything holds except that planning takes longer than the usual limit:
@@ -727,6 +753,9 @@ class PolicyRunner:
                 "max_latency_ms": round(longest * 1000, 1),
                 "fresh_frames": unique,
                 "camera_fresh_frames": fresh,
+                "camera_fps": {
+                    key: None if rate is None else round(rate, 1) for key, rate in rates.items()
+                },
                 "camera_longest_wait_ms": waits,
                 "samples": count,
                 "message": "Camera and local ACT inference meet the trained frame rate"
@@ -992,10 +1021,20 @@ class PolicyRunner:
                     max(0.15, 2 / self.model["fps"]),
                 )
                 for index, stamp in captured.items():
-                    # As in the check: is this step's frame younger than one policy step?
+                    # As in the check: the camera's own frame count decides where it is
+                    # known; otherwise, is this step's frame younger than one policy step?
                     recent = camera_stamps[index]
                     recent.append(step_started - stamp <= 1 / self.model["fps"])
-                    if len(recent) == recent.maxlen and sum(recent) < len(recent) * 0.9:
+                    if len(recent) < recent.maxlen:
+                        continue
+                    rate = self._camera_rate(
+                        index, step_started - window / self.model["fps"], step_started
+                    )
+                    if (
+                        rate < self.model["fps"] * 0.9
+                        if rate is not None
+                        else sum(recent) < len(recent) * 0.9
+                    ):
                         raise ValueError("Policy camera fell below the trained frame rate")
                 if set(positions) != set(JOINTS) or time.monotonic() - self.last_health > 0.15:
                     raise ValueError("Fresh full-arm encoder observations are unavailable")

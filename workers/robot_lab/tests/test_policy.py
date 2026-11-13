@@ -810,6 +810,45 @@ class PolicyTests(unittest.TestCase):
         steps = [message for message in sent if not message.get("reset")]
         self.assertTrue(steps and all("jpeg" in message for message in steps))
 
+    def counting_camera(self, rate, age):
+        """A camera pool that records frame arrivals, as the real one does: it delivers
+        ``rate`` frames a second, and each step is handed a frame ``age`` seconds old."""
+        camera = Camera()
+        camera.frame_lock = threading.Lock()
+
+        class Arrivals(dict):
+            def get(self, index, default=()):
+                last = int(time.monotonic() * rate)
+                return [number / rate for number in range(last - 119, last + 1)]
+
+        camera.capture_times = Arrivals()
+        camera.latest_timed_jpeg = lambda index, max_age=0.15: {
+            "jpeg": b"frame",
+            "captured_monotonic": time.monotonic() - age,
+        }
+        self.lab.camera = camera
+
+    def test_the_cameras_own_frame_count_decides_when_it_is_known(self):
+        """Real cameras at 30 FPS failed the check for a 23 FPS policy one time in five:
+        while the computer was busy some steps were handed a frame older than one step."""
+        runner, _, _ = self.install()
+        runner.load({"policy_id": "pen"})
+        # The policy runs at 13 FPS, so one step is 77 ms: every frame handed over is
+        # older than that, yet the camera delivers 30 a second.
+        self.counting_camera(rate=30, age=0.09)
+        runner.preflight({"camera_index": 0})
+        check = runner.check
+        self.assertEqual(check["fresh_frames"], 0)
+        self.assertAlmostEqual(check["camera_fps"][FRONT], 30, delta=1)
+        self.assertTrue(check["passed"], check)
+        # A camera that really delivers too few frames fails, however young its frames.
+        self.counting_camera(rate=8, age=0.0)
+        runner.preflight({"camera_index": 0})
+        check = runner.check
+        self.assertEqual(check["fresh_frames"], check["samples"])
+        self.assertAlmostEqual(check["camera_fps"][FRONT], 8, delta=1)
+        self.assertFalse(check["passed"])
+
     def test_preflight_measures_native_camera_path_without_arming(self):
         runner, _, _ = self.install()
         runner.load({"policy_id": "pen"})
