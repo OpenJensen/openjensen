@@ -2737,15 +2737,16 @@ test('Run policy requires a native preflight and attended start, then renews onl
     .getByRole('navigation', { name: 'Robot Lab tabs' })
     .getByRole('button', { name: 'Run policy', exact: true })
     .click();
-  const run = page.getByRole('button', { name: 'Run policy', exact: true }).last();
+  const controls = page.getByRole('group', { name: 'Policy run controls' });
+  const run = controls.getByRole('button', { name: 'Run policy', exact: true });
   await expect(run).toBeDisabled();
-  await page.getByRole('button', { name: 'Load and check policy', exact: true }).click();
+  await controls.getByRole('button', { name: 'Load policy', exact: true }).click();
   expect(writes(state, '/control/start')).toEqual([]);
   expect(writes(state, '/policy/start')).toEqual([]);
-  await page.getByRole('button', { name: 'Check camera and inference rate', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Enable policy control', exact: true })).toBeDisabled();
+  await controls.getByRole('button', { name: 'Check camera and inference rate', exact: true }).click();
+  await expect(controls.getByRole('button', { name: 'Enable policy control', exact: true })).toBeDisabled();
   await page.getByRole('checkbox', { name: /I am present; the arm is secured/ }).check();
-  await page.getByRole('button', { name: 'Enable policy control', exact: true }).click();
+  await controls.getByRole('button', { name: 'Enable policy control', exact: true }).click();
   expect(writes(state, '/control/start').at(-1)?.body).toMatchObject({
     mode: 'manual',
     move_to_middle: false,
@@ -2813,7 +2814,7 @@ test('Run policy previews an offline ACT observation without devices or motor au
   state.portsConnected = false;
   state.policyOffline = true;
   await openTab(page, 'Run policy');
-  await page.getByRole('button', { name: 'Load and check policy', exact: true }).click();
+  await page.getByRole('button', { name: 'Load policy', exact: true }).click();
   await expect(page.getByLabel('Task instruction', { exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Try with test inputs', exact: true }).click();
   await expect(page.getByText('Latest prediction · 25 ms · no movement')).toBeVisible();
@@ -2842,7 +2843,7 @@ test('Run policy supplies a task only for the language-conditioned offline adapt
   state.policyKind = 'smolvla';
   state.policyOffline = true;
   await openTab(page, 'Run policy');
-  await page.getByRole('button', { name: 'Load and check policy', exact: true }).click();
+  await page.getByRole('button', { name: 'Load policy', exact: true }).click();
   await page.getByLabel('Task instruction', { exact: true }).fill('Pick up the white pen.');
   await page.getByRole('button', { name: 'Try with test inputs', exact: true }).click();
   await expect.poll(() => writes(state, '/policy/preview').length).toBe(1);
