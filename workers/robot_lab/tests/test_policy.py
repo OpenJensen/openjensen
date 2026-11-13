@@ -849,6 +849,45 @@ class PolicyTests(unittest.TestCase):
         self.assertAlmostEqual(check["camera_fps"][FRONT], 8, delta=1)
         self.assertFalse(check["passed"])
 
+    def test_a_run_reopens_camera_readers_the_service_closed_after_the_check(self):
+        """The check opened the readers; 30 s idle closed them; the run died at once with
+        "Camera background reader is not running"."""
+        runner = self.prepare()
+        camera = self.lab.camera
+        opened = set()
+        camera.start_reader = lambda index: opened.add(index)
+
+        def read_latest_timed(index, max_age=0.5):
+            if index not in opened:
+                raise RuntimeError("Camera background reader is not running")
+            return None, time.monotonic()
+
+        camera.read_latest_timed = read_latest_timed
+        camera.latest_timed_jpeg = lambda index, max_age=0.15: (
+            {"jpeg": b"frame", "captured_monotonic": time.monotonic()}
+            if index in opened
+            else (_ for _ in ()).throw(RuntimeError("Camera background reader is not running"))
+        )
+        runner.start(self.run_payload())
+
+        def control_loop():
+            while self.lab.mode == "policy":
+                try:
+                    runner.apply(dict(self.lab.positions), time.monotonic())
+                except HardwareError as error:
+                    self.lab.stop(str(error))
+                    return
+                time.sleep(0.01)
+
+        threading.Thread(target=control_loop, daemon=True).start()
+        deadline = time.monotonic() + 3
+        while runner.steps < 3 and self.lab.mode == "policy" and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.assertEqual(self.lab.mode, "policy", self.lab.error)
+        self.assertGreaterEqual(runner.steps, 3)
+        self.assertEqual(opened, {0})
+        self.lab.stop()
+
     def test_preflight_measures_native_camera_path_without_arming(self):
         runner, _, _ = self.install()
         runner.load({"policy_id": "pen"})

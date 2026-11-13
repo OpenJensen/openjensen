@@ -993,6 +993,23 @@ class PolicyRunner:
         try:
             if not isinstance(cameras, dict):  # One camera, given by its index.
                 cameras = {self.model["camera_key"]: cameras}
+            # The check opened these readers, but the service closes cameras that sat
+            # unused (after 30 s), and a run starts up to a minute after its check. Open
+            # them again and wait for a frame before the first step.
+            for index in cameras.values():
+                self.lab.camera.start_reader(index)
+            warm = time.monotonic() + 3
+            for index in cameras.values():
+                while True:
+                    try:
+                        self.lab.camera.read_latest_timed(index, 0.5)
+                        break
+                    except RuntimeError, TimeoutError:
+                        if time.monotonic() >= warm or cancel.is_set():
+                            raise ValueError(
+                                "Policy camera did not provide a fresh frame"
+                            ) from None
+                        time.sleep(0.02)
             self._reset_policy()
             deadline, due = time.monotonic() + duration, time.monotonic()
             window = max(16, 2 * self.model["fps"])
