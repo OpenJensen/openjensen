@@ -538,10 +538,11 @@ test('model names distinguish checkpoint choices and training runs while legacy 
   );
   await page.getByRole('link', { name: 'Fine-tune', exact: true }).click();
   const runs = page.locator('.job-history-entry');
-  await expect(runs.filter({ hasText: /SmolVLA · LORA/ })).toHaveCount(1);
-  await expect(runs.filter({ hasText: /ACT · FULL/ })).toHaveCount(1);
-  await expect(runs.filter({ hasText: /Psi-Zero · FULL/ })).toHaveCount(1);
-  await expect(runs.filter({ hasText: /FULL/ })).toHaveCount(3);
+  // Runs are listed by model and training method, then dataset.
+  await expect(runs.filter({ hasText: /SmolVLA\s*LoRA/ })).toHaveCount(1);
+  await expect(runs.filter({ hasText: /ACT\s*Full training/ })).toHaveCount(1);
+  await expect(runs.filter({ hasText: /Psi-Zero\s*Full training/ })).toHaveCount(1);
+  await expect(runs.filter({ hasText: /Full training/ })).toHaveCount(3);
   await page.locator('.job-history-entry[data-job-id="recent-run"]').click();
   const checkpointActions = page.getByRole('region', { name: 'Use a trained checkpoint' });
   await expect(
