@@ -113,6 +113,21 @@ class PiCollectionTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaisesRegex(ValueError, "Confirm"):
             await self.service.start("test-project", CollectionInput(mode="physical"))
 
+    async def test_any_named_model_is_recorded_with_the_run(self):
+        # The model is the operator's choice, not a fixed one: a run keeps the one it was given.
+        self.assertEqual(CollectionInput().model, "gpt-6-astra")
+        run = await self.service.start("test-project", CollectionInput(model="gpt-6.1-sol"))
+        await self.service.stop(run["id"])
+        await asyncio.gather(self.service.tasks[run["id"]], return_exceptions=True)
+        self.assertEqual(self.service.get(run["id"])["config"]["model"], "gpt-6.1-sol")
+
+    def test_a_model_name_that_is_not_an_identifier_is_refused(self):
+        from pydantic import ValidationError
+
+        for name in ("", "gpt 6", "gpt-6;rm", "x" * 129):
+            with self.assertRaises(ValidationError, msg=name):
+                CollectionInput(model=name)
+
 
 if __name__ == "__main__":
     unittest.main()

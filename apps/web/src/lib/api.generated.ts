@@ -4172,9 +4172,8 @@ export interface components {
             /**
              * Model
              * @default gpt-6-astra
-             * @constant
              */
-            model: "gpt-6-astra";
+            model: string;
             /**
              * Operator Present
              * @default false

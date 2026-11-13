@@ -159,6 +159,8 @@ def admit(root, ident):
         "camera_key": manifest["camera_key"],
         "camera_keys": list(images),
         "image_shape": images[manifest["camera_key"]]["shape"],
+        # Lets the workspace tell which of its models is already installed here.
+        "source_manifest_sha256": manifest.get("source_manifest_sha256"),
         "checkpoint": checkpoint,
         "files": files,
         "manifest": manifest,

@@ -42,7 +42,10 @@ def save(path, value):
 class CollectionInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     mode: Literal["mock", "physical"] = "mock"
-    model: Literal["gpt-6-astra"] = "gpt-6-astra"
+    # Any OpenAI model that reads images and calls tools; the saved API key decides access.
+    model: str = Field(
+        default="gpt-6-astra", min_length=1, max_length=128, pattern=r"^[A-Za-z0-9._:-]+$"
+    )
     task: str = Field(default="Place one object into the tray", min_length=1, max_length=1000)
     camera_indices: list[StrictInt] = Field(default=[0, 1], min_length=2, max_length=2)
     fps: int = Field(default=10, ge=1, le=20, strict=True)

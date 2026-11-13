@@ -1898,8 +1898,10 @@
             "type": "string"
           },
           "model": {
-            "const": "gpt-6-astra",
             "default": "gpt-6-astra",
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9._:-]+$",
             "title": "Model",
             "type": "string"
           },
