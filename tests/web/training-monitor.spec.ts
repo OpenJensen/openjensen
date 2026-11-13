@@ -855,6 +855,26 @@ test('failed runs retain evidence and resume the original recipe from their chec
   expect(unexpected).toEqual([]);
 });
 
+test('a failed run is set up again with its dataset and model, leaving only where it runs to choose', async ({
+  page,
+}) => {
+  const { monitor, submitted, unexpected } = await workspace(page, 'failed');
+  await monitor.getByRole('button', { name: 'Train again', exact: true }).click();
+  // The form opens on its last step: nothing has to be picked again.
+  await expect(page.getByRole('heading', { name: 'Compute', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Start training', exact: true }).click();
+  await expect.poll(() => submitted.length).toBe(1);
+  expect(submitted[0]).toMatchObject({
+    operation: 'policy.finetune',
+    dataset_job_id: 'dataset',
+    training_method: 'lora',
+    training: { model_id: 'lerobot/smolvla_base' },
+  });
+  // A new run, not a continuation of the failed one.
+  expect(submitted[0].artifact_id ?? null).toBeNull();
+  expect(unexpected).toEqual([]);
+});
+
 test('can cancel an active run and preserves its last recorded progress', async ({ page }) => {
   const { monitor, cancelled, unexpected } = await workspace(page);
   await monitor.getByRole('button', { name: 'Cancel run' }).click();

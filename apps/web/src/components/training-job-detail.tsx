@@ -34,6 +34,7 @@ export function TrainingJobDetail({
     projectId,
     resumeOptions,
     resumeRun,
+    trainAgain,
     selectedRun,
     showHistory,
   } = panel;
@@ -87,6 +88,7 @@ export function TrainingJobDetail({
               ? (checkpointId) => resumeRun(selectedRun.id, checkpointId)
               : undefined
           }
+          onTrainAgain={() => trainAgain(selectedRun.id)}
         />
       )}
       {!selectedRun && <p className="muted">This job is no longer available.</p>}

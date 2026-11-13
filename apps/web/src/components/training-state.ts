@@ -722,6 +722,35 @@ export function useTrainingPanel({
     setView('new');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
+  /**
+   * A run that ended without a model (no GPU of that type was free, say) is set up again
+   * with its dataset, model and method; only where it runs is left to choose.
+   */
+  function trainAgain(runId: string) {
+    const run = trainingRuns.find((job) => job.id === runId);
+    const request = run?.request && 'training_method' in run.request ? run.request : undefined;
+    if (!request) return;
+    selectionGeneration.current += 1;
+    const datasets = [
+      ...new Set([request.dataset_job_id, ...(request.dataset_job_ids ?? [])].filter((id): id is string => !!id)),
+    ];
+    if (datasets.length) {
+      setDatasetId(datasets[0]);
+      setExtraDatasetIds(datasets.slice(1));
+    }
+    // A request names the model by its repository; the form lists models by catalogue id.
+    const model = models.find((item) => item.model_id === request.training?.model_id);
+    if (model) {
+      setModelId(model.id);
+      setModelIds([model.id]);
+    }
+    setMethod(request.training_method);
+    setResumeId('');
+    setStep(2);
+    mutation.reset();
+    setView('new');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
   useEffect(() => {
     if (startNew) {
       setStep(0);
@@ -844,6 +873,7 @@ export function useTrainingPanel({
     resumeId,
     resumeOptions,
     resumeRun,
+    trainAgain,
     reviewHistory,
     runStarting,
     runtime,

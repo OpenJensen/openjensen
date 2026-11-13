@@ -156,6 +156,7 @@ export function TrainingMonitor({
   cancelling,
   cancelError,
   onResume,
+  onTrainAgain,
   onQuantize,
   onNativeQuantize,
   onNativeDistill,
@@ -173,6 +174,8 @@ export function TrainingMonitor({
   cancelling: boolean;
   cancelError?: Error | null;
   onResume?: (checkpointId?: string) => void;
+  /** Set the same dataset and model up again, to choose where it runs. */
+  onTrainAgain?: () => void;
   onQuantize?: (artifactId: string) => void;
   onNativeQuantize?: (artifactId: string) => void;
   onNativeDistill?: (artifactId: string) => void;
@@ -298,6 +301,11 @@ export function TrainingMonitor({
               onClick={() => onResume(chosenCheckpoint?.id)}
             >
               Resume from checkpoint
+            </button>
+          )}
+          {!running && onTrainAgain && ['failed', 'cancelled', 'interrupted'].includes(status) && (
+            <button type="button" className="secondary-button" onClick={onTrainAgain}>
+              Train again
             </button>
           )}
         </div>
