@@ -240,4 +240,11 @@ async def cancel(project_id: str, key: str, request: Request):
         await state.dataset_library.cancel_conversion(
             job.inputs["dataset_id"], expected_job_id=job.source_id
         )
+    elif key.startswith("share:"):
+        from vla_platform.huggingface_transfer import TransferError
+
+        try:
+            await state.huggingface_sharing.cancel(job.source_id)
+        except TransferError as exc:
+            raise HTTPException(exc.status, str(exc)) from None
     return await get_job(state, project_id, key)

@@ -114,6 +114,27 @@ def _archive_metadata(path, expected_sha):
     return manifest["metadata"], recipe
 
 
+def _shared_control(record, artifact, project_id):
+    """The recording evidence that travelled with a model added from a link, if sound."""
+    saved, control = record.get("artifact"), record.get("recorded_control")
+    if (
+        not isinstance(saved, dict)
+        or saved.get("project_id") != project_id
+        or saved.get("id") != artifact.id
+        or saved.get("manifest_sha256") != artifact.manifest_sha256
+        or not isinstance(control, dict)
+        or control.get("units") != "degrees; gripper percent"
+        or type(control.get("dataset_fps")) is not int
+        or any(
+            not isinstance(control.get(key), list)
+            or [str(name).removesuffix(".pos") for name in control[key]] != JOINTS
+            for key in ("state_names", "action_names")
+        )
+    ):
+        return None
+    return {key: control[key] for key in ("units", "state_names", "action_names", "dataset_fps")}
+
+
 async def recorded_control(app, project_id, artifact):
     """Units, joint order and rate of the Robot Lab recording a policy was trained on.
 
@@ -122,11 +143,19 @@ async def recorded_control(app, project_id, artifact):
     evidence of those units, not a claim made at installation time. Anything else
     (another source, several datasets, a copy that no longer verifies) yields nothing,
     and the existing rules apply unchanged.
+
+    A model added from a Hugging Face link was trained elsewhere, so its recording is
+    not here. The machine that published it read the same evidence and sent it with the
+    model; that statement is used, and it is checked as strictly as the recording.
     """
     from vla_platform.datasets.snapshots import resolve_snapshot
+    from vla_platform.huggingface_sharing import fetched_record
 
     try:
         execution = app.state.execution
+        shared = fetched_record(execution.settings.data_dir, artifact.job_id)
+        if shared is not None:
+            return _shared_control(shared, artifact, project_id)
         job = await execution.get(artifact.job_id)
         request = getattr(job, "request", None)
         if (

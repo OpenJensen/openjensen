@@ -389,15 +389,16 @@ class Lifecycle:
                     )
                 except (OSError, ValueError, KeyError, TypeError) as exc:
                     logger.warning("Skipping unavailable checkpoint in %s: %s", index_path, exc)
+        from vla_platform.huggingface_sharing import fetched_models
+
+        # Models added from a Hugging Face link are complete local bundles of their own.
+        artifacts.extend(fetched_models(self.settings.data_dir, project_id))
         return [self.model_names.decorate(artifact, artifacts) for artifact in artifacts]
 
     async def rename_model_run(self, project_id: str, job_id: str, name: str):
-        job = await self.execution.get(job_id)
-        if (
-            not job
-            or job.project_id != project_id
-            or not any(artifact.job_id == job_id for artifact in await self.artifacts(project_id))
-        ):
+        # Every listed model already belongs to this project, whether a job here made
+        # it or it was added from a link.
+        if not any(artifact.job_id == job_id for artifact in await self.artifacts(project_id)):
             raise ValueError("Model run does not exist in this project")
         return self.model_names.rename(project_id, job_id, name)
 

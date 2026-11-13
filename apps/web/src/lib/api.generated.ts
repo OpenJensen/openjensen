@@ -951,6 +951,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/huggingface-sharing/account": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Account
+         * @description Whose account a publish goes to: the token in Settings, else this computer's login.
+         */
+        get: operations["account_api_v1_huggingface_sharing_account_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/job-diagnostics-settings": {
         parameters: {
             query?: never;
@@ -1485,6 +1505,66 @@ export interface paths {
         put?: never;
         /** Example */
         post: operations["example_api_v1_projects__project_id__datasets_example_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/huggingface-sharing/destination": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Destination
+         * @description Where a dataset or model would be published, before anything is sent.
+         */
+        get: operations["destination_api_v1_projects__project_id__huggingface_sharing_destination_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/huggingface-sharing/fetch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Fetch
+         * @description Start adding a dataset or model from a Hugging Face link or ``owner/name``.
+         */
+        post: operations["fetch_api_v1_projects__project_id__huggingface_sharing_fetch_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/huggingface-sharing/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Publish
+         * @description Start publishing a saved dataset or a model. The repository is private by default.
+         */
+        post: operations["publish_api_v1_projects__project_id__huggingface_sharing_publish_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4261,6 +4341,31 @@ export interface components {
              */
             revision: string;
         };
+        /** Destination */
+        Destination: {
+            account: components["schemas"]["SharingAccount"];
+            /** Active Job */
+            active_job?: string | null;
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "dataset" | "model";
+            /** Name */
+            name: string;
+            /**
+             * Private
+             * @default true
+             */
+            private: boolean;
+            published?: components["schemas"]["Published"] | null;
+            /** Repo Id */
+            repo_id?: string | null;
+            /** Url */
+            url?: string | null;
+        };
         /** DistillationSplits */
         DistillationSplits: {
             /** Final */
@@ -4433,6 +4538,16 @@ export interface components {
             simulated_seconds?: number | null;
             /** Speed Limit Clipped */
             speed_limit_clipped: boolean[];
+        };
+        /** FetchRequest */
+        FetchRequest: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "dataset" | "model";
+            /** Link */
+            link: string;
         };
         /** FrameIdentity */
         FrameIdentity: {
@@ -5736,6 +5851,36 @@ export interface components {
             /** Unavailable Reason */
             unavailable_reason?: string | null;
         };
+        /** PublishRequest */
+        PublishRequest: {
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "dataset" | "model";
+            /**
+             * Private
+             * @default true
+             */
+            private: boolean;
+            /** Repo Id */
+            repo_id?: string | null;
+        };
+        /** Published */
+        Published: {
+            /** Private */
+            private: boolean;
+            /** Published At */
+            published_at: string;
+            /** Repo Id */
+            repo_id: string;
+            /** Revision */
+            revision: string;
+            /** Url */
+            url: string;
+        };
         /** Receipt */
         Receipt: {
             /** Admission Observation Id */
@@ -6435,6 +6580,17 @@ export interface components {
             session_id: string | null;
             /** Stop Requested */
             stop_requested: boolean;
+        };
+        /** SharingAccount */
+        SharingAccount: {
+            /** Connected */
+            connected: boolean;
+            /** Message */
+            message?: string | null;
+            /** Source */
+            source?: ("settings" | "machine") | null;
+            /** Username */
+            username?: string | null;
         };
         /**
          * SimulationRequest
@@ -8899,6 +9055,26 @@ export interface operations {
             };
         };
     };
+    account_api_v1_huggingface_sharing_account_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SharingAccount"];
+                };
+            };
+        };
+    };
     settings_api_v1_job_diagnostics_settings_get: {
         parameters: {
             query?: never;
@@ -9956,6 +10132,110 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    destination_api_v1_projects__project_id__huggingface_sharing_destination_get: {
+        parameters: {
+            query: {
+                kind: "dataset" | "model";
+                id: string;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Destination"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    fetch_api_v1_projects__project_id__huggingface_sharing_fetch_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FetchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkJob"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    publish_api_v1_projects__project_id__huggingface_sharing_publish_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublishRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkJob"];
                 };
             };
             /** @description Validation Error */
