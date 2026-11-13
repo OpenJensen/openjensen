@@ -775,7 +775,8 @@ async function openNativeAgain(page: Page, reload = false) {
   await expect
     .poll(
       async () =>
-        (await review.isVisible()) || (await page.getByRole('button', { name: 'New simulation', exact: true }).isVisible()),
+        (await review.isVisible()) ||
+        (await page.getByRole('button', { name: 'New simulation', exact: true }).isVisible()),
     )
     .toBe(true);
   if (await review.isVisible()) await review.click();

@@ -409,8 +409,8 @@ export function AiPhysicalConnection({ physical }: { physical: ReturnType<typeof
     <section className="agent-control-evidence" aria-label="Physical SO101 preflight">
       <h3>Physical SO101</h3>
       <p>
-        Connect the arm here after completing calibration in Robot Lab. Connecting enables torque and holds the
-        measured current pose; it does not start an AI task. Keep the arm supported and Stop within reach.
+        Connect the arm here after completing calibration in Robot Lab. Connecting enables torque and holds the measured
+        current pose; it does not start an AI task. Keep the arm supported and Stop within reach.
       </p>
       {!capable && (
         <p role="status">

@@ -458,7 +458,9 @@ for (const stage of ['Evaluate', 'Simulate']) {
     artifacts.push({ ...artifacts[0], id: 'packed-policy', label: 'Compressed policy', format: 'gguf' });
     await page.getByRole('link', { name: stage, exact: true }).click();
 
-    await page.getByRole('button', { name: stage === 'Evaluate' ? 'New evaluation' : 'New simulation', exact: true }).click();
+    await page
+      .getByRole('button', { name: stage === 'Evaluate' ? 'New evaluation' : 'New simulation', exact: true })
+      .click();
     if (stage === 'Simulate') await page.getByRole('button', { name: 'Check inference', exact: true }).click();
     await expect(page.getByRole('group', { name: 'Compute', exact: true }).getByRole('radio')).toHaveCount(0);
     await expect(choice(page, 'Compute', 'gcp')).toHaveCount(0);
@@ -659,7 +661,9 @@ for (const stage of ['Evaluate', 'Simulate']) {
       page.getByRole('region', { name: stage === 'Evaluate' ? 'Evaluation jobs' : 'Simulation runs', exact: true }),
     ).toBeVisible();
     await expect(page.getByRole('group', { name: 'My model', exact: true })).toHaveCount(0);
-    await page.getByRole('button', { name: stage === 'Evaluate' ? 'New evaluation' : 'New simulation', exact: true }).click();
+    await page
+      .getByRole('button', { name: stage === 'Evaluate' ? 'New evaluation' : 'New simulation', exact: true })
+      .click();
     if (stage === 'Simulate') await page.getByRole('button', { name: 'Check inference', exact: true }).click();
     await expectCompute(page, 'gcp');
     await expectSelectedPolicy(page, 'cloud-q8', false);
@@ -751,7 +755,9 @@ for (const stage of ['Evaluate', 'Simulate']) {
     const { submitted, unexpected } = await workspace(page, true, true);
     await page.getByRole('link', { name: stage, exact: true }).click();
 
-    await page.getByRole('button', { name: stage === 'Evaluate' ? 'New evaluation' : 'New simulation', exact: true }).click();
+    await page
+      .getByRole('button', { name: stage === 'Evaluate' ? 'New evaluation' : 'New simulation', exact: true })
+      .click();
     if (stage === 'Simulate') await page.getByRole('button', { name: 'Check inference', exact: true }).click();
     await expectCompute(page, 'gcp');
     await expect(page.getByText('Quantize a SmolVLA checkpoint first.', { exact: true })).toBeVisible();
