@@ -2959,6 +2959,83 @@ test('Run policy installs a project model without loading or starting hardware',
   expect(state.errors).toEqual([]);
 });
 
+test('two runs of one recipe are told apart when choosing a model to install', async ({ page }) => {
+  const state = await fixture(page, true, 'Darwin', false);
+  const checkpoint = (job: string) => ({
+    id: `${job}:operation`,
+    project_id: 'alpha',
+    job_id: job,
+    label: 'ACT checkpoint',
+    run_name: 'act-20000-sft',
+    format: 'training_checkpoint',
+    metadata: { architecture: 'act', training_backend: 'lerobot', reload_verified: true, method: 'full', step: 20000 },
+  });
+  state.projectModels = [checkpoint('morning-run'), checkpoint('evening-run')];
+  const run = (id: string, created_at: string) => ({
+    id,
+    project_id: 'alpha',
+    kind: 'policy.finetune',
+    status: 'succeeded',
+    created_at,
+    updated_at: created_at,
+    request: {
+      operation: 'policy.finetune',
+      runtime_id: 'fixture',
+      dataset_job_id: 'duck-inspection',
+      training_method: 'full',
+      training: { model_id: 'code://lerobot/act', steps: 20000 },
+    },
+  });
+  await page.route('**/api/v1/projects/alpha/jobs', (route) =>
+    route.fulfill({
+      json: [
+        run('morning-run', '2026-11-12T09:05:00'),
+        run('evening-run', '2026-11-12T20:17:00'),
+        {
+          id: 'duck-inspection',
+          project_id: 'alpha',
+          kind: 'dataset.inspect',
+          status: 'succeeded',
+          created_at: '2026-11-12T08:00:00',
+          updated_at: '2026-11-12T08:00:00',
+          request: { source: 'local', library_id: 'a'.repeat(32), revision: 'main' },
+        },
+      ],
+    }),
+  );
+  await page.route('**/api/v1/datasets?project_id=alpha', (route) =>
+    route.fulfill({
+      json: [
+        {
+          id: 'a'.repeat(32),
+          project_id: 'alpha',
+          name: 'pick-up-duck-home',
+          source: 'local',
+          status: 'ready',
+          created_at: '2026-11-12T08:00:00',
+        },
+      ],
+    }),
+  );
+  await page
+    .getByRole('navigation', { name: 'Robot Lab tabs' })
+    .getByRole('button', { name: 'Run policy', exact: true })
+    .click();
+  await page.getByText('Install from Models', { exact: true }).click();
+  const options = page.getByRole('combobox', { name: 'Project model', exact: true }).locator('option');
+  // Model, dataset, when the run started, and which checkpoint: no two lines alike.
+  await expect(options).toHaveText([
+    'Choose a native ACT or SmolVLA model',
+    'ACT · pick-up-duck-home · Nov 12, 9:05 AM · step 20,000',
+    'ACT · pick-up-duck-home · Nov 12, 8:17 PM · step 20,000',
+  ]);
+  // The name offered for the installed policy says what it is, not "ACT checkpoint".
+  await expect(page.getByRole('textbox', { name: 'Installed policy name', exact: true })).toHaveValue(
+    'ACT · pick-up-duck-home · step 20,000',
+  );
+  expect(state.errors).toEqual([]);
+});
+
 test('every Run policy button is drawn as one of the application buttons', async ({ page }) => {
   const state = await fixture(page, true, 'Darwin', false);
   state.projectModels = [

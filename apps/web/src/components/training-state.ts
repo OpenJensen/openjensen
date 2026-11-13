@@ -5,11 +5,12 @@ import { useJobComputeSelection } from '@/lib/job-compute-state';
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, isActive, isDatasetJob, type Job, type PolicyRequest } from '@/lib/api';
-import { datasetLibrary } from '@/lib/dataset-library';
+import { datasetLibrary, isProjectDataset, type LibraryDataset } from '@/lib/dataset-library';
+import { runName, trainingMethodLabels } from '@/lib/run-names';
 import { projectHistoryView } from '@/lib/project-history';
 import { readPublicPreference, writePublicPreference } from '@/lib/public-preferences';
 import { gradientAccumulationAvailable, trainingModels, type TrainingModel } from '@/lib/training-models';
-import { checkpointStep, trainingRunModelLabel } from '@/lib/checkpoints';
+import { checkpointStep } from '@/lib/checkpoints';
 import { type JobHistoryEntry } from '@/components/job-history';
 import { trainingReceipt } from '@/lib/training-submission';
 import { submissionOf, useDurableSubmission } from '@/lib/durable-submission';
@@ -740,9 +741,14 @@ export function useTrainingPanel({
     if (preferredRunId) chooseRun(preferredRunId);
   }, [preferredRunId]);
 
+  const nameContext = {
+    jobs: jobs.data ?? [],
+    artifacts: artifacts.data ?? [],
+    library: (library.data ?? []).filter((entry): entry is LibraryDataset => isProjectDataset(entry, projectId)),
+    catalog: models,
+  };
   const historyEntries: JobHistoryEntry[] = trainingRuns.map((job) => {
     const request = 'training_method' in job.request ? job.request : undefined;
-    const recordedModel = trainingRunModelLabel(job, models, artifacts.data ?? [], trainingRuns);
     const dataset = allInspections.find((item) => item.id === request?.dataset_job_id);
     const targetSteps = positiveInteger(request?.training?.steps) ? request.training.steps : null;
     const savedSteps = (artifacts.data ?? [])
@@ -768,8 +774,13 @@ export function useTrainingPanel({
             : undefined;
     return {
       id: job.id,
-      title: [recordedModel ?? 'Fine-tuning', request?.training_method.toUpperCase()].filter(Boolean).join(' · '),
-      subtitle: dataset?.result.repo_id ?? (dataset ? 'Local dataset' : 'Dataset not recorded'),
+      title: runName(job, nameContext),
+      subtitle: [
+        request ? (trainingMethodLabels[request.training_method] ?? request.training_method) : null,
+        dataset ? null : 'Dataset not recorded',
+      ]
+        .filter(Boolean)
+        .join(' · '),
       status: job.status,
       createdAt: job.created_at,
       progress,

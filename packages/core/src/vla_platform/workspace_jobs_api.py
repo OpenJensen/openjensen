@@ -21,6 +21,7 @@ from vla_platform.workspace_jobs import (
     WorkRecord,
     core_job,
     get_job,
+    job_names,
     list_jobs,
 )
 
@@ -163,7 +164,8 @@ async def submit(
             if source is None or source.project_id != project_id:
                 raise HTTPException(404, "Dataset source not found in this project")
             return core_job(
-                await state.execution.submit(project_id, body, idempotency_key=idempotency_key)
+                await state.execution.submit(project_id, body, idempotency_key=idempotency_key),
+                await job_names(state, project_id),
             )
         model = {
             "dataset.inspect": IntakeRequest,
@@ -193,7 +195,8 @@ async def submit(
             raw["operation"] = payload.operation
         body = model.model_validate(raw)
         return core_job(
-            await state.execution.submit(project_id, body, idempotency_key=idempotency_key)
+            await state.execution.submit(project_id, body, idempotency_key=idempotency_key),
+            await job_names(state, project_id),
         )
     except ValidationError:
         raise HTTPException(422, "Job inputs do not match the selected operation") from None

@@ -98,14 +98,14 @@ test('browser intake reads local metadata and preserves its limits after reload'
   expect(receipts).toHaveLength(1);
   const submitted = receipts[0];
   const job = await waitForJob(request, submitted.id, 'succeeded');
-  await expect(page.getByRole('heading', { name: 'Local dataset', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'lerobot_v3_preview', exact: true })).toBeVisible();
   expect(job.result.inspection_scope).toBe('metadata_only');
   expect(job.result.robot_type).toBe('synthetic_fixture');
   expect(await cli('jobs', 'show', submitted.id)).toEqual(job);
   await page.reload();
   await expect(page.getByLabel('Current project')).toHaveAttribute('data-project-id', project.id);
   await page.getByRole('button', { name: 'Open dataset lerobot_v3_preview', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Local dataset', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'lerobot_v3_preview', exact: true })).toBeVisible();
   await page.getByText('Advanced', { exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Inspection notes', exact: true })).toBeVisible();
   await expect(

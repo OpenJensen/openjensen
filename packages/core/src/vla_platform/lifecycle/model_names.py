@@ -88,7 +88,8 @@ class ModelNames:
     def key(project_id: str, job_id: str) -> str:
         return hashlib.sha256(json.dumps([project_id, job_id]).encode()).hexdigest()
 
-    def name(self, project_id: str, job_id: str, default: str) -> str:
+    def chosen(self, project_id: str, job_id: str) -> str | None:
+        """The name someone saved for this run, or None while it has its automatic one."""
         key = self.key(project_id, job_id)
         path = self.directory / f"{key}.json"
         if path.exists():
@@ -96,7 +97,10 @@ class ModelNames:
                 return ModelRunName.model_validate_json(path.read_text()).name
             except (ValueError, OSError) as exc:
                 logger.warning("Unable to read saved model display name %s: %s", key, exc)
-        return default
+        return None
+
+    def name(self, project_id: str, job_id: str, default: str) -> str:
+        return self.chosen(project_id, job_id) or default
 
     def rename(self, project_id: str, job_id: str, name: str) -> ModelRunName:
         value = ModelRunName(name=name)

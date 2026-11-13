@@ -4,6 +4,7 @@ Adapters project records; they never duplicate execution or rewrite old history.
 Maintenance is deliberately outside this service.
 """
 
+from pathlib import PurePath
 from typing import Literal
 from urllib.parse import quote
 
@@ -94,16 +95,83 @@ OPERATIONS = [
 CATALOG = {item.id: item for item in OPERATIONS}
 
 
-def core_job(job):
+class JobNames:
+    """What a job's title needs beyond its own record.
+
+    A dataset saved on the computer is known by the name it was saved under, and a
+    training run by the model and the dataset it used, or by the name someone chose
+    for it. Without this context a title falls back to what the job itself records.
+    """
+
+    def __init__(self, datasets=None, dataset_requests=None, runs=None):
+        self.datasets = datasets or {}
+        self.dataset_requests = dataset_requests or {}
+        self.runs = runs
+
+    def dataset(self, request: IntakeRequest) -> str:
+        if request.recordings is not None:
+            return "Prepare recording"
+        if request.repo_id:
+            return request.repo_id
+        saved = self.datasets.get(request.library_id) if request.library_id else None
+        if saved:
+            return saved
+        folder = PurePath(request.path).name if request.path else ""
+        return folder or "Unnamed dataset"
+
+    def run(self, job, request: dict, fallback: str) -> str:
+        chosen = self.runs.chosen(job.project_id, job.id) if self.runs is not None else None
+        if chosen:
+            return chosen
+        model = _model_label((request.get("training") or {}).get("model_id"))
+        identifiers = request.get("dataset_job_ids") or [request.get("dataset_job_id")]
+        datasets = [
+            self.dataset(self.dataset_requests[ident])
+            for ident in identifiers
+            if ident in self.dataset_requests
+        ]
+        if len(datasets) > 1:
+            datasets = [f"{datasets[0]} + {len(datasets) - 1} more"]
+        return " · ".join([model or fallback, *datasets])
+
+
+def _model_label(model_id) -> str | None:
+    """The catalog's name for a base model, never its repository or code address."""
+    if not isinstance(model_id, str) or not model_id:
+        return None
+    from vla_platform.lifecycle.training_catalog import TRAINING_MODELS
+
+    return next((model.label for model in TRAINING_MODELS if model.model_id == model_id), model_id)
+
+
+async def job_names(state, project_id, jobs=None) -> JobNames:
+    """Read the names once for a list of jobs, or for the one job being shown."""
+    from vla_platform.lifecycle.model_names import ModelNames
+
+    if jobs is None:
+        jobs = await state.execution.list(project_id)
+    return JobNames(
+        datasets={
+            record["id"]: record["name"]
+            for record in state.dataset_library.records()
+            if record.get("project_id") == project_id and record.get("name")
+        },
+        dataset_requests={
+            job.id: job.request for job in jobs if isinstance(job.request, IntakeRequest)
+        },
+        runs=ModelNames(state.execution.settings.data_dir),
+    )
+
+
+def core_job(job, names: JobNames | None = None):
+    names = names or JobNames()
     operation = CATALOG[job.kind]
     request = job.request.model_dump(mode="json")
     title = operation.title
     if isinstance(job.request, IntakeRequest):
-        title = job.request.repo_id or "Local dataset"
-        if job.request.recordings is not None:
-            title = "Prepare recording"
+        title = names.dataset(job.request)
     elif job.kind == "policy.finetune":
-        title = (request.get("training") or {}).get("model_id") or title
+        title = names.run(job, request, title)
     parents = [
         request[key]
         for key in ("dataset_job_id", "source_job_id", "resume_job_id")
@@ -325,7 +393,9 @@ def legacy_dataset_job(record):
 
 
 async def list_jobs(state, project_id):
-    rows = [core_job(job) for job in await state.execution.list(project_id)]
+    jobs = await state.execution.list(project_id)
+    names = await job_names(state, project_id, jobs)
+    rows = [core_job(job, names) for job in jobs]
     core_ids = {job.source_id for job in rows}
     rows.extend(
         scene_job(run)
@@ -357,7 +427,11 @@ async def get_job(state, project_id, key):
     try:
         if family == "core":
             source = await state.execution.get(ident)
-            result = core_job(source) if source is not None else None
+            result = (
+                core_job(source, await job_names(state, source.project_id))
+                if source is not None
+                else None
+            )
         elif family == "scene":
             result = scene_job(state.scenes.get(ident))
         elif family == "agent":
