@@ -210,3 +210,117 @@ time,
 .status-badge {
   font-variant-numeric: tabular-nums;
 }
+
+/* Choices shown all at once: segmented buttons for short values, cards for named things. */
+.segmented {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--subtle);
+  max-width: 100%;
+}
+.segmented button {
+  min-height: 34px;
+  padding: 6px 14px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.segmented button:hover:not(:disabled):not([aria-checked='true']) {
+  color: var(--ink);
+  background: var(--hover);
+}
+.segmented button[aria-checked='true'] {
+  background: var(--surface);
+  color: var(--primary);
+  box-shadow:
+    0 0 0 1px var(--line-strong),
+    0 1px 2px rgb(0 0 0 / 8%);
+}
+.segmented button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+.choice-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 230px), 1fr));
+  gap: 10px;
+}
+.choice-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  min-width: 0;
+  padding: 13px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.choice-card:hover:not(:disabled):not([aria-checked='true']) {
+  border-color: var(--line-strong);
+  background: var(--subtle);
+}
+.choice-card[aria-checked='true'] {
+  border-color: var(--accent);
+  background: var(--selected);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.choice-card:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.choice-card-mark {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  border: 1.5px solid var(--line-strong);
+  border-radius: 50%;
+  background: var(--surface);
+}
+.choice-card[aria-checked='true'] .choice-card-mark {
+  border: 5px solid var(--accent);
+}
+.choice-card-text {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
+}
+.choice-card-text strong {
+  font-size: 13px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.choice-card-text small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.choice-card-badge {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--subtle);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.choice-card[aria-checked='true'] .choice-card-badge {
+  background: var(--surface);
+}

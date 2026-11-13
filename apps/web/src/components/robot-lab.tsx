@@ -110,7 +110,7 @@ export function RobotLab() {
           { title: 'Teleoperation', step: 3 },
           { title: 'Record', step: 4 },
           { title: 'Run policy', step: 5 },
-          { title: 'Astra collection', step: 6 },
+          { title: 'AI collection', step: 6 },
         ].map((item) => (
           <button
             key={item.title}
@@ -144,8 +144,13 @@ export function RobotLab() {
         {showError(previousSessionError) && previousSessionError && (
           <HardwareNotice
             label="Previous session error"
-            context="Previous hardware session stopped"
+            context="The last session stopped by itself"
             message={previousSessionError}
+            actions={
+              <button className="text-button" disabled={!state?.ok || busy} onClick={stop}>
+                Dismiss
+              </button>
+            }
           />
         )}
         {hasCalibrationStatus && <RobotLabCalibrationReadiness lab={lab} />}
@@ -162,7 +167,6 @@ export function RobotLab() {
           </p>
         )}
         {recording?.error && <HardwareNotice message={recording.error} />}
-        <RobotLabDiagnostics diagnostics={state?.diagnostics} />
       </div>
       {step < 3 && !lab.selectedDeviceId ? (
         <RobotLabDevices lab={lab} />
@@ -171,7 +175,15 @@ export function RobotLab() {
           <section
             className="robot-lab-main"
             aria-label={
-              step < 3 ? 'Device configuration' : step === 3 ? 'Teleoperation' : step === 4 ? 'Record' : 'Run policy'
+              step < 3
+                ? 'Device configuration'
+                : step === 3
+                  ? 'Teleoperation'
+                  : step === 4
+                    ? 'Record'
+                    : step === 5
+                      ? 'Run policy'
+                      : 'AI collection'
             }
           >
             {step < 3 && (
@@ -196,6 +208,7 @@ export function RobotLab() {
           <RobotLabCamera lab={lab} />
         </div>
       )}
+      <RobotLabDiagnostics diagnostics={state?.diagnostics} />
     </div>
   );
 }

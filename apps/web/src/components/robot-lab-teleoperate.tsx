@@ -5,6 +5,7 @@ import { Icon } from '@/components/icon';
 import { robotApi, robotJoints } from '@/lib/robot-api';
 import { Heading, Notice, RangeTable, JointControl } from './robot-lab-shared';
 import type { RobotLabState } from './robot-lab-state';
+import { Segmented } from './ui/choice';
 
 export function RobotLabTeleoperate({ lab }: { lab: RobotLabState }) {
   const {
@@ -52,37 +53,24 @@ export function RobotLabTeleoperate({ lab }: { lab: RobotLabState }) {
     <>
       <Heading title="Teleoperation" />
       <div className="robot-lab-form">
-        {mode !== 'handguide' &&
-          (state?.capabilities?.lerobot_position_control ? (
-            <Notice>
-              <strong>LeRobot SO101 control</strong>Direct position targets; motors may move quickly. Keep the full path
-              clear.
-            </Notice>
-          ) : (
-            online && (
-              <Notice kind="warning">
-                <strong>Earlier control profile</strong>Update the robot companion to use LeRobot SO101 control.
-              </Notice>
-            )
-          ))}
-        {state?.controller?.encoder_range_tolerance_ticks !== undefined && (
-          <p className="robot-lab-subtle">
-            Encoder jitter allowance: {state.controller.encoder_range_tolerance_ticks} ticks during control. Movement
-            targets stay inside the saved range.
-          </p>
+        {mode !== 'handguide' && online && !state?.capabilities?.lerobot_position_control && (
+          <Notice kind="warning">
+            <strong>Earlier control profile</strong>Update the robot companion to use LeRobot SO101 control.
+          </Notice>
         )}
         <RobotLabControlDevices lab={lab} />
+        <span className="robot-lab-field-label">How to move it</span>
         <div className="robot-lab-mode-grid" role="group" aria-label="Control mode">
           {(
             [
               {
                 value: 'manual',
                 title: 'Joint control',
-                detail: 'Sliders and position steps',
+                detail: 'Move each joint from this page',
                 icon: 'sliders',
               },
-              { value: 'handguide', title: 'Hand guiding', detail: 'Torque off', icon: 'robot' },
-              { value: 'leader', title: 'Leader → follower', detail: 'Two calibrated arms', icon: 'layers' },
+              { value: 'handguide', title: 'Hand guiding', detail: 'Motors off; move it by hand', icon: 'robot' },
+              { value: 'leader', title: 'Leader → follower', detail: 'A second arm drives this one', icon: 'layers' },
             ] as const
           ).map((item) => (
             <button
@@ -101,23 +89,31 @@ export function RobotLabTeleoperate({ lab }: { lab: RobotLabState }) {
             </button>
           ))}
         </div>
-        {controlJointOptions}
-        {mode === 'manual' && !partialSelection && state?.capabilities?.middle_tolerance && (
-          <label>
-            Middle tolerance
-            <select
-              aria-label="Middle tolerance"
-              value={active ? (session?.centering?.tolerance ?? middleTolerance) : middleTolerance}
-              onChange={(event) => {
-                setMiddleTolerance(Number(event.target.value));
-                setMotionReady(false);
-              }}
-              disabled={active || busy}
-            >
-              <option value={2}>2° / 2%</option>
-              <option value={5}>5° / 5%</option>
-            </select>
-          </label>
+        {mode === 'manual' && !active && (
+          <details className="robot-lab-details robot-lab-more-options" open={partialSelection}>
+            <summary>More options</summary>
+            <div className="robot-lab-form">
+              {controlJointOptions}
+              {mode === 'manual' && !partialSelection && state?.capabilities?.middle_tolerance && (
+                <div className="robot-lab-field">
+                  <span className="robot-lab-field-label">How close to the middle counts as there</span>
+                  <Segmented
+                    label="Middle tolerance"
+                    value={active ? (session?.centering?.tolerance ?? middleTolerance) : middleTolerance}
+                    disabled={active || busy}
+                    onChange={(value) => {
+                      setMiddleTolerance(value);
+                      setMotionReady(false);
+                    }}
+                    options={[
+                      { value: 2, label: '2° / 2%' },
+                      { value: 5, label: '5° / 5%' },
+                    ]}
+                  />
+                </div>
+              )}
+            </div>
+          </details>
         )}
         {!active && (
           <>
@@ -221,25 +217,17 @@ export function RobotLabTeleoperate({ lab }: { lab: RobotLabState }) {
                 {partialControl && <p className="robot-lab-subtle">Selected motors only · recording unavailable</p>}
                 <div className="robot-lab-control-heading">
                   <h3>Joint controls</h3>
-                  <span className="robot-lab-subtle">Position → target · release slider to move</span>
-                  <label>
-                    Step
-                    <select
-                      value={jointStep}
-                      aria-label="Joint step size"
-                      onChange={(event) => setJogStep(Number(event.target.value))}
-                    >
-                      <option value={0.5}>0.5° / %</option>
-                      <option value={1}>1° / %</option>
-                      <option value={2}>2° / %</option>
-                      {state?.capabilities?.large_joint_steps && (
-                        <>
-                          <option value={5}>5° / %</option>
-                          <option value={10}>10° / %</option>
-                        </>
-                      )}
-                    </select>
-                  </label>
+                  <span className="robot-lab-subtle">Release a slider to move · step per press</span>
+                  <Segmented
+                    label="Joint step size"
+                    value={jointStep}
+                    onChange={setJogStep}
+                    options={[0.5, 1, 2, ...(state?.capabilities?.large_joint_steps ? [5, 10] : [])].map((value) => ({
+                      value,
+                      label: `${value}°`,
+                      name: `${value}° / %`,
+                    }))}
+                  />
                 </div>
                 <div className="robot-lab-joints" aria-busy={jogging}>
                   {robotJoints

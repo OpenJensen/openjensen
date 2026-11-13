@@ -116,6 +116,7 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin', 
     policyKind: 'act',
     policyViews: ['observation.images.front'],
     policyPlanningMs: 20,
+    policyCheckFailure: '',
     projectModels: [] as any[],
     removedDevices: [] as any[],
     removeDeviceError: null as string | null,
@@ -219,7 +220,7 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin', 
       if (action === '/policy/preflight') {
         const slow = state.policyPlanningMs > 500 && !body.allow_planning_pause;
         state.status.policy.preflight = {
-          passed: !slow,
+          passed: !slow && !state.policyCheckFailure,
           camera_index: body.camera_index,
           ...(body.cameras ? { cameras: body.cameras } : {}),
           planning_pause: !!body.allow_planning_pause,
@@ -231,7 +232,7 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin', 
           max_latency_ms: state.policyPlanningMs,
           message: slow
             ? 'This policy takes 680 ms to plan its next actions; 500 ms is allowed.'
-            : 'Camera and inference meet the frame rate',
+            : state.policyCheckFailure || 'Camera and inference meet the frame rate',
         };
         return route.fulfill({ json: state.status });
       }
@@ -744,6 +745,11 @@ async function openTab(page: Page, title: string) {
   await tab(page, title).click();
 }
 
+// Choices are shown as buttons or cards, never in a dropdown.
+const choices = (page: Page, name: string) => page.getByRole('radiogroup', { name, exact: true });
+const choice = (page: Page, name: string, value: string | number) =>
+  choices(page, name).locator(`[data-value="${value}"]`);
+const chosen = (page: Page, name: string) => choices(page, name).getByRole('radio', { checked: true });
 const writes = (state: Awaited<ReturnType<typeof fixture>>, path: string) =>
   state.writes.filter((item) => item.path.endsWith(path));
 async function startManual(page: Page) {
@@ -801,7 +807,7 @@ test('device library has five main tabs and saves names independently of roles',
   const state = await fixture(page, false, 'Darwin', false);
   const tabs = page.getByRole('navigation', { name: 'Robot Lab tabs' });
   await expect(tabs.getByRole('button')).toHaveCount(5);
-  await expect(tabs.getByRole('button', { name: 'Astra collection' })).toBeVisible();
+  await expect(tabs.getByRole('button', { name: 'AI collection' })).toBeVisible();
   await expect(page.getByRole('combobox', { name: 'Devices', exact: true })).toHaveCount(0);
   await expect(page.getByTestId('device-arm-a')).toContainText('Motor IDs');
   await page.getByTestId('device-arm-a').click();
@@ -1005,7 +1011,7 @@ test('range and current faults give recovery steps without stale success or read
   state.status.session.error = 'Motor 5 write Torque_Enable=0 failed: [RxPacketError] OverEle error!';
   await openTab(page, 'Calibrate');
   await expect(page.getByRole('alert', { name: 'Previous session error' })).toContainText(
-    'Previous hardware session stopped',
+    'The last session stopped by itself',
   );
   await expect(page.getByRole('alert', { name: 'Calibration error' })).toHaveCount(0);
   // A real failure from starting calibration still appears as a calibration error.
@@ -1054,8 +1060,8 @@ test('leader device calibration recovers after reload without enabling motion', 
   await expect(page.getByRole('heading', { name: 'Leader calibration', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Cancel calibration', exact: true }).click();
   await openTab(page, 'Teleoperate');
-  await expect(page.getByLabel('Follower device', { exact: true })).toHaveValue('arm-a');
-  await expect(page.getByLabel('Leader device', { exact: true })).toHaveValue('arm-b');
+  await expect(chosen(page, 'Follower device')).toHaveAttribute('data-value', 'arm-a');
+  await expect(chosen(page, 'Leader device')).toHaveAttribute('data-value', 'arm-b');
   expect(writes(state, '/control/start')).toEqual([]);
 });
 
@@ -1120,7 +1126,7 @@ test('manual control is explicit, jogs are bounded, and navigating away stops th
   const state = await fixture(page, true);
   await startManual(page);
   state.encoderLag = true;
-  await page.getByLabel('Joint step size').selectOption('2');
+  await choice(page, 'Joint step size', 2).click();
   await page.getByRole('button', { name: 'Increase Shoulder pan', exact: true }).click();
   await expect(page.getByLabel('Shoulder pan position')).toHaveText('0.0°');
   await expect(page.getByLabel('Shoulder pan target', { exact: true })).toHaveText('→ 2.0°');
@@ -1217,7 +1223,7 @@ test('unsaved recording can be explicitly closed after Stop while retained files
   await startManual(page);
   await openTab(page, 'Record');
   await page.getByLabel('Dataset name', { exact: true }).fill('next-demo');
-  await page.getByLabel('Recording frame rate', { exact: true }).selectOption('5');
+  await choice(page, 'Recording frame rate', 5).click();
   await page.getByRole('button', { name: 'Create recording dataset', exact: true }).click();
   expect(writes(state, '/recording/start').at(-1)?.body).toEqual({
     dataset_id: 'next-demo',
@@ -1777,6 +1783,7 @@ test('moving to recorded middle blocks jogging and recording but keeps Stop avai
 test('selected motor control excludes disconnected motors and blocks dataset recording', async ({ page }, testInfo) => {
   const state = await fixture(page, true);
   await openTab(page, 'Teleoperate');
+  await page.getByText('More options', { exact: true }).click();
   await page.getByRole('button', { name: 'Select connected motors', exact: true }).click();
   // Fixture probe reports only ID 1. Selection is explicit and never starts motion.
   const selection = page.getByRole('group', { name: 'Motors in this session' });
@@ -2102,6 +2109,7 @@ test('joint sliders respect centering and excluded joints and reject stale repli
   state.status.session.centering.active = false;
   await expect(page.getByRole('slider', { name: 'Elbow target slider' })).toBeEnabled();
   await page.getByRole('button', { name: 'Stop arm and disable torque' }).click();
+  await page.getByText('More options', { exact: true }).click();
   for (const name of ['Shoulder pan', 'Shoulder lift', 'Wrist flex', 'Wrist roll', 'Gripper']) {
     await page.getByRole('checkbox', { name: new RegExp(name) }).uncheck();
   }
@@ -2129,22 +2137,24 @@ test('middle tolerance defaults to two and five is explicit, fixed during motion
   const state = await fixture(page, true);
   state.middleInProgress = true;
   await openTab(page, 'Teleoperate');
-  const tolerance = page.getByLabel('Middle tolerance', { exact: true });
-  await expect(tolerance).toHaveValue('2');
-  await tolerance.selectOption('5');
+  await page.getByText('More options', { exact: true }).click();
+  const tolerance = chosen(page, 'Middle tolerance');
+  await expect(tolerance).toHaveAttribute('data-value', '2');
+  await choice(page, 'Middle tolerance', 5).click();
   expect(writes(state, '/control/start')).toHaveLength(0);
   await page.getByRole('checkbox', { name: /Arm secured; workspace clear/ }).check();
   await page.getByRole('button', { name: 'Enable & move to recorded middle', exact: true }).click();
   expect(writes(state, '/control/start')[0].body).toMatchObject({ move_to_middle: true, middle_tolerance: 5 });
-  await expect(tolerance).toBeDisabled();
-  await expect(tolerance).toHaveValue('5');
+  // The tolerance belongs to starting a session; it is not offered while the arm moves.
+  await expect(choices(page, 'Middle tolerance')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Increase Shoulder lift', exact: true })).toBeDisabled();
   state.status.session.centering.active = false;
   await expect(page.getByRole('button', { name: 'Increase Shoulder lift', exact: true })).toBeEnabled();
   await page.getByRole('button', { name: 'Stop arm and disable torque' }).click();
   await page.reload();
   await openTab(page, 'Teleoperate');
-  await expect(tolerance).toHaveValue('5');
+  await page.getByText('More options', { exact: true }).click();
+  await expect(tolerance).toHaveAttribute('data-value', '5');
   await expect(tolerance).toBeEnabled();
   expect(writes(state, '/control/start')).toHaveLength(1);
   expect(state.errors).toEqual([]);
@@ -2267,13 +2277,13 @@ test('large joint steps offer five and ten and update only the requested destina
 }, testInfo) => {
   const state = await fixture(page, true);
   await startManual(page);
-  const selector = page.getByLabel('Joint step size');
-  await expect(selector.locator('option')).toHaveText(['0.5° / %', '1° / %', '2° / %', '5° / %', '10° / %']);
-  await selector.selectOption('5');
+  const selector = choices(page, 'Joint step size');
+  await expect(selector.getByRole('radio')).toHaveText(['0.5°', '1°', '2°', '5°', '10°']);
+  await choice(page, 'Joint step size', 5).click();
   await page.getByRole('button', { name: 'Increase Elbow', exact: true }).click();
   await expect(page.getByLabel('Elbow target', { exact: true })).toHaveText('→ 5.0°');
   await expect(page.getByLabel('Elbow position', { exact: true })).toHaveText('0.0°');
-  await selector.selectOption('10');
+  await choice(page, 'Joint step size', 10).click();
   await page.getByRole('button', { name: 'Increase Elbow', exact: true }).click();
   await expect(page.getByLabel('Elbow target', { exact: true })).toHaveText('→ 15.0°');
   await page.getByRole('button', { name: 'Decrease Elbow', exact: true }).click();
@@ -2286,7 +2296,7 @@ test('large joint steps offer five and ten and update only the requested destina
     { joint: 'elbow_flex', delta: -10 },
     { joint: 'gripper', delta: 10 },
   ]);
-  await expect(selector).toHaveValue('10');
+  await expect(chosen(page, 'Joint step size')).toHaveAttribute('data-value', '10');
   await page.screenshot({ path: testInfo.outputPath('large-joint-steps.png'), fullPage: true });
   await page.getByRole('button', { name: 'Stop & release motors', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Increase Elbow', exact: true })).toHaveCount(0);
@@ -2298,7 +2308,7 @@ test('large joint steps are hidden when the connected companion does not support
   state.status.capabilities.large_joint_steps = false;
   await page.getByRole('button', { name: 'Refresh devices', exact: true }).click();
   await startManual(page);
-  await expect(page.getByLabel('Joint step size').locator('option')).toHaveText(['0.5° / %', '1° / %', '2° / %']);
+  await expect(choices(page, 'Joint step size').getByRole('radio')).toHaveText(['0.5°', '1°', '2°']);
   expect(writes(state, '/control/jog')).toEqual([]);
 });
 
@@ -2325,10 +2335,8 @@ test('Linux companion discovers USB and camera without motor commands', async ({
 test('LeRobot control identifies direct goals and sends the full slider target', async ({ page }) => {
   const state = await fixture(page, true);
   await startManual(page);
-  await expect(page.getByText('LeRobot SO101 control', { exact: true })).toBeVisible();
-  await expect(
-    page.getByText('Direct position targets; motors may move quickly. Keep the full path clear.', { exact: false }),
-  ).toBeVisible();
+  // Nothing is said about the control profile while it is the current one.
+  await expect(page.getByText('Earlier control profile', { exact: true })).toHaveCount(0);
   const slider = page.getByRole('slider', { name: 'Shoulder pan target slider' });
   await slider.press('End');
   await expect.poll(() => writes(state, '/control/jog').length).toBeGreaterThan(0);
@@ -2439,10 +2447,10 @@ test('session slots select actual devices independently of default roles and loc
   await page.getByRole('button', { name: 'Refresh devices', exact: true }).click();
   await openTab(page, 'Teleoperate');
   await page.getByRole('button', { name: /Leader → follower/ }).click();
-  await page.getByLabel('Follower device', { exact: true }).selectOption('arm-b');
-  await page.getByLabel('Leader device', { exact: true }).selectOption('arm-a');
+  await choice(page, 'Follower device', 'arm-b').click();
+  await choice(page, 'Leader device', 'arm-a').click();
   expect(writes(state, '/control/start')).toHaveLength(0);
-  await expect(page.getByLabel('Leader device', { exact: true }).locator('option[value="arm-b"]')).toHaveCount(0);
+  await expect(choice(page, 'Leader device', 'arm-b')).toHaveCount(0);
   await page.getByRole('checkbox', { name: /Arm secured; workspace clear/ }).check();
   await page.getByRole('button', { name: 'Start leader teleoperation', exact: true }).click();
   expect(writes(state, '/control/start')[0].body).toMatchObject({
@@ -2451,11 +2459,11 @@ test('session slots select actual devices independently of default roles and loc
     leader_port: port,
     leader_id: 'my-so101',
   });
-  await expect(page.getByLabel('Follower device', { exact: true })).toBeDisabled();
+  await expect(chosen(page, 'Follower device')).toBeDisabled();
   await openTab(page, 'Record');
-  await expect(page.getByLabel('Follower device', { exact: true })).toHaveValue('arm-b');
-  await expect(page.getByLabel('Leader device', { exact: true })).toHaveValue('arm-a');
-  await expect(page.getByLabel('Leader device', { exact: true })).toBeDisabled();
+  await expect(chosen(page, 'Follower device')).toHaveAttribute('data-value', 'arm-b');
+  await expect(chosen(page, 'Leader device')).toHaveAttribute('data-value', 'arm-a');
+  await expect(chosen(page, 'Leader device')).toBeDisabled();
   await page.screenshot({ path: testInfo.outputPath('recording-device-selection.png'), fullPage: true });
 });
 
@@ -2631,8 +2639,8 @@ test('guided recording defaults to measured FPS and follows server episode cues'
   await openTab(page, 'Record');
   await page.getByLabel('Dataset name', { exact: true }).fill('pen-demo');
   await page.getByLabel('Task instruction', { exact: true }).fill('Pick up the pen.');
-  await expect(page.getByLabel('Collection mode')).toHaveValue('guided');
-  await expect(page.getByLabel('Recording frame rate', { exact: true })).not.toBeVisible();
+  await expect(chosen(page, 'Collection mode')).toHaveAttribute('data-value', 'guided');
+  await expect(choices(page, 'Recording frame rate')).not.toBeVisible();
   await page.getByRole('button', { name: 'Create recording dataset', exact: true }).click();
   expect(writes(state, '/recording/start')[0].body).toEqual({
     dataset_id: 'pen-demo',
@@ -2690,9 +2698,9 @@ test('advanced recording allows manual frame rate and manual episodes', async ({
   await openTab(page, 'Record');
   await page.getByLabel('Dataset name', { exact: true }).fill('manual-demo');
   await page.getByLabel('Task instruction', { exact: true }).fill('Pick up the pen.');
-  await page.getByLabel('Collection mode').selectOption('manual');
+  await choice(page, 'Collection mode', 'manual').click();
   await page.getByText('Advanced recording settings', { exact: true }).click();
-  await page.getByLabel('Recording frame rate', { exact: true }).selectOption('5');
+  await choice(page, 'Recording frame rate', 5).click();
   await page.getByRole('button', { name: 'Create recording dataset', exact: true }).click();
   expect(writes(state, '/recording/start')[0].body).toEqual({
     dataset_id: 'manual-demo',
@@ -2792,78 +2800,104 @@ test('recording file work prevents overlapping dataset creation', async ({ page 
   expect(writes(state, '/recording/start')).toEqual([]);
 });
 
-test('an expired policy check blocks enabling torque and starting a run', async ({ page }) => {
-  const state = await fixture(page, true, 'Darwin', false);
-  await page.clock.install();
-  await page
+const openRunPolicy = (page: Page) =>
+  page
     .getByRole('navigation', { name: 'Robot Lab tabs' })
     .getByRole('button', { name: 'Run policy', exact: true })
     .click();
-  const check = page.getByRole('button', { name: 'Check camera and inference rate' });
-  const enable = page.getByRole('button', { name: 'Enable policy control', exact: true });
-  const run = page.getByRole('button', { name: 'Run policy', exact: true }).last();
-  await page.getByRole('button', { name: 'Load policy', exact: true }).click();
-  await page.getByRole('checkbox', { name: /I am present; the arm is secured/ }).check();
-  await check.click();
-  await expect(enable).toBeEnabled();
-  await page.clock.fastForward(61_000);
-  await expect(enable).toBeDisabled();
-  await expect(page.getByText('Camera and inference check expired. Run the check again.')).toBeVisible();
-  expect(writes(state, '/control/start')).toEqual([]);
+const startRun = (page: Page) => page.getByRole('button', { name: 'Start run', exact: true });
+const atTheArm = (page: Page) => page.getByRole('checkbox', { name: /I am at the arm and its path is clear/ });
 
-  await check.click();
-  await enable.click();
-  await expect(run).toBeEnabled();
-  await page.clock.fastForward(61_000);
-  await expect(run).toBeDisabled();
-  await expect(
-    page.getByText('Camera and inference check expired. Stop the arm and run the check again.'),
-  ).toBeVisible();
-  expect(writes(state, '/policy/start')).toEqual([]);
-  await page.getByRole('button', { name: 'Stop arm and disable torque' }).click();
-  await check.click();
-  await expect(enable).toBeEnabled();
-});
-
-test('Run policy requires a native preflight and attended start, then renews only policy authority', async ({
+test('one Start loads the policy, checks it, holds the arm and runs, then renews only policy authority', async ({
   page,
 }, testInfo) => {
   const state = await fixture(page, true, 'Darwin', false);
-  await page
-    .getByRole('navigation', { name: 'Robot Lab tabs' })
-    .getByRole('button', { name: 'Run policy', exact: true })
-    .click();
-  const controls = page.getByRole('group', { name: 'Policy run controls' });
-  const run = controls.getByRole('button', { name: 'Run policy', exact: true });
-  await expect(run).toBeDisabled();
-  await controls.getByRole('button', { name: 'Load policy', exact: true }).click();
-  expect(writes(state, '/control/start')).toEqual([]);
-  expect(writes(state, '/policy/start')).toEqual([]);
-  await controls.getByRole('button', { name: 'Check camera and inference rate', exact: true }).click();
-  await expect(controls.getByRole('button', { name: 'Enable policy control', exact: true })).toBeDisabled();
-  await page.getByRole('checkbox', { name: /I am present; the arm is secured/ }).check();
-  await controls.getByRole('button', { name: 'Enable policy control', exact: true }).click();
-  expect(writes(state, '/control/start').at(-1)?.body).toMatchObject({
-    mode: 'manual',
-    move_to_middle: false,
-    joints,
-  });
-  expect(writes(state, '/policy/start')).toEqual([]);
-  await expect(run).toBeEnabled();
-  await run.click();
+  await openRunPolicy(page);
+  await expect(chosen(page, 'Installed policy')).toContainText('Pen ACT');
+  const next = page.getByRole('status', { name: 'Next step' });
+  await expect(startRun(page)).toBeDisabled();
+  await expect(next).toHaveText('Tick the box above once you are at the arm.');
+  // Nothing is loaded and no motor is powered until Start is pressed.
+  expect(state.writes).toEqual([]);
+  await atTheArm(page).check();
+  await startRun(page).click();
   await expect.poll(() => writes(state, '/policy/heartbeat').length).toBeGreaterThan(0);
-  expect(writes(state, '/policy/start').at(-1)?.body).toEqual({
+  expect(
+    state.writes
+      .map((entry) => entry.path.replace('/api/v1/robot-lab', ''))
+      .filter((path) => !path.endsWith('/heartbeat')),
+  ).toEqual(['/policy/load', '/policy/preflight', '/control/start', '/policy/start']);
+  expect(writes(state, '/policy/preflight')[0].body).toEqual({ camera_index: 0 });
+  expect(writes(state, '/control/start')[0].body).toMatchObject({ mode: 'manual', move_to_middle: false, joints });
+  expect(writes(state, '/policy/start')[0].body).toEqual({
     confirm: 'RUN POLICY',
     operator_present: true,
     workspace_clear: true,
     camera_index: 0,
-    duration_seconds: 10,
+    duration_seconds: 30,
     expected_generation: 1,
   });
+  const progress = page.getByRole('list', { name: 'Run progress' });
+  await expect(progress.getByRole('listitem')).toHaveText([
+    'Load the policy',
+    'Check the cameras and speed · 13 FPS',
+    'Hold the arm where it is',
+    'Run',
+  ]);
+  await expect(page.getByText(/^Running · /)).toBeVisible();
+  await expect(startRun(page)).toHaveCount(0);
   await page.screenshot({ path: testInfo.outputPath('run-policy.png'), fullPage: true });
   await page.getByRole('button', { name: 'Stop arm and disable torque' }).click();
   await expect.poll(() => state.status.session.mode).toBe('idle');
-  await expect(run).toBeDisabled();
+  // The box stays ticked, so the next run is one press.
+  await expect(startRun(page)).toBeEnabled();
+  expect(state.errors).toEqual([]);
+});
+
+test('a failed camera check stops the run before any motor is powered', async ({ page }) => {
+  const state = await fixture(page, true, 'Darwin', false);
+  state.policyCheckFailure = 'The camera delivers 6 frames per second; this policy needs 13.';
+  await openRunPolicy(page);
+  await atTheArm(page).check();
+  await startRun(page).click();
+  await expect(page.getByText('The run did not start.', { exact: true })).toBeVisible();
+  await expect(page.getByText('The camera delivers 6 frames per second; this policy needs 13.')).toBeVisible();
+  await expect(page.getByRole('list', { name: 'Run progress' }).locator('[data-state="failed"]')).toHaveText(
+    'Check the cameras and speed',
+  );
+  expect(writes(state, '/control/start')).toEqual([]);
+  expect(writes(state, '/policy/start')).toEqual([]);
+  // Fix the cause and Start checks again from the top.
+  state.policyCheckFailure = '';
+  await startRun(page).click();
+  await expect.poll(() => writes(state, '/policy/start').length).toBe(1);
+  expect(writes(state, '/policy/load')).toHaveLength(1);
+  expect(writes(state, '/policy/preflight')).toHaveLength(2);
+  await page.getByRole('button', { name: 'Stop arm and disable torque' }).click();
+  expect(state.errors).toEqual([]);
+});
+
+test('Stop while a run is starting sends no further motor command', async ({ page }) => {
+  const state = await fixture(page, true, 'Darwin', false);
+  let release = () => {};
+  await page.route('**/api/v1/robot-lab/policy/preflight', async (route) => {
+    await new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await route.fallback();
+  });
+  await openRunPolicy(page);
+  await atTheArm(page).check();
+  await startRun(page).click();
+  await expect(page.getByRole('list', { name: 'Run progress' }).locator('[data-state="active"]')).toHaveText(
+    'Check the cameras and speed…',
+  );
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  release();
+  await expect(startRun(page)).toBeEnabled();
+  await page.waitForTimeout(300);
+  expect(writes(state, '/control/start')).toEqual([]);
+  expect(writes(state, '/policy/start')).toEqual([]);
   expect(state.errors).toEqual([]);
 });
 
@@ -2874,36 +2908,37 @@ test('a policy trained on two views is checked and run with a camera for each', 
   state.policyViews = [front, side];
   state.cameras = [
     { index: 0, name: 'Laptop camera', width: 640, height: 480 },
-    { index: 1, name: 'Front USB', width: 640, height: 480 },
-    { index: 2, name: 'Side USB', width: 640, height: 480 },
+    { index: 1, name: 'USB Camera', width: 640, height: 480 },
+    { index: 2, name: 'USB Camera', width: 640, height: 480 },
   ];
   await page.reload();
   await openTab(page, 'Run policy');
-  const cameras = page.getByRole('group', { name: 'Policy cameras' });
-  await expect(cameras).toContainText('trained on 2 camera views');
-  const frontCamera = cameras.getByLabel('Camera for front', { exact: true });
-  const sideCamera = cameras.getByLabel('Camera for camera_4', { exact: true });
+  await expect(chosen(page, 'Installed policy')).toContainText('2 cameras');
+  // Two cameras of one model are numbered so they can be told apart.
+  await expect(choices(page, 'Camera for front').getByRole('radio')).toHaveText([
+    'Laptop camera',
+    'USB Camera 1',
+    'USB Camera 2',
+  ]);
   // Camera 4 does not exist here, so the second view starts on the next free camera.
-  await expect(frontCamera).toHaveValue('0');
-  await expect(sideCamera).toHaveValue('1');
-  // One camera cannot feed both views.
-  await expect(sideCamera.locator('option[value="0"]')).toHaveAttribute('disabled', '');
-  await frontCamera.selectOption('1');
-  await expect(sideCamera).toHaveValue('0');
-  await sideCamera.selectOption('2');
-  await page.getByRole('button', { name: 'Load policy', exact: true }).click();
-  await page.getByRole('button', { name: 'Check camera and inference rate', exact: true }).click();
+  await expect(chosen(page, 'Camera for front')).toHaveAttribute('data-value', '0');
+  await expect(chosen(page, 'Camera for camera_4')).toHaveAttribute('data-value', '1');
+  // One camera cannot feed both views: taking the other view's camera swaps the two.
+  await choice(page, 'Camera for front', 1).click();
+  await expect(chosen(page, 'Camera for camera_4')).toHaveAttribute('data-value', '0');
+  await choice(page, 'Camera for camera_4', 2).click();
+  // The preview beside the form shows each view under the policy's own name for it.
+  const preview = page.getByRole('region', { name: 'Camera preview', exact: true });
+  await expect(preview).toContainText('front · USB Camera 1');
+  await expect(preview).toContainText('camera_4 · USB Camera 2');
+  await atTheArm(page).check();
+  await page.screenshot({ path: testInfo.outputPath('run-policy-two-cameras.png'), fullPage: true });
+  await startRun(page).click();
+  await expect.poll(() => writes(state, '/policy/start').length).toBe(1);
   expect(writes(state, '/policy/preflight').at(-1)?.body).toEqual({
     camera_index: 1,
     cameras: { [front]: 1, [side]: 2 },
   });
-  await page.getByRole('checkbox', { name: /I am present; the arm is secured/ }).check();
-  await page.getByRole('button', { name: 'Enable policy control', exact: true }).click();
-  const run = page.getByRole('button', { name: 'Run policy', exact: true }).last();
-  await expect(run).toBeEnabled();
-  await page.screenshot({ path: testInfo.outputPath('run-policy-two-cameras.png'), fullPage: true });
-  await run.click();
-  await expect.poll(() => writes(state, '/policy/start').length).toBe(1);
   expect(writes(state, '/policy/start').at(-1)?.body).toMatchObject({
     camera_index: 1,
     cameras: { [front]: 1, [side]: 2 },
@@ -2912,31 +2947,34 @@ test('a policy trained on two views is checked and run with a camera for each', 
   expect(state.errors).toEqual([]);
 });
 
-test('Run policy names what each greyed-out step is waiting for', async ({ page }) => {
+test('Run policy says what is still missing before Start', async ({ page }) => {
   const state = await fixture(page, true, 'Darwin', false);
   state.policyKind = 'smolvla';
   await page.reload();
   await openTab(page, 'Run policy');
   const next = page.getByRole('status', { name: 'Next step' });
-  const check = page.getByRole('button', { name: 'Check camera and inference rate', exact: true });
-  await expect(next).toHaveText('Next: Load the policy.');
-  await page.getByRole('button', { name: 'Load policy', exact: true }).click();
-  // The check stays greyed out until the task is typed, and now the page says so.
-  await expect(next).toContainText('Type the task instruction');
-  await expect(check).toBeDisabled();
+  // A greyed-out Start is never a riddle: the page names the one thing to do next.
+  await expect(next).toContainText('Type the task');
+  await expect(startRun(page)).toBeDisabled();
   await page.getByLabel('Task instruction', { exact: true }).fill('Pick up the duck.');
-  await expect(next).toHaveText('Next: Run the camera and inference check.');
-  await check.click();
-  await expect(next).toContainText('Confirm that you are present');
-  await page.getByRole('checkbox', { name: /I am present; the arm is secured/ }).check();
-  await expect(next).toHaveText('Next: Enable policy control.');
-  await page.getByRole('button', { name: 'Enable policy control', exact: true }).click();
-  await expect(next).toHaveText('Next: Run policy.');
+  await expect(next).toHaveText('Tick the box above once you are at the arm.');
+  await atTheArm(page).check();
+  await expect(next).toHaveCount(0);
+  await startRun(page).click();
+  await expect.poll(() => writes(state, '/policy/start').length).toBe(1);
+  expect(writes(state, '/policy/preflight')[0].body).toEqual({ camera_index: 0, task: 'Pick up the duck.' });
+  expect(writes(state, '/policy/start')[0].body).toMatchObject({ task: 'Pick up the duck.' });
   await page.getByRole('button', { name: 'Stop arm and disable torque' }).click();
+  // The words are kept for this policy, ready for the next visit.
+  await page.reload();
+  await openTab(page, 'Run policy');
+  await expect(page.getByLabel('Task instruction', { exact: true })).toHaveValue('Pick up the duck.');
   expect(state.errors).toEqual([]);
 });
 
-test('an unplugged saved follower profile is not preselected over the connected arm', async ({ page }) => {
+test('an unplugged saved follower profile is neither offered nor preselected over the connected arm', async ({
+  page,
+}) => {
   const state = await fixture(page, true, 'Darwin', false);
   // A saved profile whose arm is unplugged has an empty port, as an unchosen device does.
   state.catalog.unshift({
@@ -2952,7 +2990,25 @@ test('an unplugged saved follower profile is not preselected over the connected 
   });
   await page.reload();
   await openTab(page, 'Run policy');
-  await expect(page.locator('label', { hasText: 'Follower device' }).locator('select')).toHaveValue('arm-a');
+  await expect(chosen(page, 'Follower device')).toHaveAttribute('data-value', 'arm-a');
+  await expect(choice(page, 'Follower device', 'profile-old-follower')).toHaveCount(0);
+  expect(state.errors).toEqual([]);
+});
+
+test('an arm plugged in after the page opened is chosen without a click', async ({ page }) => {
+  const state = await fixture(page, true, 'Darwin', false);
+  const arms = state.catalog;
+  state.catalog = arms.map((device: any) => ({ ...device, connected: false }));
+  state.portsConnected = false;
+  await page.reload();
+  await openTab(page, 'Run policy');
+  await expect(page.getByText(/No arm is plugged in/)).toBeVisible();
+  await expect(page.getByRole('status', { name: 'Next step' })).toHaveText('Plug in the arm.');
+  state.catalog = arms;
+  state.portsConnected = true;
+  await page.getByRole('button', { name: 'Refresh devices', exact: true }).click();
+  await expect(chosen(page, 'Follower device')).toHaveAttribute('data-value', 'arm-a');
+  expect(state.writes).toEqual([]);
   expect(state.errors).toEqual([]);
 });
 
@@ -2960,30 +3016,18 @@ test('a policy that plans slowly runs only after the operator allows planning pa
   const state = await fixture(page, true, 'Darwin', false);
   state.policyPlanningMs = 680;
   await openTab(page, 'Run policy');
-  const allow = page.getByRole('checkbox', { name: /Allow planning pauses for this run/ });
+  const allow = page.getByRole('button', { name: 'Allow planning pauses and start', exact: true });
   await expect(allow).toHaveCount(0);
-  await page.getByRole('button', { name: 'Load policy', exact: true }).click();
-  const check = page.getByRole('button', { name: 'Check camera and inference rate', exact: true });
-  await check.click();
-  await expect(page.getByText(/takes 680 ms to plan its next actions; 500 ms is allowed/)).toBeVisible();
+  await atTheArm(page).check();
+  await startRun(page).click();
+  // The check found the policy too slow for the usual limit: the run waits for one more yes.
+  await expect(page.getByText('This policy thinks for up to 680 ms between moves.', { exact: true })).toBeVisible();
   expect(writes(state, '/policy/preflight').at(-1)?.body).toEqual({ camera_index: 0 });
-  // The option appears only now, and it is off until the operator ticks it.
-  await expect(allow).not.toBeChecked();
-  await page.getByRole('checkbox', { name: /I am present; the arm is secured/ }).check();
-  const enable = page.getByRole('button', { name: 'Enable policy control', exact: true });
-  await expect(enable).toBeDisabled();
-  await allow.check();
-  // The earlier check was made without the allowance, so it no longer counts.
-  await expect(enable).toBeDisabled();
-  await check.click();
-  expect(writes(state, '/policy/preflight').at(-1)?.body).toEqual({ camera_index: 0, allow_planning_pause: true });
-  await expect(page.getByText(/planning takes up to 680 ms/)).toBeVisible();
+  expect(writes(state, '/control/start')).toEqual([]);
   await page.screenshot({ path: testInfo.outputPath('run-policy-planning-pause.png'), fullPage: true });
-  await enable.click();
-  const run = page.getByRole('button', { name: 'Run policy', exact: true }).last();
-  await expect(run).toBeEnabled();
-  await run.click();
+  await allow.click();
   await expect.poll(() => writes(state, '/policy/start').length).toBe(1);
+  expect(writes(state, '/policy/preflight').at(-1)?.body).toEqual({ camera_index: 0, allow_planning_pause: true });
   expect(writes(state, '/policy/start').at(-1)?.body).toMatchObject({ camera_index: 0, allow_planning_pause: true });
   await page.getByRole('button', { name: 'Stop arm and disable torque' }).click();
   expect(state.errors).toEqual([]);
@@ -2994,48 +3038,65 @@ test('a two-view policy on a computer with one camera says what is missing', asy
   state.policyViews = ['observation.images.front', 'observation.images.camera_4'];
   await page.reload();
   await openTab(page, 'Run policy');
-  await expect(page.getByRole('group', { name: 'Policy cameras' })).toContainText(
-    'This policy needs 2 cameras and this computer shows 1.',
+  await expect(page.getByRole('status', { name: 'Next step' })).toHaveText(
+    'Connect 2 cameras: this policy was trained on 2 views.',
   );
-  await page.getByRole('button', { name: 'Load policy', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Check camera and inference rate', exact: true })).toBeDisabled();
+  await atTheArm(page).check();
+  await expect(startRun(page)).toBeDisabled();
   expect(writes(state, '/policy/preflight')).toEqual([]);
 });
 
-test('Run policy installs a project model without loading or starting hardware', async ({ page }) => {
+const penModel = {
+  id: 'native-act',
+  project_id: 'alpha',
+  job_id: 'training-one',
+  label: 'Pen ACT imported',
+  format: 'training_checkpoint',
+  metadata: { architecture: 'act', training_backend: 'lerobot', reload_verified: true },
+};
+const installs = (state: Awaited<ReturnType<typeof fixture>>) =>
+  state.writes.filter((entry) => entry.path.endsWith('/policies/native-act/install'));
+
+test('a trained model is put on the robot computer with one click, without loading or starting hardware', async ({
+  page,
+}) => {
   const state = await fixture(page, true, 'Darwin', false);
-  state.projectModels = [
-    {
-      id: 'native-act',
-      project_id: 'alpha',
-      job_id: 'training-one',
-      label: 'Pen ACT imported',
-      format: 'training_checkpoint',
-      metadata: { architecture: 'act', training_backend: 'lerobot', reload_verified: true },
-    },
-  ];
-  await page
-    .getByRole('navigation', { name: 'Robot Lab tabs' })
-    .getByRole('button', { name: 'Run policy', exact: true })
-    .click();
-  await page.getByText('Install from Models', { exact: true }).click();
-  await expect(page.getByRole('combobox', { name: 'Project model', exact: true })).toHaveValue('native-act');
-  await page.getByRole('checkbox', { name: 'Offline inference only (no arm control)' }).uncheck();
-  await page.getByLabel('Training FPS, if missing from the model').fill('13');
-  await page.getByRole('checkbox', { name: /If the model has no saved units/ }).check();
-  await page.getByRole('button', { name: 'Install policy on USB computer', exact: true }).click();
-  await expect
-    .poll(() => state.writes.filter((entry) => entry.path.endsWith('/policies/native-act/install')).length)
-    .toBe(1);
-  expect(state.writes.find((entry) => entry.path.endsWith('/policies/native-act/install'))?.body).toEqual({
+  state.projectModels = [penModel];
+  await openRunPolicy(page);
+  const models = page.getByRole('region', { name: 'Trained models', exact: true });
+  await expect(models).toContainText('Pen ACT imported');
+  await models.getByRole('button', { name: 'Install Pen ACT imported', exact: true }).click();
+  await expect.poll(() => installs(state).length).toBe(1);
+  // Ready for the arm by default; the units come from the training recording.
+  expect(installs(state)[0].body).toEqual({
+    name: 'Pen ACT imported',
+    confirm_so101_units: false,
+    offline_only: false,
+  });
+  expect(writes(state, '/policy/load')).toEqual([]);
+  expect(writes(state, '/control/start')).toEqual([]);
+  expect(writes(state, '/policy/start')).toEqual([]);
+  expect(state.errors).toEqual([]);
+});
+
+test('install options state a missing frame rate and units for a model saved without them', async ({ page }) => {
+  const state = await fixture(page, true, 'Darwin', false);
+  state.projectModels = [penModel];
+  await openRunPolicy(page);
+  const models = page.getByRole('region', { name: 'Trained models', exact: true });
+  await models.getByRole('button', { name: 'Options', exact: true }).click();
+  await expect(models.getByRole('checkbox', { name: 'Offline inference only (no arm control)' })).not.toBeChecked();
+  await models.getByLabel('Training FPS, if missing from the model').fill('13');
+  await models.getByRole('checkbox', { name: /If the model has no saved units/ }).check();
+  await models.getByRole('button', { name: 'Install with these options', exact: true }).click();
+  await expect.poll(() => installs(state).length).toBe(1);
+  expect(installs(state)[0].body).toEqual({
     name: 'Pen ACT imported',
     fps: 13,
     confirm_so101_units: true,
     offline_only: false,
   });
   expect(writes(state, '/policy/load')).toEqual([]);
-  expect(writes(state, '/control/start')).toEqual([]);
-  expect(writes(state, '/policy/start')).toEqual([]);
   expect(state.errors).toEqual([]);
 });
 
@@ -3097,20 +3158,17 @@ test('two runs of one recipe are told apart when choosing a model to install', a
       ],
     }),
   );
-  await page
-    .getByRole('navigation', { name: 'Robot Lab tabs' })
-    .getByRole('button', { name: 'Run policy', exact: true })
-    .click();
-  await page.getByText('Install from Models', { exact: true }).click();
-  const options = page.getByRole('combobox', { name: 'Project model', exact: true }).locator('option');
+  await openRunPolicy(page);
+  const models = page.getByRole('region', { name: 'Trained models', exact: true });
   // Model, dataset, when the run started, and which checkpoint: no two lines alike.
-  await expect(options).toHaveText([
-    'Choose a native ACT or SmolVLA model',
+  await expect(models.locator('.robot-lab-policy-model strong')).toHaveText([
     'ACT · pick-up-duck-home · Nov 12, 9:05 AM · step 20,000',
     'ACT · pick-up-duck-home · Nov 12, 8:17 PM · step 20,000',
   ]);
   // The name offered for the installed policy says what it is, not "ACT checkpoint".
-  await expect(page.getByRole('textbox', { name: 'Installed policy name', exact: true })).toHaveValue(
+  await models.getByRole('button', { name: 'Options', exact: true }).first().click();
+  await expect(models.getByRole('textbox', { name: 'Installed policy name', exact: true })).toHaveAttribute(
+    'placeholder',
     'ACT · pick-up-duck-home · step 20,000',
   );
   expect(state.errors).toEqual([]);
@@ -3118,34 +3176,23 @@ test('two runs of one recipe are told apart when choosing a model to install', a
 
 test('every Run policy button is drawn as one of the application buttons', async ({ page }) => {
   const state = await fixture(page, true, 'Darwin', false);
-  state.projectModels = [
-    {
-      id: 'native-act',
-      project_id: 'alpha',
-      job_id: 'training-one',
-      label: 'Pen ACT imported',
-      format: 'training_checkpoint',
-      metadata: { architecture: 'act', training_backend: 'lerobot', reload_verified: true },
-    },
-  ];
-  await page
-    .getByRole('navigation', { name: 'Robot Lab tabs' })
-    .getByRole('button', { name: 'Run policy', exact: true })
-    .click();
+  state.projectModels = [penModel];
+  await openRunPolicy(page);
   const run = page.getByRole('region', { name: 'Run policy', exact: true });
-  await run.getByText('Install from Models', { exact: true }).click();
+  await run.getByText('Test the policy without moving the arm', { exact: true }).click();
   await run.getByText('Use an observation image and state', { exact: true }).click();
   for (const name of [
-    'Install policy on USB computer',
+    'Install Pen ACT imported',
+    'Start run',
     'Load policy',
     'Try with test inputs',
     'Preview uploaded observation',
-    'Check camera and inference rate',
   ])
     await expect(run.getByRole('button', { name, exact: true })).toBeVisible();
   // A button without one of these classes falls back to the browser's own grey button.
+  // Choices drawn as cards or segments have their own look.
   const plain = await run
-    .locator('button')
+    .locator('button:not([role="radio"])')
     .evaluateAll((buttons) =>
       buttons
         .filter(
@@ -3166,6 +3213,7 @@ test('Run policy previews an offline ACT observation without devices or motor au
   state.portsConnected = false;
   state.policyOffline = true;
   await openTab(page, 'Run policy');
+  await expect(chosen(page, 'Installed policy')).toContainText('Test only');
   await page.getByRole('button', { name: 'Load policy', exact: true }).click();
   await expect(page.getByLabel('Task instruction', { exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Try with test inputs', exact: true }).click();
@@ -3184,7 +3232,8 @@ test('Run policy previews an offline ACT observation without devices or motor au
     state: [12.5, 0, 0, 0, 0, 0],
     jpeg: pixel.toString('base64'),
   });
-  await expect(page.getByRole('button', { name: 'Enable policy control', exact: true })).toHaveCount(0);
+  // A policy installed for testing only is never offered a run.
+  await expect(startRun(page)).toHaveCount(0);
   expect(writes(state, '/control/start')).toEqual([]);
   expect(writes(state, '/policy/start')).toEqual([]);
   expect(state.errors).toEqual([]);
@@ -3205,6 +3254,77 @@ test('Run policy supplies a task only for the language-conditioned offline adapt
   });
   expect(writes(state, '/control/start')).toEqual([]);
   expect(writes(state, '/policy/start')).toEqual([]);
+  expect(state.errors).toEqual([]);
+});
+
+test('AI collection runs with the model the operator picks and asks for no typed phrase', async ({
+  page,
+}, testInfo) => {
+  const state = await fixture(page, true, 'Darwin', false);
+  state.cameras = [
+    { index: 0, name: 'USB Camera', width: 640, height: 480 },
+    { index: 1, name: 'USB Camera', width: 640, height: 480 },
+  ];
+  const runs: any[] = [];
+  await page.route('**/api/v1/projects/beta/robot-lab/collection-runs', (route) => {
+    if (route.request().method() === 'GET') return route.fulfill({ json: runs });
+    const config = route.request().postDataJSON();
+    state.writes.push({ path: '/collection-runs', body: config });
+    runs.unshift({
+      id: 'a'.repeat(32),
+      status: 'saved',
+      frames: 24,
+      error: null,
+      config,
+      proposal: null,
+      dataset: null,
+    });
+    return route.fulfill({ status: 201, json: runs[0] });
+  });
+  await page.reload();
+  await selectProject(page, 'beta');
+  await startManual(page);
+  await page.getByRole('navigation', { name: 'Robot Lab tabs' }).getByRole('button', { name: 'AI collection' }).click();
+  // The practice run is the default: it needs no arm, no key and no model.
+  await expect(chosen(page, 'Run mode')).toHaveAttribute('data-value', 'mock');
+  await expect(choices(page, 'Model')).toHaveCount(0);
+  await choice(page, 'Run mode', 'physical').click();
+  await expect(choices(page, 'Model').getByRole('radio')).toHaveText([
+    'GPT-6.1 Sol',
+    'GPT-6 Astra',
+    'GPT-6.1 Terra',
+    'GPT-6 Luna',
+    'Other…',
+  ]);
+  await choice(page, 'Model', 'gpt-6.1-sol').click();
+  const start = page.getByRole('button', { name: 'Start collection', exact: true });
+  await expect(start).toBeDisabled();
+  await expect(page.getByText('Tick both boxes once you are at the arm.', { exact: true })).toBeVisible();
+  await expect(page.getByRole('textbox', { name: /ARM AI CONTROL/ })).toHaveCount(0);
+  // Taking the other view's camera swaps the two.
+  await choice(page, 'Wrist camera', 1).click();
+  await expect(chosen(page, 'Side camera')).toHaveAttribute('data-value', '0');
+  await page.getByRole('checkbox', { name: /I am at the arm and can stop it/ }).check();
+  await page.getByRole('checkbox', { name: /The workspace is clear/ }).check();
+  await page.screenshot({ path: testInfo.outputPath('ai-collection.png'), fullPage: true });
+  await start.click();
+  await expect.poll(() => writes(state, '/collection-runs').length).toBe(1);
+  expect(writes(state, '/collection-runs')[0].body).toMatchObject({
+    mode: 'physical',
+    model: 'gpt-6.1-sol',
+    camera_indices: [1, 0],
+    confirm: 'ARM AI CONTROL',
+    operator_present: true,
+    workspace_clear: true,
+  });
+  await expect(page.getByRole('region', { name: 'Collection progress' })).toContainText('GPT-6.1 Sol');
+  // Any other model the key can use is typed in.
+  await choice(page, 'Model', 'other').click();
+  await page.getByRole('textbox', { name: 'Model ID', exact: true }).fill('gpt-7-nova');
+  await start.click();
+  await expect.poll(() => writes(state, '/collection-runs').length).toBe(2);
+  expect(writes(state, '/collection-runs')[1].body).toMatchObject({ model: 'gpt-7-nova' });
+  await page.getByRole('button', { name: 'Stop arm and disable torque' }).click();
   expect(state.errors).toEqual([]);
 });
 

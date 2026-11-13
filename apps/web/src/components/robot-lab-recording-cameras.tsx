@@ -44,7 +44,7 @@ export function RobotLabRecordingCameras({ lab }: { lab: RobotLabState }) {
               />
               <CameraIcon size={20} />
               <span>
-                <strong>{camera.name}</strong>
+                <strong>{lab.cameraName(camera.index)}</strong>
                 <small>{checked ? 'Included in dataset' : 'Not recorded'}</small>
               </span>
             </label>

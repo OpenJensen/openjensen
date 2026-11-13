@@ -1631,3 +1631,215 @@
   font-size: 12px;
   margin-bottom: 8px;
 }
+
+/* Arms, cameras and policies are picked from cards, not dropdowns. */
+.robot-lab-arms {
+  display: grid;
+  gap: 16px;
+}
+.robot-lab-arm-slot {
+  display: grid;
+  gap: 8px;
+}
+.robot-lab-field-label {
+  font-size: 13px;
+  font-weight: 500;
+}
+.robot-lab-field {
+  display: grid;
+  gap: 8px;
+}
+
+/* Run policy: one Start button, a list of what it is doing, and a large Stop. */
+.robot-lab-policy-models {
+  display: grid;
+  gap: 8px;
+  margin-top: 6px;
+}
+.robot-lab-policy-model {
+  display: grid;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 10px;
+}
+.robot-lab-policy-model-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.robot-lab-policy-model-row > span {
+  display: grid;
+  gap: 2px;
+  flex: 1 1 220px;
+  min-width: 0;
+}
+.robot-lab-policy-model-row strong {
+  font-size: 13px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.robot-lab-policy-model-row small {
+  color: var(--muted);
+  font-size: 12px;
+}
+.robot-lab-policy-options {
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+.robot-lab-run-steps {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--subtle);
+  list-style: none;
+  font-size: 13px;
+}
+.robot-lab-run-steps li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+}
+.robot-lab-run-step-mark {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid var(--line-strong);
+  border-radius: 50%;
+}
+.robot-lab-run-steps li[data-state='done'] {
+  color: var(--ink);
+}
+.robot-lab-run-steps li[data-state='done'] .robot-lab-run-step-mark {
+  border-color: var(--success);
+  background: var(--success);
+}
+.robot-lab-run-steps li[data-state='active'] {
+  color: var(--ink);
+  font-weight: 600;
+}
+.robot-lab-run-steps li[data-state='active'] .robot-lab-run-step-mark {
+  border-color: var(--accent);
+  border-top-color: transparent;
+  animation: spin 0.9s linear infinite;
+}
+.robot-lab-run-steps li[data-state='failed'] {
+  color: var(--error);
+  font-weight: 600;
+}
+.robot-lab-run-steps li[data-state='failed'] .robot-lab-run-step-mark {
+  border-color: var(--error);
+  background: var(--error);
+}
+.robot-lab-run-start {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+}
+.robot-lab-run-button {
+  min-width: 190px;
+  min-height: 52px;
+  padding: 0 28px;
+  font-size: 15px;
+  font-weight: 600;
+}
+.robot-lab-run-live {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 18px;
+  border: 1px solid color-mix(in srgb, var(--success) 35%, var(--line));
+  border-radius: 10px;
+  background: var(--success-bg);
+}
+.robot-lab-run-live > div {
+  display: grid;
+  gap: 4px;
+}
+.robot-lab-run-live strong {
+  font-size: 17px;
+  font-variant-numeric: tabular-nums;
+}
+.robot-lab-run-live small {
+  color: var(--muted);
+  font-size: 12px;
+}
+.robot-lab-policy-test > .robot-lab-form {
+  margin-top: 14px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .robot-lab-run-steps li[data-state='active'] .robot-lab-run-step-mark {
+    animation: none;
+    border-top-color: var(--accent);
+  }
+}
+
+/* AI collection */
+.robot-lab-fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.robot-lab-limits {
+  margin-top: 12px;
+}
+.robot-lab-collection-views {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+  gap: 10px;
+}
+.robot-lab-collection-views figure {
+  margin: 0;
+}
+.robot-lab-collection-views img {
+  display: block;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.robot-lab-collection-views figcaption {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.robot-lab-collection-proposal {
+  max-height: 220px;
+  overflow: auto;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  font:
+    12px/1.5 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+}
+.robot-lab-mode-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr));
+}
+.robot-lab-more-options > .robot-lab-form {
+  margin-top: 14px;
+}
+.robot-lab-camera-controls fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.robot-lab-camera-controls legend {
+  padding: 0;
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 500;
+}

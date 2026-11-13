@@ -117,6 +117,8 @@ export type RobotPolicyCatalog = {
     camera_key?: string;
     camera_keys?: string[];
     image_shape?: number[];
+    /** The project model this policy was installed from; absent on older robot services. */
+    source_manifest_sha256?: string | null;
   }[];
   runtime: { configured: boolean; device: string | null; message: string };
   state: RobotPolicyState;
@@ -435,6 +437,7 @@ export const robotApi = {
     cameras?: Record<string, number>;
     allow_planning_pause?: boolean;
     duration_seconds: number;
+    task?: string;
   }) =>
     request<RobotStatus>('/policy/start', {
       ...input,

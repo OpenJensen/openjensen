@@ -2,9 +2,11 @@
 
 import { useState } from 'react';
 import { RobotLabCameraFrame } from './robot-lab-camera-frame';
+import { viewName } from '@/lib/policy-cameras';
 import { CameraIcon } from './robot-lab-shared';
 import { RobotLabCameraSettings } from './robot-lab-camera-settings';
 import type { RobotLabState } from './robot-lab-state';
+import { Segmented } from './ui/choice';
 
 export function RobotLabCamera({ lab }: { lab: RobotLabState }) {
   const {
@@ -28,13 +30,18 @@ export function RobotLabCamera({ lab }: { lab: RobotLabState }) {
   const [expandedCamera, setExpandedCamera] = useState<number | null>(null);
   const large = lab.cameraWorkspace && (lab.step === 3 || lab.step === 4);
   const multipleAvailable = !!state?.capabilities?.multi_camera_recording;
-  const indices = multipleAvailable
-    ? recording?.active && recording.camera_indices?.length
-      ? recording.camera_indices
-      : selectedCameraIndices.length
-        ? selectedCameraIndices
-        : [cameraIndex]
-    : [cameraIndex];
+  // On Run policy the preview shows the policy's views, each named as the policy names it.
+  const policyViews = lab.step === 5 ? lab.policyViews : [];
+  const indices = policyViews.length
+    ? policyViews.map((item) => item.index)
+    : multipleAvailable
+      ? recording?.active && recording.camera_indices?.length
+        ? recording.camera_indices
+        : selectedCameraIndices.length
+          ? selectedCameraIndices
+          : [cameraIndex]
+      : [cameraIndex];
+  const viewOf = (index: number) => policyViews.find((item) => item.index === index)?.view;
   const primaryIndex = recording?.active ? (indices[0] ?? cameraIndex) : cameraIndex;
   function resetErrors() {
     setCameraError(false);
@@ -75,10 +82,11 @@ export function RobotLabCamera({ lab }: { lab: RobotLabState }) {
               className="robot-lab-camera-tile"
               hidden={large && expandedCamera !== null && indices.includes(expandedCamera) && expandedCamera !== index}
             >
-              {(indices.length > 1 || large) && (
+              {(indices.length > 1 || large || policyViews.length > 0) && (
                 <div className="robot-lab-camera-tile-heading">
                   <strong>
-                    {availableCameras.find((camera) => camera.index === index)?.name || `Camera ${index}`}
+                    {viewOf(index) ? `${viewName(viewOf(index)!)} · ` : ''}
+                    {lab.cameraName(index)}
                   </strong>
                   {large && indices.length > 1 && expandedCamera !== index && (
                     <button
@@ -148,28 +156,29 @@ export function RobotLabCamera({ lab }: { lab: RobotLabState }) {
             />
           )}
           <div className="robot-lab-camera-controls">
-            {lab.step !== 4 && (
-              <label>
-                Camera
-                <select
-                  value={primaryIndex}
-                  aria-label="Preview camera"
-                  onChange={(event) => {
-                    setCameraIndex(Number(event.target.value));
-                    resetErrors();
-                  }}
-                  disabled={!online || !availableCameras.length || recording?.active}
-                >
-                  {!availableCameras.length && <option value={0}>No camera available</option>}
-                  {availableCameras.map((camera) => (
-                    <option key={camera.index} value={camera.index}>
-                      {camera.name} · {camera.width}×{camera.height}
-                    </option>
-                  ))}
-                </select>
-              </label>
+            {lab.step !== 4 && !policyViews.length && (
+              <div className="robot-lab-field">
+                <span className="robot-lab-field-label">Camera</span>
+                {availableCameras.length ? (
+                  <Segmented
+                    label="Preview camera"
+                    value={primaryIndex}
+                    disabled={!online || !!recording?.active}
+                    onChange={(index) => {
+                      setCameraIndex(index);
+                      resetErrors();
+                    }}
+                    options={availableCameras.map((camera) => ({
+                      value: camera.index,
+                      label: lab.cameraName(camera.index),
+                    }))}
+                  />
+                ) : (
+                  <span className="robot-lab-subtle">No camera available</span>
+                )}
+              </div>
             )}
-            {lab.step !== 4 && multipleAvailable && availableCameras.length > 1 && (
+            {lab.step !== 4 && !policyViews.length && multipleAvailable && availableCameras.length > 1 && (
               <fieldset className="robot-lab-form">
                 <legend>Also preview and record</legend>
                 {availableCameras
@@ -194,7 +203,7 @@ export function RobotLabCamera({ lab }: { lab: RobotLabState }) {
                           resetErrors();
                         }}
                       />
-                      {camera.name}
+                      {lab.cameraName(camera.index)}
                     </label>
                   ))}
                 <small>Selected views are saved together when Record camera is enabled.</small>
