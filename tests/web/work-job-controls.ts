@@ -3,7 +3,7 @@ import { expect, type Page, type Route } from '@playwright/test';
 /** Open a category's new task through its visible primary action. */
 export async function openModuleTask(page: Page) {
   const start = page.getByRole('button', {
-    name: /^(New augmentation|New scene|New scoring|New teleoperation|New run)$/,
+    name: /^(New augmentation|New scene|New scoring|New teleoperation|New simulation)$/,
   });
   const back = page.getByRole('button', { name: 'Back to jobs', exact: true });
   await expect.poll(async () => (await start.isVisible()) || (await back.isVisible())).toBe(true);
