@@ -86,6 +86,7 @@ export type RobotPolicyState = {
     planning_pause_needed?: boolean;
     prediction_limit_ms?: number;
     checked_at: number;
+    valid_for_ms?: number;
     fps: number;
     measured_fps: number;
     mean_latency_ms: number;

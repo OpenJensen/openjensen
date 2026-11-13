@@ -225,6 +225,7 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin', 
           planning_pause: !!body.allow_planning_pause,
           planning_pause_needed: slow,
           prediction_limit_ms: body.allow_planning_pause ? 1500 : 500,
+          checked_at: performance.now() / 1000,
           measured_fps: 13,
           mean_latency_ms: 20,
           max_latency_ms: state.policyPlanningMs,
@@ -2789,6 +2790,39 @@ test('recording file work prevents overlapping dataset creation', async ({ page 
   state.status.recording.saving = false;
   await expect(page.getByRole('button', { name: 'Create recording dataset', exact: true })).toBeEnabled();
   expect(writes(state, '/recording/start')).toEqual([]);
+});
+
+test('an expired policy check blocks enabling torque and starting a run', async ({ page }) => {
+  const state = await fixture(page, true, 'Darwin', false);
+  await page.clock.install();
+  await page
+    .getByRole('navigation', { name: 'Robot Lab tabs' })
+    .getByRole('button', { name: 'Run policy', exact: true })
+    .click();
+  const check = page.getByRole('button', { name: 'Check camera and inference rate' });
+  const enable = page.getByRole('button', { name: 'Enable policy control', exact: true });
+  const run = page.getByRole('button', { name: 'Run policy', exact: true }).last();
+  await page.getByRole('button', { name: 'Load and check policy' }).click();
+  await page.getByRole('checkbox', { name: /I am present; the arm is secured/ }).check();
+  await check.click();
+  await expect(enable).toBeEnabled();
+  await page.clock.fastForward(61_000);
+  await expect(enable).toBeDisabled();
+  await expect(page.getByText('Camera and inference check expired. Run the check again.')).toBeVisible();
+  expect(writes(state, '/control/start')).toEqual([]);
+
+  await check.click();
+  await enable.click();
+  await expect(run).toBeEnabled();
+  await page.clock.fastForward(61_000);
+  await expect(run).toBeDisabled();
+  await expect(
+    page.getByText('Camera and inference check expired. Stop the arm and run the check again.'),
+  ).toBeVisible();
+  expect(writes(state, '/policy/start')).toEqual([]);
+  await page.getByRole('button', { name: 'Stop arm and disable torque' }).click();
+  await check.click();
+  await expect(enable).toBeEnabled();
 });
 
 test('Run policy requires a native preflight and attended start, then renews only policy authority', async ({

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { robotApi, robotJoints } from '@/lib/robot-api';
 import { policyCameras, sameCameras, viewName } from '@/lib/policy-cameras';
@@ -15,6 +15,8 @@ export function RobotLabPolicy({ lab }: { lab: RobotLabState }) {
   const [attending, setAttending] = useState(false);
   const [viewCameras, setViewCameras] = useState<Record<string, number>>({});
   const [planningPause, setPlanningPause] = useState(false);
+  const [localCheck, setLocalCheck] = useState<number>();
+  const [expiredCheck, setExpiredCheck] = useState<number>();
   const catalog = useQuery({
     queryKey: ['robot-lab', 'policy-catalog'],
     queryFn: robotApi.policyCatalog,
@@ -57,6 +59,22 @@ export function RobotLabPolicy({ lab }: { lab: RobotLabState }) {
     (!cameras || sameCameras(policy.preflight.cameras, cameras)) &&
     !!policy.preflight.planning_pause === planningPause;
   const pauseSeconds = policy?.limits?.planning_pause_seconds ?? 1.5;
+  const preflight = policy?.preflight;
+  const checkStamp = preflight?.checked_at;
+  const remaining = preflight?.valid_for_ms;
+  const checkPassed = preflight?.passed === true;
+  // The companion's monotonic clock cannot be compared with the browser's clock.
+  // Older companions can only be timed from a check this page just requested.
+  const checkExpired =
+    checkPassed &&
+    (remaining === 0 ||
+      (expiredCheck === checkStamp && expiredCheck !== undefined) ||
+      (remaining === undefined && (checkStamp === undefined || localCheck !== checkStamp)));
+  useEffect(() => {
+    if (!checkPassed || checkStamp === undefined || checkExpired) return;
+    const timer = window.setTimeout(() => setExpiredCheck(checkStamp), remaining ?? 60_000);
+    return () => window.clearTimeout(timer);
+  }, [checkPassed, checkStamp, checkExpired, remaining]);
   return (
     <>
       <Heading title="Run policy" />
@@ -223,27 +241,35 @@ export function RobotLabPolicy({ lab }: { lab: RobotLabState }) {
                     !camerasReady
                   }
                   onClick={() =>
-                    void lab.perform('Policy camera and inference check completed.', () =>
-                      robotApi.preflightPolicy(
-                        lab.cameraIndex,
-                        requiresTask ? lab.task : undefined,
-                        cameras ?? undefined,
-                        planningPause,
-                      ),
+                    void lab.perform(
+                      'Policy camera and inference check completed.',
+                      () =>
+                        robotApi.preflightPolicy(
+                          lab.cameraIndex,
+                          requiresTask ? lab.task : undefined,
+                          cameras ?? undefined,
+                          planningPause,
+                        ),
+                      (result) => setLocalCheck(result.policy?.preflight?.checked_at),
                     )
                   }
                 >
                   Check camera and inference rate
                 </button>
-                {policy?.preflight && (
-                  <Notice kind={policy.preflight.passed ? 'success' : 'warning'}>
-                    {policy.preflight.message} · {policy.preflight.measured_fps} FPS ·{' '}
-                    {policy.preflight.mean_latency_ms} ms mean latency
-                    {policy.preflight.planning_pause
-                      ? ' · planning takes up to ' + Math.round(policy.preflight.max_latency_ms) + ' ms'
+                {checkExpired && !running ? (
+                  <Notice kind="warning">
+                    Camera and inference check expired. {lab.active ? 'Stop the arm and run' : 'Run'} the check again.
+                  </Notice>
+                ) : preflight ? (
+                  <Notice kind={preflight.passed ? 'success' : 'warning'}>
+                    {preflight.message} · {preflight.measured_fps} FPS · {preflight.mean_latency_ms} ms mean latency
+                    {preflight.planning_pause
+                      ? ' · planning takes up to ' + Math.round(preflight.max_latency_ms) + ' ms'
                       : ''}
                     .
                   </Notice>
+                ) : (
+                  <p className="robot-lab-subtle">Run the camera and inference check before enabling policy control.</p>
                 )}
                 {(planningPause || policy?.preflight?.planning_pause_needed) && (
                   <label className="robot-lab-check">
@@ -293,7 +319,9 @@ export function RobotLabPolicy({ lab }: { lab: RobotLabState }) {
                       !lab.calibrated ||
                       !attending ||
                       policy?.phase !== 'ready' ||
-                      !policy.preflight?.passed ||
+                      policy.policy_id !== selectedId ||
+                      !preflight?.passed ||
+                      checkExpired ||
                       !checkedTheseCameras ||
                       !!lab.recording?.active
                     }
@@ -326,7 +354,8 @@ export function RobotLabPolicy({ lab }: { lab: RobotLabState }) {
                       !prepared ||
                       !attending ||
                       policy?.phase !== 'ready' ||
-                      !policy.preflight?.passed ||
+                      !preflight?.passed ||
+                      checkExpired ||
                       !checkedTheseCameras ||
                       policy.policy_id !== selectedId ||
                       generation === undefined ||

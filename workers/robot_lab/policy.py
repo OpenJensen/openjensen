@@ -46,6 +46,10 @@ def prediction_limit(fps, planning_pause=False):
     return PLANNING_PAUSE_SECONDS if planning_pause else max(0.5, 3 / fps)
 
 
+# How long a passing camera and inference check allows a run to start.
+PREFLIGHT_VALID_SECONDS = 60
+
+
 def admit(root, ident):
     if not isinstance(ident, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,80}", ident):
         raise ValueError("Choose an installed policy")
@@ -329,6 +333,10 @@ class PolicyRunner:
 
     def snapshot(self):
         with self.lock:
+            preflight = None
+            if self.check is not None:
+                remaining = PREFLIGHT_VALID_SECONDS - (time.monotonic() - self.check["checked_at"])
+                preflight = {**self.check, "valid_for_ms": max(0, int(remaining * 1000))}
             return {
                 "phase": self.phase,
                 "policy_id": self.model["id"] if self.model else None,
@@ -336,7 +344,7 @@ class PolicyRunner:
                 "error": self.error,
                 "fps": self.model["fps"] if self.model else None,
                 "steps": self.steps,
-                "preflight": self.check,
+                "preflight": preflight,
                 "preview": self.preview,
                 "policy_type": self.model["policy_type"] if self.model else None,
                 "task_required": self.model["task_required"] if self.model else False,
@@ -767,13 +775,19 @@ class PolicyRunner:
                 raise ValueError("The manual operator heartbeat expired")
             cameras = self._cameras(payload)
             if (
+                self.check
+                and time.monotonic() - self.check["checked_at"] >= PREFLIGHT_VALID_SECONDS
+            ):
+                raise ValueError(
+                    "Camera and inference check expired. Stop the arm and run the check again."
+                )
+            if (
                 not self.check
                 or not self.check["passed"]
                 or self.check["camera_index"] != camera
                 or self.check.get("cameras", cameras) != cameras
                 # A run may pause for planning only if its check measured it that way.
                 or self.check.get("planning_pause", False) != pause
-                or time.monotonic() - self.check["checked_at"] > 60
                 or (
                     self.model["task_required"]
                     and self.check.get("task_sha256") != hashlib.sha256(task.encode()).hexdigest()

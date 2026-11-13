@@ -302,7 +302,7 @@ class PolicyTests(unittest.TestCase):
             runner.start(self.run_payload())
         runner.check["camera_index"] = 0
         runner.check["checked_at"] -= 61
-        with self.assertRaisesRegex(ValueError, "Check this policy"):
+        with self.assertRaisesRegex(ValueError, "check expired"):
             runner.start(self.run_payload())
 
     def test_targets_obey_speed_acceleration_limits_and_manual_heartbeat_cannot_extend_authority(
@@ -677,6 +677,9 @@ class PolicyTests(unittest.TestCase):
         self.lab.camera = Camera()
         runner.preflight({"camera_index": 0})
         self.assertTrue(runner.check["passed"])
+        self.assertGreater(runner.snapshot()["preflight"]["valid_for_ms"], 0)
+        runner.check["checked_at"] -= 61
+        self.assertEqual(runner.snapshot()["preflight"]["valid_for_ms"], 0)
         self.assertEqual(self.lab.mode, "idle")
         self.assertEqual(self.buses, [])
 
