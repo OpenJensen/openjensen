@@ -57,8 +57,13 @@ NOT_CONNECTED = (
 )
 
 
-def megabytes(size: int) -> str:
-    return f"{size / 1024**3:.2f} GB" if size >= 1024**3 else f"{size / 1024**2:.1f} MB"
+def size_text(size: int) -> str:
+    """A size as a person reads it: ``1.24 GB``, ``483.0 MB``, ``130 KB``."""
+    if size >= 1024**3:
+        return f"{size / 1024**3:.2f} GB"
+    if size >= 1024**2:
+        return f"{size / 1024**2:.1f} MB"
+    return f"{max(1, round(size / 1024))} KB"
 
 
 def digest(path: Path) -> str:
@@ -747,7 +752,7 @@ class HuggingFaceSharing:
         ident, inputs = record["id"], record["inputs"]
         size = sum((folder / name).stat().st_size for name in expect)
 
-        uploading = f"Uploading {len(expect)} files ({megabytes(size)}) to {inputs['repo_id']}"
+        uploading = f"Uploading {len(expect)} files ({size_text(size)}) to {inputs['repo_id']}"
         state = {"task": None}
 
         async def elapsed():
@@ -843,7 +848,7 @@ class HuggingFaceSharing:
             # The files live in cloud storage: bring them here once, straight to a folder.
             if shutil.disk_usage(self.data_dir).free < artifact.file_bytes + DISK_HEADROOM:
                 raise ValueError("Not enough free storage to bring this model here for publishing")
-            bringing = f"Bringing the model from cloud storage ({megabytes(artifact.file_bytes)})"
+            bringing = f"Bringing the model from cloud storage ({size_text(artifact.file_bytes)})"
             self.jobs.progress(ident, "collecting", bringing)
             directory = self.work / ident / "bundle"
             directory.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -921,7 +926,7 @@ class HuggingFaceSharing:
                 self.jobs.progress(
                     ident,
                     "downloading",
-                    f"Downloading {files} files ({megabytes(total)}) from {repo_id} · {share}%",
+                    f"Downloading {files} files ({size_text(total)}) from {repo_id} · {share}%",
                     event=False,
                 )
 
@@ -931,7 +936,7 @@ class HuggingFaceSharing:
                 self.jobs.progress(
                     ident,
                     "downloading",
-                    f"Downloading {files} files ({megabytes(total)}) from {repo_id}",
+                    f"Downloading {files} files ({size_text(total)}) from {repo_id}",
                 )
                 state["task"] = asyncio.create_task(watch(files, total))
 
