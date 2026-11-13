@@ -30,6 +30,7 @@ from policy_contract import (
 UNITS = ["degrees"] * 5 + ["percent"]
 MAX_SPEED = 10.0
 MAX_ACCELERATION = 20.0
+PREFLIGHT_VALID_SECONDS = 60
 
 
 def admit(root, ident):
@@ -307,6 +308,10 @@ class PolicyRunner:
 
     def snapshot(self):
         with self.lock:
+            preflight = None
+            if self.check is not None:
+                remaining = PREFLIGHT_VALID_SECONDS - (time.monotonic() - self.check["checked_at"])
+                preflight = {**self.check, "valid_for_ms": max(0, int(remaining * 1000))}
             return {
                 "phase": self.phase,
                 "policy_id": self.model["id"] if self.model else None,
@@ -314,7 +319,7 @@ class PolicyRunner:
                 "error": self.error,
                 "fps": self.model["fps"] if self.model else None,
                 "steps": self.steps,
-                "preflight": self.check,
+                "preflight": preflight,
                 "preview": self.preview,
                 "policy_type": self.model["policy_type"] if self.model else None,
                 "task_required": self.model["task_required"] if self.model else False,
@@ -627,11 +632,12 @@ class PolicyRunner:
                 )
             if time.monotonic() - self.lab.heartbeat > 2:
                 raise ValueError("The manual operator heartbeat expired")
+            if self.check and time.monotonic() - self.check["checked_at"] >= PREFLIGHT_VALID_SECONDS:
+                raise ValueError("Camera and inference check expired. Stop the arm and run the check again.")
             if (
                 not self.check
                 or not self.check["passed"]
                 or self.check["camera_index"] != camera
-                or time.monotonic() - self.check["checked_at"] > 60
                 or (
                     self.model["task_required"]
                     and self.check.get("task_sha256") != hashlib.sha256(task.encode()).hexdigest()
