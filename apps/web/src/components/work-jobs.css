@@ -156,3 +156,8 @@
 .work-job-failure {
   border-color: var(--error);
 }
+.work-job-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}

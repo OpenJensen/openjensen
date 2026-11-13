@@ -180,9 +180,7 @@ export function ModulesPanel() {
       {modules.isPending && <p role="status">Loading modules…</p>}
       {modules.error && <p role="alert">{modules.error.message}</p>}
       <p className="module-introduction">
-        Install optional runtimes only when you need them. Install downloads pinned packages from upstream and verifies
-        them before use. Uninstall removes packages owned by this module manager; Hide only changes the sidebar.
-        Built-in pages and connections use Enable and need no package download.
+        Turn on the pages you use. A few need a one-time download; Hide only takes a page out of the sidebar.
       </p>
       <div className="module-groups" aria-label="Workspace modules">
         {moduleGroups.map((group) => {
@@ -242,11 +240,6 @@ export function ModulesPanel() {
                                 ? 'Managed runtime packages installed on this server.'
                                 : 'Uses an existing shared runtime. Uninstall keeps that environment.'
                               : 'Runtime packages are downloaded only when you install.'}
-                        </p>
-                      )}
-                      {!realInstall && (
-                        <p className="module-muted">
-                          Built-in page · no package download. Configure workers or services separately.
                         </p>
                       )}
                       <div className="module-actions">

@@ -18,6 +18,9 @@ import {
 } from '@/lib/work-jobs';
 import { WorkJobSceneResults } from './work-job-scene-results';
 import { Notice } from './ui/notice';
+import { Segmented } from './ui/choice';
+import { isModule, workspaceRoutes, type FeatureModuleId, type StageId } from '@/lib/workspace-routes';
+import { useWorkspace } from './workspace-context';
 import './work-jobs.css';
 
 /** Most outputs are files this application serves; a published repository is elsewhere. */
@@ -289,6 +292,7 @@ export function WorkJobs({
   onNew: (operation: JobOperation) => void;
   preferredJobId?: string;
 }) {
+  const { moduleInstalled } = useWorkspace();
   const [selected, setSelected] = useState(preferredJobId ?? '');
   const [filter, setFilter] = useState('all');
   const [state, setState] = useState('all');
@@ -328,7 +332,10 @@ export function WorkJobs({
   const owned = (jobs.data?.jobs ?? []).filter((job) => job.project_id === projectId);
   const current = detail.data?.project_id === projectId && detail.data.id === selected ? detail.data : undefined;
   const choices = (operations.data ?? []).filter((operation) => !module || operation.module === module);
-  const modules = [...new Set((operations.data ?? []).map((item) => item.module))];
+  // Only the pages this workspace shows are offered as filters.
+  const modules = [...new Set((operations.data ?? []).map((item) => item.module))].filter(
+    (id) => !(id in workspaceRoutes) || !isModule(id as StageId) || moduleInstalled(id as FeatureModuleId),
+  );
   const category = module ? jobCategoryActions[module] : undefined;
   const primary = category && choices.find((item) => item.id === category.operation);
   const additional = module ? choices.filter((item) => item !== primary) : [];
@@ -378,47 +385,42 @@ export function WorkJobs({
             maxLength={200}
           />
         </label>
-        {!module && (
-          <label>
-            Module
-            <select
-              disabled={!projectId}
-              value={filter}
-              onChange={(event) => {
-                setFilter(event.target.value);
-                setOffset(0);
-              }}
-            >
-              <option value="all">All modules</option>
-              {modules.map((id) => (
-                <option key={id} value={id}>
-                  {id.replaceAll('-', ' ')}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-        <label>
-          Status
-          <select
+      </div>
+      <div className="work-job-chips">
+        {!module && modules.length > 1 && (
+          <Segmented
+            label="Module"
+            value={filter}
             disabled={!projectId}
-            value={state}
-            onChange={(event) => {
-              setState(event.target.value);
+            onChange={(value) => {
+              setFilter(value);
               setOffset(0);
             }}
-          >
-            <option value="all">All statuses</option>
-            <option value="active">Active</option>
-            {Object.entries(workStatusLabels)
+            options={[
+              { value: 'all', label: 'Everything' },
+              ...modules.map((id) => ({
+                value: id,
+                label: id in workspaceRoutes ? workspaceRoutes[id as StageId].name : id.replaceAll('-', ' '),
+              })),
+            ]}
+          />
+        )}
+        <Segmented
+          label="Status"
+          value={state}
+          disabled={!projectId}
+          onChange={(value) => {
+            setState(value);
+            setOffset(0);
+          }}
+          options={[
+            { value: 'all', label: 'Any status' },
+            { value: 'active', label: 'Active' },
+            ...Object.entries(workStatusLabels)
               .filter(([id]) => !['queued', 'running', 'preparing', 'cancelling'].includes(id))
-              .map(([id, label]) => (
-                <option key={id} value={id}>
-                  {label}
-                </option>
-              ))}
-          </select>
-        </label>
+              .map(([id, label]) => ({ value: id, label })),
+          ]}
+        />
       </div>
       {operations.error && (
         <Notice

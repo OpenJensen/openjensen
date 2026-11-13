@@ -1,5 +1,6 @@
 'use client';
 
+import { Segmented } from './ui/choice';
 import { jobStatusLabel } from '@/lib/job-status';
 import { useEffect, useState } from 'react';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -710,13 +711,15 @@ export function ModelLibrary({
             placeholder="Name, dataset, model ID…"
           />
         </label>
-        <label>
-          Show
-          <select value={scope} onChange={(event) => setScope(event.target.value)}>
-            <option value="all">All projects</option>
-            <option value="current">Current project</option>
-          </select>
-        </label>
+        <Segmented
+          label="Show"
+          value={scope}
+          onChange={setScope}
+          options={[
+            { value: 'current', label: 'This project' },
+            { value: 'all', label: 'All projects' },
+          ]}
+        />
         <button type="button" className="secondary-button" onClick={refresh}>
           Refresh models
         </button>
