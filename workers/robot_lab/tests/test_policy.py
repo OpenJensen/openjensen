@@ -594,6 +594,83 @@ class PolicyTests(unittest.TestCase):
         self.assertFalse(self.lab.torque)
         self.assertIn("fell behind", self.lab.error)
 
+    def camera_at(self, rate):
+        """A camera that produces a new frame ``rate`` times a second."""
+        seen = []
+
+        state = {"frame": time.monotonic()}
+
+        def latest(index, max_age=0.15):
+            now = time.monotonic()
+            if now - state["frame"] >= 1 / rate:
+                state["frame"] = now
+            seen.append(state["frame"])
+            return {"jpeg": b"frame", "captured_monotonic": state["frame"]}
+
+        self.lab.camera = Camera()
+        self.lab.camera.latest_timed_jpeg = latest
+        return seen
+
+    def test_a_camera_faster_than_the_policy_passes_even_when_two_steps_share_a_frame(self):
+        """Two 30 FPS cameras failed the check for a 23 FPS policy: whenever one step ran
+        slow, the next followed at once, used the same recent frame and was counted stale."""
+        runner, _, _ = self.install()
+        runner.load({"policy_id": "pen"})
+        seen = self.camera_at(20)  # The policy runs at 13 FPS.
+        calls = []
+        answer = runner.runtime.request
+
+        def request(message, timeout=2):
+            if not message.get("reset"):
+                calls.append(1)
+                if len(calls) % 4 == 0:
+                    # Slow, but within what the loop catches up on: the next two steps
+                    # then start a few milliseconds apart and share one camera frame.
+                    time.sleep(0.14)
+            return answer(message)
+
+        runner.runtime.request = request
+        runner.preflight({"camera_index": 0})
+        check = runner.check
+        # The scenario really repeats frames between steps...
+        self.assertLess(len(set(seen[-check["samples"] :])), check["samples"] * 0.9)
+        # ...and every one of them was younger than one policy step.
+        self.assertEqual(check["fresh_frames"], check["samples"])
+        self.assertTrue(check["passed"], check)
+
+    def test_a_camera_slower_than_the_policy_fails_the_check(self):
+        runner, _, _ = self.install()
+        runner.load({"policy_id": "pen"})
+        self.camera_at(8)  # The policy runs at 13 FPS.
+        runner.preflight({"camera_index": 0})
+        check = runner.check
+        self.assertFalse(check["passed"])
+        self.assertLess(check["fresh_frames"], check["samples"] * 0.9)
+        self.assertEqual(check["camera_fresh_frames"], {FRONT: check["fresh_frames"]})
+        self.assertIn("cannot sustain", check["message"])
+
+    def test_a_camera_slower_than_the_policy_stops_a_run(self):
+        runner = self.prepare()
+        self.camera_at(8)
+        runner.start(self.run_payload())
+
+        def control_loop():
+            while self.lab.mode == "policy":
+                try:
+                    runner.apply(dict(self.lab.positions), time.monotonic())
+                except HardwareError as error:
+                    self.lab.stop(str(error))
+                    return
+                time.sleep(0.01)
+
+        threading.Thread(target=control_loop, daemon=True).start()
+        deadline = time.monotonic() + 5
+        while self.lab.mode != "idle" and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.assertEqual(self.lab.mode, "idle")
+        self.assertFalse(self.lab.torque)
+        self.assertIn("camera fell below the trained frame rate", self.lab.error)
+
     def test_preflight_measures_native_camera_path_without_arming(self):
         runner, _, _ = self.install()
         runner.load({"policy_id": "pen"})

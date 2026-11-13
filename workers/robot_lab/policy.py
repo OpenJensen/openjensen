@@ -606,6 +606,7 @@ class PolicyRunner:
                         time.sleep(0.02)
             self.runtime.request({"reset": True})
             samples, starts, stamps = [], [], {index: [] for index in cameras.values()}
+            ages = {index: [] for index in cameras.values()}
             count = max(16, 2 * fps)
             due = time.monotonic()
             late, lost = 0, 0.0
@@ -636,13 +637,28 @@ class PolicyRunner:
                 starts.append(started)
                 for index, stamp in captured.items():
                     stamps[index].append(stamp)
+                    ages[index].append(started - stamp)
                 due += 1 / fps
                 time.sleep(max(0, due - time.monotonic()))
             self.runtime.request({"reset": True})
             # The rate between slow steps; how many slow steps there may be is checked too.
             actual = (count - 1) / max(1e-6, starts[-1] - starts[0] - lost)
-            # Every camera must keep up; the slowest one decides.
-            unique = min(len(set(values)) for values in stamps.values())
+            # Every camera must keep up; the slowest one decides. A camera keeps up when
+            # the frame a step uses is younger than one policy step. Counting frames that
+            # differ from the previous step's would also fail a faster camera whenever
+            # two steps run close together, which any slow step causes.
+            fresh = {
+                key: sum(age <= 1 / fps for age in ages[index]) for key, index in cameras.items()
+            }
+            unique = min(fresh.values())
+            # The longest wait between two different frames of each camera, as seen here.
+            waits = {}
+            for key, index in cameras.items():
+                seen = sorted(set(stamps[index]))
+                waits[key] = round(
+                    max((later - earlier for earlier, later in zip(seen, seen[1:])), default=0)
+                    * 1000
+                )
             mean = sum(samples) / count
             longest = max(samples)
             steady = (
@@ -671,6 +687,8 @@ class PolicyRunner:
                 "mean_latency_ms": round(mean * 1000, 1),
                 "max_latency_ms": round(longest * 1000, 1),
                 "fresh_frames": unique,
+                "camera_fresh_frames": fresh,
+                "camera_longest_wait_ms": waits,
                 "samples": count,
                 "message": "Camera and local ACT inference meet the trained frame rate"
                 if passed
@@ -912,6 +930,7 @@ class PolicyRunner:
                         raise ValueError("Policy loop cannot maintain the trained frame rate")
                     due = time.monotonic()
                 positions = dict(self.lab.positions)
+                step_started = time.monotonic()
                 message, captured = self._observation(
                     cameras,
                     [positions.get(j) for j in JOINTS],
@@ -919,9 +938,10 @@ class PolicyRunner:
                     max(0.15, 2 / self.model["fps"]),
                 )
                 for index, stamp in captured.items():
+                    # As in the check: is this step's frame younger than one policy step?
                     recent = camera_stamps[index]
-                    recent.append(stamp)
-                    if len(recent) == recent.maxlen and len(set(recent)) < len(recent) * 0.9:
+                    recent.append(step_started - stamp <= 1 / self.model["fps"])
+                    if len(recent) == recent.maxlen and sum(recent) < len(recent) * 0.9:
                         raise ValueError("Policy camera fell below the trained frame rate")
                 if set(positions) != set(JOINTS) or time.monotonic() - self.last_health > 0.15:
                     raise ValueError("Fresh full-arm encoder observations are unavailable")
