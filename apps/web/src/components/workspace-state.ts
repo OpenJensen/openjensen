@@ -325,13 +325,31 @@ export function useWorkbenchState() {
           setSelectedModel({ projectId: job.project_id, id: artifact.id });
       }
     }
+    // Published to, or added from, Hugging Face: open the dataset or model itself.
+    const shared = job.id.startsWith('share:')
+      ? job.operation.endsWith('.publish')
+        ? job.inputs.source_id
+        : record(job.result)
+          ? (job.result.dataset_id ?? job.result.artifact_id)
+          : undefined
+      : undefined;
+    if (job.module === 'models' && typeof shared === 'string')
+      setSelectedModel({ projectId: job.project_id, id: shared });
     setRequestedWorkJob(job);
     setModuleJobView('workspace');
-    if (job.operation === 'dataset.import' || job.operation === 'dataset.convert') {
+    if (
+      job.operation === 'dataset.import' ||
+      job.operation === 'dataset.convert' ||
+      (job.module === 'datasets' && typeof shared === 'string')
+    ) {
       const version = workNavigationVersion.current;
       try {
         const entry = await datasetLibrary.get(
-          typeof job.inputs.dataset_id === 'string' ? job.inputs.dataset_id : job.source_id,
+          typeof shared === 'string'
+            ? shared
+            : typeof job.inputs.dataset_id === 'string'
+              ? job.inputs.dataset_id
+              : job.source_id,
         );
         if (version !== workNavigationVersion.current || entry.project_id !== job.project_id) return;
         if (entry.status === 'ready' || entry.status === 'converting') {

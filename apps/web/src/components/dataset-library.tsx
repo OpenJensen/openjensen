@@ -19,6 +19,7 @@ import {
 import { api, apiMediaUrl } from '@/lib/api';
 import { datasetPollingInterval, publishDatasetReceipt } from '@/lib/dataset-cache';
 import { Icon } from './icon';
+import { AddFromHuggingFace, PublishToHuggingFace } from './huggingface-share';
 import './dataset-library.css';
 
 export function DatasetLibrary({
@@ -89,6 +90,11 @@ export function DatasetLibrary({
           </button>
         </div>
       </div>
+      <AddFromHuggingFace
+        projectId={projectId}
+        kind="dataset"
+        onOpen={(id) => void datasetLibrary.get(id).then(onOpen, () => undefined)}
+      />
       {!!repairNotices.length && (
         <section role="alert" aria-label="Workspace dataset repair notice">
           <p>
@@ -803,6 +809,14 @@ export function DatasetLabeling({ entry }: { entry: LibraryDataset }) {
           </a>
         )}
       </div>
+      {current.status === 'ready' && (
+        <PublishToHuggingFace
+          projectId={entry.project_id}
+          kind="dataset"
+          id={entry.id}
+          blocked={dirty || save.isPending ? 'Save your labels before publishing.' : undefined}
+        />
+      )}
       {current.status === 'converting' && <p role="status">Preparing camera views…</p>}
       {current.error && (
         <p className="error-notice" role="alert">

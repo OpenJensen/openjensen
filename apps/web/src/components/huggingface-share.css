@@ -1,0 +1,124 @@
+.hf-share-closed {
+  display: flex;
+  justify-content: flex-end;
+  margin: 0 0 16px;
+}
+.hf-share.panel {
+  display: grid;
+  gap: 12px;
+  margin: 0 0 20px;
+}
+.hf-share-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.hf-share h3 {
+  margin: 0;
+  font-size: 16px;
+}
+.hf-share p {
+  margin: 0;
+  line-height: 1.5;
+}
+.hf-share-form {
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+}
+.hf-share-form label:not(.hf-share-public) {
+  display: grid;
+  gap: 6px;
+  width: min(100%, 460px);
+  font-size: 12px;
+  color: var(--muted);
+}
+.hf-share-form input:not([type='checkbox']) {
+  width: 100%;
+}
+.hf-share-destination,
+.hf-share-hint {
+  color: var(--muted);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.hf-share-privacy {
+  font-size: 14px;
+}
+.hf-share-public {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.hf-share-done {
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+}
+.hf-share-link {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+}
+.hf-share-link input {
+  flex: 1 1 280px;
+  min-width: 0;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 13px;
+}
+.hf-share-progress {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+}
+.hf-share-progress p {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+}
+.hf-add {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 20px;
+}
+.hf-add > label {
+  font-size: 12px;
+  color: var(--muted);
+}
+.hf-add-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.hf-add-row input {
+  flex: 1 1 320px;
+  min-width: 0;
+}
+.hf-add-done {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 16px;
+  margin: 0;
+}
+.hf-add .error-notice {
+  margin: 0;
+}
+@media (max-width: 720px) {
+  .hf-share-closed {
+    justify-content: stretch;
+  }
+  .hf-share-closed button,
+  .hf-add-row button {
+    width: 100%;
+  }
+  .hf-share-form input:not([type='checkbox']),
+  .hf-add-row input {
+    font-size: 16px;
+  }
+}

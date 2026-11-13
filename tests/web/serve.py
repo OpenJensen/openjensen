@@ -9,6 +9,7 @@ from tempfile import TemporaryDirectory
 
 import uvicorn
 import vla_platform.api as api_module
+import vla_platform.huggingface_transfer as huggingface_transfer
 from vla_platform.api import create_app
 from vla_platform.compute_settings import ComputeSettings, ComputeSettingsUpdate
 from vla_platform.environment import getenv
@@ -116,6 +117,18 @@ with TemporaryDirectory(prefix="jensen-browser-tests-") as data_dir:
         )
     elif getenv("JENSEN_BROWSER_EMPTY_RUNTIME") == "1":
         runtime_config.write_text('{"runtimes": [], "sources": []}', encoding="utf-8")
+    # "Hugging Face" is a folder in this workspace. Publishing and adding from a link
+    # run the real application against tests/hub_stand_in.py and never leave the machine.
+    # The account is a fixture login file; the developer's own login is out of reach.
+    huggingface_transfer.WORKER = Path(__file__).resolve().parents[1] / "hub_stand_in.py"
+    (workspace / "hugging-face").mkdir()
+    (workspace / "fixture-login").write_text("hf_BrowserFixtureLoginNotARealCredential")
+    os.environ.update(
+        FAKE_HUB=str(workspace / "hugging-face"),
+        FAKE_HUB_MACHINE_USER="browser-fixture",
+        JENSEN_HUGGINGFACE_PYTHON=sys.executable,
+        HF_TOKEN_PATH=str(workspace / "fixture-login"),
+    )
     if getenv("JENSEN_BROWSER_EMPTY_RUNTIME") != "1":
         # Only this disposable fixture opts into its synthetic local workers.
         # The application's default continues to require explicit local enablement.

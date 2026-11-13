@@ -217,7 +217,7 @@ class ShareJobs:
             status=status,
             stage=status,
             error=message if error else None,
-            message=None if error else value.get("message"),
+            message=None,
             result=result,
         )
         value["events"] = [
