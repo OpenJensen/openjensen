@@ -659,7 +659,7 @@ def test_invalid_guided_recording_settings_never_contact_hardware(tmp_path, chan
                 "operator_present": True,
                 "workspace_clear": True,
                 "camera_index": 0,
-                "duration_seconds": 121,
+                "duration_seconds": 601,
                 "expected_generation": 42,
             },
         ),
@@ -695,7 +695,7 @@ def test_policy_catalog_load_and_explicit_start_are_finite_proxy_routes(tmp_path
             "operator_present": True,
             "workspace_clear": True,
             "camera_index": 0,
-            "duration_seconds": 10,
+            "duration_seconds": 600,
             "expected_generation": 42,
         }
         assert client.post("/api/v1/robot-lab/policy/start", json=payload).status_code == 200

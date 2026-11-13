@@ -281,7 +281,7 @@ class PolicyTests(unittest.TestCase):
         for mutation in (
             {"operator_present": False},
             {"workspace_clear": False},
-            {"duration_seconds": 121},
+            {"duration_seconds": 601},
             {"expected_generation": True},
             {"expected_generation": self.lab.generation - 1},
         ):
@@ -291,6 +291,14 @@ class PolicyTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "files changed"):
             runner.start(self.run_payload())
         self.assertEqual(self.lab.mode, "manual")
+
+    def test_ten_minute_run_keeps_the_short_operator_watchdog(self):
+        runner = self.prepare()
+        with patch.object(runner, "_run"):
+            runner.start(self.run_payload() | {"duration_seconds": 600})
+            runner.thread.join(timeout=1)
+        self.assertEqual(runner.run_deadline - runner.started, 600)
+        self.assertEqual(runner.operator_deadline - runner.started, 2)
 
     def test_start_requires_recent_camera_and_full_arm_check(self):
         runner = self.prepare()

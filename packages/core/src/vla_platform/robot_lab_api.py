@@ -52,7 +52,7 @@ class PolicyStartRequest(BaseModel):
     cameras: PolicyCameras | None = None
     # The operator's choice to let this run pause while the policy plans its actions.
     allow_planning_pause: StrictBool = False
-    duration_seconds: StrictInt = Field(ge=1, le=120)
+    duration_seconds: StrictInt = Field(ge=1, le=600)
     expected_generation: StrictInt
 
 

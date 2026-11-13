@@ -32,6 +32,7 @@ from policy_contract import (
 UNITS = ["degrees"] * 5 + ["percent"]
 MAX_SPEED = 10.0
 MAX_ACCELERATION = 20.0
+MAX_RUN_SECONDS = 600
 # Model predictions may slightly overshoot an endpoint: degrees for arm joints,
 # percentage points for the gripper. Commanded motion keeps its original bounds.
 PREDICTION_TOLERANCE = 5.0
@@ -359,7 +360,7 @@ class PolicyRunner:
                     "max_acceleration": MAX_ACCELERATION,
                     "prediction_tolerance_degrees": PREDICTION_TOLERANCE,
                     "prediction_tolerance_gripper_percent": PREDICTION_TOLERANCE,
-                    "max_run_seconds": 120,
+                    "max_run_seconds": MAX_RUN_SECONDS,
                     "operator_heartbeat_seconds": 2,
                     "planning_pause_seconds": PLANNING_PAUSE_SECONDS,
                 },
@@ -745,12 +746,14 @@ class PolicyRunner:
         pause = payload.get("allow_planning_pause", False)
         if (
             type(duration) is not int
-            or not 1 <= duration <= 120
+            or not 1 <= duration <= MAX_RUN_SECONDS
             or type(camera) is not int
             or not 0 <= camera <= 63
             or type(pause) is not bool
         ):
-            raise ValueError("Run duration must be 1–120 seconds with an available camera")
+            raise ValueError(
+                f"Run duration must be 1–{MAX_RUN_SECONDS} seconds with an available camera"
+            )
         with self.lab.lock, self.lock, self.lab.lifecycle_lock:
             if self.phase != "ready" or not self.runtime or not self.model:
                 raise ValueError("Load and verify a policy first")
