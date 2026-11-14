@@ -58,6 +58,7 @@ print(json.dumps([
 
 
 def wait_for(path, process):
+    # The children rename a finished file into place, so existing means complete.
     deadline = time.monotonic() + 5
     while not path.exists():
         assert process.poll() is None, "Bootstrap exited before the worker started"
@@ -83,13 +84,15 @@ def test_timeout_and_interrupt_stop_owned_tree_only(tmp_path, bootstrap_source, 
     grandchild = (
         "import os,signal,time; from pathlib import Path; "
         "signal.signal(signal.SIGTERM, signal.SIG_IGN); "
-        "Path('grandchild.pid').write_text(str(os.getpid())); time.sleep(60)"
+        "Path('grandchild.tmp').write_text(str(os.getpid())); "
+        "os.replace('grandchild.tmp', 'grandchild.pid'); time.sleep(60)"
     )
     worker = (
         "import os,signal,subprocess,sys,time; from pathlib import Path; "
         "signal.signal(signal.SIGTERM, signal.SIG_IGN); "
         f"subprocess.Popen([sys.executable,'-c',{grandchild!r}]); "
-        "Path('worker.pid').write_text(str(os.getpid())); time.sleep(60)"
+        "Path('worker.tmp').write_text(str(os.getpid())); "
+        "os.replace('worker.tmp', 'worker.pid'); time.sleep(60)"
     )
     if mode.startswith("leader_"):
         worker = worker.rsplit("time.sleep(60)", 1)[0] + (
