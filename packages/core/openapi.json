@@ -1860,6 +1860,9 @@
             "title": "Expected Generation",
             "type": "integer"
           },
+          "experiment": {
+            "$ref": "#/components/schemas/Experiment"
+          },
           "fps": {
             "default": 10,
             "maximum": 20.0,
@@ -3275,6 +3278,73 @@
           "speed_limit_clipped"
         ],
         "title": "ExecutionEvidence",
+        "type": "object"
+      },
+      "Experiment": {
+        "additionalProperties": false,
+        "properties": {
+          "attempt": {
+            "default": 1,
+            "minimum": 1.0,
+            "title": "Attempt",
+            "type": "integer"
+          },
+          "configuration_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Configuration Id"
+          },
+          "mock_timing_fixture": {
+            "default": false,
+            "title": "Mock Timing Fixture",
+            "type": "boolean"
+          },
+          "parent_run_id": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9a-f]{32}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Run Id"
+          },
+          "subtask": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subtask"
+          },
+          "success_criterion": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Success Criterion"
+          }
+        },
+        "title": "Experiment",
         "type": "object"
       },
       "FetchRequest": {
@@ -14701,6 +14771,55 @@
           }
         },
         "summary": "Image",
+        "tags": [
+          "Agent collection"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/robot-lab/collection-runs/{ident}/reviews": {
+      "get": {
+        "operationId": "reviews_api_v1_projects__project_id__robot_lab_collection_runs__ident__reviews_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "ident",
+            "required": true,
+            "schema": {
+              "title": "Ident",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reviews",
         "tags": [
           "Agent collection"
         ]

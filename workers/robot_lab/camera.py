@@ -28,6 +28,8 @@ class CameraPool:
         self.last_frames = {}
         self.frame_lock = threading.RLock()
         self.frame_times = {}
+        self.frame_sequences = {}
+        self.collection_sink = None
         self.readers = {}
         self.preview_readers = set()
         self.reader_errors = {}
@@ -177,6 +179,11 @@ class CameraPool:
             with self.frame_lock:
                 self.last_frames[index] = frame
                 self.frame_times[index] = time.monotonic()
+                self.frame_sequences[index] = self.frame_sequences.get(index, 0) + 1
+                if self.collection_sink:
+                    self.collection_sink(
+                        index, self.frame_sequences[index], self.frame_times[index], frame
+                    )
                 self.capture_times.setdefault(index, deque(maxlen=120)).append(
                     self.frame_times[index]
                 )
@@ -246,6 +253,15 @@ class CameraPool:
         with self.frame_lock:
             frame = self.read_latest(index, max_age)
             return frame, self.frame_times[index]
+
+    def set_collection_sink(self, sink):
+        with self.frame_lock:
+            self.collection_sink = sink
+
+    def collection_frame(self, index):
+        with self.frame_lock:
+            frame, stamp = self.read_latest_timed(index)
+            return frame, stamp, self.frame_sequences[index]
 
     def jpeg(self, index=0, keep_indices=None):
         if type(index) is not int or not 0 <= index <= MAX_CAMERA_INDEX:
