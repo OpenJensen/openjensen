@@ -234,7 +234,6 @@ export function ApplicationUpdates() {
             className={value.companion_update.state === 'needs_update' ? 'error-notice' : undefined}
             role={value.companion_update.state === 'needs_update' ? 'alert' : 'status'}
           >
-            <strong>Robot control service: </strong>
             {value.companion_update.message}
           </p>
         )}

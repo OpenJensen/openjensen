@@ -89,6 +89,8 @@ def service(tmp_path, monkeypatch):
             "session": {"mode": "idle", "torque_enabled": False},
         },
     )
+    # This service predates describing its own code, and no test may reach a real one.
+    monkeypatch.setattr(updates, "reported_files", lambda pairing: None)
     return locals()
 
 
@@ -271,6 +273,155 @@ def test_unmanaged_application_reports_warning_without_source_change(service):
     value = updates.reconcile(service["desired"], service["pairing_path"], allow_update=False)
     assert value["state"] == "needs_update" and value["managed"]
     assert controls(service) == []
+
+
+def reports(service, monkeypatch, files):
+    """The paired service is not one this application may replace; it only answers for itself."""
+    monkeypatch.setattr(updates.sys, "platform", "darwin")
+    monkeypatch.setattr(updates, "reported_files", lambda pairing: files)
+
+
+def test_a_service_on_another_platform_running_the_same_code_is_current(service, monkeypatch):
+    reports(service, monkeypatch, updates.source_files(service["desired"]))
+    value = updates.reconcile(service["desired"], service["pairing_path"], allow_update=True)
+    assert value == {
+        "state": "current",
+        "message": "Robot control service matches this application.",
+        "managed": False,
+    }
+    # Nothing was inspected through systemd and nothing was restarted.
+    assert service["commands"] == []
+
+
+def test_an_installed_service_with_fewer_files_than_the_application_is_still_current(
+    service, monkeypatch
+):
+    # The installer ships the modules the service loads; the application's folder also
+    # holds helpers of its own and the pinned requirements.
+    (service["desired"] / "collection_mock.py").write_text("# used by the application only\n")
+    files = updates.source_files(service["desired"])
+    del files["collection_mock.py"], files["requirements-hardware.txt"]
+    reports(service, monkeypatch, files)
+    value = updates.reconcile(service["desired"], service["pairing_path"])
+    assert value["state"] == "current"
+
+
+def test_a_service_running_other_code_says_what_to_do(service, monkeypatch):
+    reports(service, monkeypatch, updates.source_files(service["source"]))
+    value = updates.reconcile(service["desired"], service["pairing_path"], allow_update=True)
+    assert value["state"] == "needs_update" and not value["managed"]
+    assert "different code" in value["message"]
+    assert "install_robot_lab.py" in value["message"]
+    assert (service["source"] / "server.py").read_text() == "# old\n"
+    assert controls(service) == []
+
+
+def test_a_service_too_old_to_describe_itself_still_needs_an_update(service, monkeypatch):
+    reports(service, monkeypatch, None)
+    value = updates.reconcile(service["desired"], service["pairing_path"], allow_update=True)
+    assert value == updates.result("needs_update", updates.HELP)
+
+
+def test_a_service_that_cannot_be_reached_is_not_called_out_of_date(service, monkeypatch):
+    monkeypatch.setattr(updates.sys, "platform", "darwin")
+
+    def refused(pairing):
+        raise ConnectionRefusedError("robot service is not running")
+
+    monkeypatch.setattr(updates, "reported_files", refused)
+    assert updates.reconcile(service["desired"], service["pairing_path"]) is None
+
+
+def test_a_service_answers_over_its_own_address_and_an_older_one_has_no_answer(monkeypatch):
+    import io
+    from urllib.error import HTTPError
+
+    asked = []
+
+    class Reply(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+    def answer(request, timeout):
+        asked.append((request.full_url, request.get_header("Authorization")))
+        return Reply(json.dumps({"files": {"server.py": "a" * 64}}).encode())
+
+    pairing = {"url": "http://127.0.0.1:18101", "token": "secret"}
+    monkeypatch.setattr(updates, "urlopen", answer)
+    assert updates.reported_files(pairing) == {"server.py": "a" * 64}
+    assert asked == [("http://127.0.0.1:18101/v1/source", "Bearer secret")]
+
+    def unknown(request, timeout):
+        raise HTTPError(request.full_url, 404, "Not found", {}, None)
+
+    monkeypatch.setattr(updates, "urlopen", unknown)
+    assert updates.reported_files(pairing) is None
+
+
+def test_the_fingerprints_follow_code_and_ignore_notes_tests_and_caches(tmp_path):
+    tree = tmp_path / "service"
+    (tree / "_vendor").mkdir(parents=True)
+    (tree / "server.py").write_text("print('one')\n")
+    (tree / "_vendor/tool.py").write_text("VALUE = 1\n")
+    (tree / "requirements-hardware.txt").write_text("pyserial==3.5\n")
+    first = updates.source_files(tree)
+    assert list(first) == ["_vendor/tool.py", "requirements-hardware.txt", "server.py"]
+    (tree / "README.md").write_text("notes")
+    (tree / "server.py.before-update").write_text("an operator's saved copy")
+    (tree / "tests").mkdir()
+    (tree / "tests/test_server.py").write_text("assert True\n")
+    (tree / "__pycache__").mkdir()
+    (tree / "__pycache__/server.cpython-314.pyc").write_bytes(b"cache")
+    assert updates.source_files(tree) == first
+    (tree / "_vendor/tool.py").write_text("VALUE = 2\n")
+    changed = updates.source_files(tree)
+    assert changed["_vendor/tool.py"] != first["_vendor/tool.py"]
+    assert changed["server.py"] == first["server.py"]
+
+
+def test_the_service_and_the_application_compute_the_same_fingerprints():
+    import importlib.util
+
+    source = updates.Path(__file__).resolve().parents[1] / "workers/robot_lab"
+    spec = importlib.util.spec_from_file_location("source_identity", source / "source_identity.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    files = module.source_files(source)
+    assert files == updates.source_files(source)
+    assert {"server.py", "hardware.py", "source_identity.py"} <= files.keys()
+
+
+def test_checking_for_updates_asks_a_hand_installed_service_again(tmp_path, monkeypatch):
+    """Reinstalling the robot service must clear the warning without restarting the application."""
+    pairing = private(tmp_path / "pairing.json", "{}")
+    answers = iter(
+        [
+            updates.result("needs_update", updates.MISMATCH),
+            updates.result("current", "Robot control service matches this application."),
+        ]
+    )
+
+    async def check():
+        application = ApplicationUpdates(data_dir=tmp_path)
+        monkeypatch.setattr(
+            application, "configuration", lambda: (_ for _ in ()).throw(UpdateError("not managed"))
+        )
+        monkeypatch.setattr(updates, "reconcile", lambda *args, **kwargs: next(answers))
+        monkeypatch.setattr(updates, "observe", lambda *args, **kwargs: next(answers))
+        await application.reconcile_companion(pairing)
+        assert application.status().companion_update.state == "needs_update"
+        await application.observe_companion()
+        assert application.status().companion_update.state == "current"
+        # A service the application manages itself was settled at startup and is left alone.
+        application.companion_update.managed = True
+        await application.observe_companion()
+        assert application.status().companion_update.state == "current"
+        await application.close()
+
+    asyncio.run(check())
 
 
 @pytest.mark.parametrize("assembled,verification", [("stopped", "stopped"), ("complete", "done")])

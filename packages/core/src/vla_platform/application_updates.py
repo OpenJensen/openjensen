@@ -129,6 +129,7 @@ class ApplicationUpdates:
         self.checked = 0.0
         self.value = {"state": "unchecked", "message": "Updates have not been checked."}
         self.companion_update = None
+        self.pairing_path = None
 
     async def close(self):
         await self.client.aclose()
@@ -139,6 +140,7 @@ class ApplicationUpdates:
 
         if not pairing_path.exists():
             return
+        self.pairing_path = pairing_path
         try:
             self.configuration()
             allowed = any(
@@ -158,6 +160,23 @@ class ApplicationUpdates:
             # Core must remain available to explain an unsupported or failed
             # robot-service upgrade. The helper owns source rollback.
             value = robot_companion_updates.result("needs_update", robot_companion_updates.HELP)
+        self.companion_update = CompanionUpdateStatus.model_validate(value) if value else None
+
+    async def observe_companion(self):
+        """A service installed by hand can be replaced while the application runs: ask it again.
+
+        A service this application manages itself is settled at startup and left alone.
+        """
+        from vla_platform import robot_companion_updates
+
+        if self.pairing_path is None or (self.companion_update and self.companion_update.managed):
+            return
+        try:
+            value = await asyncio.to_thread(
+                robot_companion_updates.observe, ROOT / "workers/robot_lab", self.pairing_path
+            )
+        except Exception:
+            return
         self.companion_update = CompanionUpdateStatus.model_validate(value) if value else None
 
     def configuration(self):
@@ -255,6 +274,8 @@ class ApplicationUpdates:
             if not force and self.checked and time.monotonic() - self.checked < 600:
                 return self.status()
             from datetime import UTC, datetime
+
+            await self.observe_companion()
 
             checked_at = datetime.now(UTC).isoformat()
             try:
