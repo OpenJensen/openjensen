@@ -309,13 +309,12 @@ def code_files(source):
     return files
 
 
-def source_identity(source):
-    """The fingerprint the service computes over its own code; see its source_identity.py."""
+def source_files(source):
+    """The fingerprints the service reports for its own code; see its source_identity.py."""
     import hashlib
 
     root = Path(source)
-    digest = hashlib.sha256()
-    names = []
+    files = {}
     for path in root.rglob("*"):
         relative = path.relative_to(root)
         if (
@@ -326,28 +325,51 @@ def source_identity(source):
             or (path.suffix != ".py" and relative.as_posix() != "requirements-hardware.txt")
         ):
             continue
-        names.append(relative.as_posix())
-    for name in sorted(names):
-        digest.update(name.encode() + b"\0")
-        digest.update(hashlib.sha256((root / name).read_bytes()).digest())
-    return digest.hexdigest()
+        files[relative.as_posix()] = hashlib.sha256(path.read_bytes()).hexdigest()
+    return dict(sorted(files.items()))
+
+
+def reported_files(pairing):
+    """What the paired service says it runs, or None when it is too old to say."""
+    from urllib.error import HTTPError
+
+    request = Request(
+        pairing["url"] + "/v1/source", headers={"Authorization": "Bearer " + pairing["token"]}
+    )
+    try:
+        with urlopen(request, timeout=remaining(3)) as response:
+            files = json.loads(response.read(1024**2)).get("files")
+    except HTTPError as error:
+        if error.code in {400, 404}:
+            return None
+        raise
+    if (
+        not isinstance(files, dict)
+        or "server.py" not in files
+        or not all(isinstance(key, str) and isinstance(value, str) for key, value in files.items())
+    ):
+        return None
+    return files
 
 
 def compare(source, pairing):
     """Whether a service that is not replaced from here runs this application's code.
 
     The service answers for itself, so this works across platforms and through a
-    tunnel. A service that cannot be reached says nothing here: Robot Lab already
-    reports that it is unavailable.
+    tunnel. Only files both sides have are compared: an installer ships fewer files
+    than a full copy, and a file that matters is always imported by one that differs.
+    A service that cannot be reached says nothing here: Robot Lab already reports
+    that it is unavailable.
     """
     try:
-        reported = status(pairing).get("source_sha256")
+        reported = reported_files(pairing)
     except OSError, ValueError, KeyError, TypeError, AttributeError, RuntimeError:
         return None
-    if not isinstance(reported, str) or not reported:
+    if reported is None:
         # A service from before it could describe itself.
         return result("needs_update", HELP)
-    if hmac.compare_digest(reported, source_identity(source)):
+    own = source_files(source)
+    if all(own.get(name, digest) == digest for name, digest in reported.items()):
         return result("current", "Robot control service matches this application.")
     return result("needs_update", MISMATCH)
 

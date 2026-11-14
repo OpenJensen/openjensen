@@ -142,8 +142,6 @@ export type RobotStatus = {
   label?: string;
   message?: string;
   version?: string;
-  /** Fingerprint of the service's own code; absent on services from before they reported it. */
-  source_sha256?: string;
   platform?: string;
   dependencies?: Record<string, { installed: boolean; version: string | null }>;
   capabilities?: {

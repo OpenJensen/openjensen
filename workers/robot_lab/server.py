@@ -66,7 +66,7 @@ from policy import PolicyRunner
 from policy_install import install_archive
 from recording import MAX_RECORDING_FPS, CaptureProbe, CaptureRate, Collection
 from rest_position import RestPositions
-from source_identity import source_identity
+from source_identity import source_files
 from verification import (
     MappingChecks,
     MappingVerification,
@@ -76,7 +76,7 @@ from verification import (
 )
 
 # The code this process started from; a later edit on disk does not change what runs.
-SOURCE_SHA256 = source_identity()
+SOURCE_FILES = source_files()
 
 
 class RequestError(ValueError):
@@ -836,8 +836,6 @@ class RobotLab:
         return {
             "ok": True,
             "version": "1",
-            # Lets an application tell whether this service runs the code it ships.
-            "source_sha256": SOURCE_SHA256,
             "platform": platform.system(),
             "backend": "feetech-sdk",
             "dataset_format": "lerobot-v3",
@@ -2864,6 +2862,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, lab.diagnostics.snapshot(full=True))
             if path == "/v1/status":
                 return self._send(200, lab.status())
+            if path == "/v1/source":
+                # Lets an application tell whether this service runs the code it ships.
+                return self._send(200, {"files": SOURCE_FILES})
             if path == "/v1/calibration/profiles":
                 if (
                     not {"robot_id", "role"} <= set(query)

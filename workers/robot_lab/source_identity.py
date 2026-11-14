@@ -1,19 +1,19 @@
-"""One fingerprint of this service's own code.
+"""Which code this service runs, file by file.
 
 An application that cannot inspect or replace this service (another platform, a
 tunnel, an installation made by hand) can still learn whether it runs the same code
-as the application's own copy. The application computes the same value over its
-copy; keep the two in step.
+as the application's own copy: it compares these fingerprints with its files. The
+application computes them the same way; keep the two in step.
 """
 
 import hashlib
 from pathlib import Path
 
 
-def source_identity(root=None):
+def source_files(root=None):
+    """The SHA-256 of every code file, by its path below the service's folder."""
     root = Path(root) if root is not None else Path(__file__).resolve().parent
-    digest = hashlib.sha256()
-    names = []
+    files = {}
     for path in root.rglob("*"):
         relative = path.relative_to(root)
         if (
@@ -25,8 +25,5 @@ def source_identity(root=None):
             or (path.suffix != ".py" and relative.as_posix() != "requirements-hardware.txt")
         ):
             continue
-        names.append(relative.as_posix())
-    for name in sorted(names):
-        digest.update(name.encode() + b"\0")
-        digest.update(hashlib.sha256((root / name).read_bytes()).digest())
-    return digest.hexdigest()
+        files[relative.as_posix()] = hashlib.sha256(path.read_bytes()).hexdigest()
+    return dict(sorted(files.items()))
