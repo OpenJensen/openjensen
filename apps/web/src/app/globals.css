@@ -2170,22 +2170,47 @@ input::placeholder {
 .cloud-heading button {
   flex-shrink: 0;
 }
-.cloud-run-picker {
-  display: grid;
-  gap: 8px;
-  margin-top: 24px;
-  max-width: 100%;
-  font-size: 13px;
+.cloud-run-cards {
+  margin-top: 20px;
 }
-.cloud-run-picker select {
-  min-width: 0;
-  width: 100%;
-  min-height: 44px;
-  padding: 8px;
+.cloud-events {
+  max-height: 32rem;
+  overflow: auto;
   border: 1px solid var(--line);
-  background: var(--surface);
-  color: var(--ink);
   border-radius: 8px;
+  background: var(--surface);
+}
+.cloud-events ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.cloud-events li {
+  display: grid;
+  grid-template-columns: 9ch minmax(0, 1fr);
+  gap: 2px 14px;
+  padding: 10px 14px;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.cloud-events li + li {
+  border-top: 1px solid var(--line);
+}
+.cloud-events time {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.cloud-events small {
+  grid-column: 2;
+  color: var(--muted);
+  font-size: 11px;
+}
+.cloud-events p {
+  margin: 0;
+  padding: 14px;
+  color: var(--muted);
+  font-size: 13px;
 }
 .cloud-freshness {
   display: grid;

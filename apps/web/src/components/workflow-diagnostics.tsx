@@ -4,9 +4,9 @@ import { jobStatusWord } from '@/lib/job-status';
 import { JobStatus } from '@/components/ui/job-status';
 import { isActive } from '@/lib/api';
 import { conciseRunError, runLabel, runSummary } from '@/lib/run-summary';
-import type { Preferences } from '@/lib/workflow-preferences';
 import type { SettingsTab } from './workflow-shared';
 import type { WorkflowState } from './workflow-state';
+import { Segmented } from './ui/choice';
 
 export function WorkflowDiagnostics({
   workflow,
@@ -67,19 +67,19 @@ export function WorkflowDiagnostics({
             ))}
           </select>
         </label>
-        <label>
-          Diagnostic mode
-          <select
+        <div className="choice-field">
+          <span>Diagnostic mode</span>
+          <Segmented
+            label="Diagnostic mode"
             value={preferences.mode}
             disabled={!ready || preferences.suite === 'libero_spatial'}
-            onChange={(event) => update('mode', event.target.value as Preferences['mode'])}
-          >
-            <option value="engine">Engine checks</option>
-            <option value="libero" disabled={!runtime?.simulation}>
-              LIBERO task evaluation
-            </option>
-          </select>
-        </label>
+            onChange={(value) => update('mode', value)}
+            options={[
+              { value: 'engine', label: 'Engine checks' },
+              { value: 'libero', label: 'LIBERO task evaluation', disabled: !runtime?.simulation },
+            ]}
+          />
+        </div>
         <details className="workflow-advanced">
           <summary>Protocol details</summary>
           <p className="muted">

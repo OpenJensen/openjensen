@@ -324,3 +324,16 @@ time,
 .choice-card[aria-checked='true'] .choice-card-badge {
   background: var(--surface);
 }
+
+/* A choice that stands where a labelled field would: its name above, its options below. */
+.choice-field {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 500;
+}
+.choice-field > .segmented {
+  justify-self: start;
+  font-weight: 400;
+}

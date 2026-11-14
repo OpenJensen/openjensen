@@ -72,8 +72,13 @@ async function openLocalCompute(page: Page) {
   await page.getByRole('link', { name: 'Settings', exact: true }).click();
   await page.getByRole('button', { name: 'Compute targets', exact: true }).click();
   const setup = page.getByText('Local worker setup', { exact: true });
-  if (!(await page.getByRole('region', { name: 'Local runs', exact: true }).isVisible())) await setup.click();
-  await expect(page.getByRole('region', { name: 'Local runs', exact: true })).toBeVisible();
+  const local = page.getByRole('region', { name: 'Local runs', exact: true });
+  // The page can open this section by itself a moment after it appears; clicking at
+  // that moment would close it again. Give it that moment before opening it by hand.
+  await expect(local)
+    .toBeVisible({ timeout: 1500 })
+    .catch(() => setup.click());
+  await expect(local).toBeVisible();
 }
 
 async function mockWorkspace(
@@ -794,7 +799,7 @@ async function openTrainingPreferences(page: Page) {
   const panel = page.locator('.cloud-gpu-settings');
   await expect(panel.locator(':scope > summary')).toContainText('Training preferences');
   await panel.locator(':scope > summary').click();
-  await expect(panel.getByRole('combobox', { name: 'Default GPU', exact: true })).toBeVisible();
+  await expect(panel.getByRole('radiogroup', { name: 'Default GPU', exact: true })).toBeVisible();
   return panel;
 }
 
@@ -805,14 +810,13 @@ for (const gpu of ['L4', 'T4', 'A100']) {
     const preferences = page.locator('.cloud-gpu-settings');
     await expect(preferences).not.toHaveAttribute('open', '');
     const panel = await openTrainingPreferences(page);
-    const picker = panel.getByRole('combobox', { name: 'Default GPU', exact: true });
-    await picker.click();
-    const choices = panel.getByRole('listbox', { name: 'Default GPU', exact: true });
-    await expect(choices.getByRole('option')).toHaveCount(3);
+    const picker = panel.getByRole('radiogroup', { name: 'Default GPU', exact: true });
+    const choices = picker;
+    await expect(choices.getByRole('radio')).toHaveCount(3);
     for (const option of ['L4', 'T4', 'A100'])
-      await expect(choices.getByRole('option', { name: option, exact: true })).toBeVisible();
-    await choices.getByRole('option', { name: gpu, exact: true }).click();
-    await expect(picker).toHaveAttribute('value', gpu);
+      await expect(choices.getByRole('radio', { name: option, exact: true })).toBeVisible();
+    await choices.getByRole('radio', { name: gpu, exact: true }).click();
+    await expect(picker).toHaveAttribute('data-value', gpu);
     await panel.locator('.cloud-gpu-advanced > summary').click();
     await expect(panel.getByRole('checkbox', { name: 'Allow cloud training', exact: true })).toBeChecked();
     await panel.getByRole('spinbutton', { name: 'Disk size (GB)', exact: true }).fill('300');
@@ -827,7 +831,7 @@ for (const gpu of ['L4', 'T4', 'A100']) {
     await openCompute(page);
     await expect(preferences).not.toHaveAttribute('open', '');
     await openTrainingPreferences(page);
-    await expect(picker).toHaveAttribute('value', gpu);
+    await expect(picker).toHaveAttribute('data-value', gpu);
     await panel.locator('.cloud-gpu-advanced > summary').click();
     await expect(panel.getByRole('checkbox', { name: 'Allow cloud training', exact: true })).toBeChecked();
     await expect(panel.getByRole('spinbutton', { name: 'Disk size (GB)', exact: true })).toHaveValue('300');
@@ -891,9 +895,9 @@ test('training preferences GPU popover fits the screen without infrastructure de
     connected('gcp', { project_id: 'robotics-training-123', region: 'us-central1' }),
   ]);
   const panel = await openTrainingPreferences(page);
-  await panel.getByRole('combobox', { name: 'Default GPU', exact: true }).click();
-  await expect(panel.getByRole('listbox', { name: 'Default GPU', exact: true })).toBeVisible();
-  await expect(panel.getByRole('option', { name: 'T4', exact: true })).toBeVisible();
+  await panel.getByRole('radiogroup', { name: 'Default GPU', exact: true }).click();
+  await expect(panel.getByRole('radiogroup', { name: 'Default GPU', exact: true })).toBeVisible();
+  await expect(panel.getByRole('radio', { name: 'T4', exact: true })).toBeVisible();
   await noOverflow(page);
   const screenshot = testInfo.outputPath('cloud-gpu-preferences.png');
   await page.screenshot({ path: screenshot, fullPage: true });

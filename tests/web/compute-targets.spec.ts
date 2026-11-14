@@ -123,7 +123,7 @@ test('Slurm settings retain resource limits and connection references', async ({
   await page.getByRole('button', { name: 'Add compute target', exact: true }).click();
   const form = page.getByRole('form', { name: 'Configure compute target', exact: true });
   await form.getByRole('textbox', { name: 'Target name', exact: true }).fill('Research cluster');
-  await form.getByRole('combobox', { name: 'Infrastructure', exact: true }).selectOption('slurm');
+  await form.getByRole('radiogroup', { name: 'Infrastructure', exact: true }).locator('[data-value="slurm"]').click();
   await form.getByRole('combobox', { name: 'Worker runtime', exact: true }).selectOption('worker');
   await form.getByRole('combobox', { name: 'Connection', exact: true }).selectOption('team-compute');
   await form.getByRole('textbox', { name: 'Registered cluster', exact: true }).fill('research');
@@ -132,7 +132,7 @@ test('Slurm settings retain resource limits and connection references', async ({
   await form.getByRole('textbox', { name: 'QoS (optional)', exact: true }).fill('normal');
   await form.getByRole('spinbutton', { name: 'CPUs', exact: true }).fill('8');
   await form.getByRole('spinbutton', { name: 'Memory (GiB)', exact: true }).fill('32');
-  await form.getByRole('combobox', { name: 'GPU count', exact: true }).selectOption('1');
+  await form.getByRole('radiogroup', { name: 'GPU count', exact: true }).locator('[data-value="1"]').click();
   await form.getByRole('textbox', { name: 'Accelerator type', exact: true }).fill('L4');
   await form.getByRole('spinbutton', { name: 'Concurrent jobs', exact: true }).fill('2');
   await form.getByRole('checkbox', { name: 'Allow jobs on this target', exact: true }).check();
