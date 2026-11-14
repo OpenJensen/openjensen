@@ -245,9 +245,45 @@ def prepare_release(config, target, operation):
     return release
 
 
+def clones(directory):
+    """Whether copies made inside this directory share their data until one side changes.
+
+    Such a copy (APFS, Btrfs, XFS with reflinks) is complete and independent, yet takes
+    no space of its own until it is written to. The answer comes from making one: a
+    small file is cloned beside the workspace and removed again.
+    """
+    probe = Path(directory) / (".openjensen-clone-probe-" + str(os.getpid()))
+    copy = probe.with_name(probe.name + "-copy")
+    try:
+        probe.write_bytes(b"openjensen")
+        if sys.platform == "darwin":
+            import ctypes
+
+            library = ctypes.CDLL(None, use_errno=True)
+            return library.clonefile(os.fsencode(probe), os.fsencode(copy), 0) == 0
+        if sys.platform.startswith("linux"):
+            import fcntl
+
+            with probe.open("rb") as origin, copy.open("wb") as target:
+                fcntl.ioctl(target.fileno(), 0x40049409, origin.fileno())  # FICLONE
+            return True
+        return False
+    except OSError, AttributeError, ValueError:
+        return False
+    finally:
+        for path in (copy, probe):
+            try:
+                path.unlink()
+            except OSError:
+                pass
+
+
 def copy_workspace(source, destination):
+    # Both commands clone where the filesystem can and copy where it cannot.
     if sys.platform.startswith("linux"):
         run(["cp", "-a", "--reflink=auto", str(source), str(destination)])
+    elif sys.platform == "darwin":
+        run(["cp", "-a", "-c", str(source), str(destination)])
     else:
         shutil.copytree(source, destination, symlinks=True)
 
@@ -339,6 +375,49 @@ def project_ids(config):
     return {value["id"] for value in values}
 
 
+def prune_backups(config, keep):
+    """Remove the copies kept by earlier updates that completed; the newest stays.
+
+    Every update keeps the workspace as it was. Without this they pile up, one or two
+    workspaces at a time. Only folders this updater named and marked as completed are
+    removed: one left by a failed or interrupted update, or by an older release, is
+    never touched. A failure here never fails the update.
+    """
+    root = Path(config["root"])
+    records = root / "private/application-updates"
+    if config.get("kind") == "native":
+        parent = Path(config.get("workspace", root / "data")).parent
+        pattern = r"\.openjensen-update-([0-9a-f]{32})"
+    else:
+        parent, pattern = records, r"([0-9a-f]{32})"
+    try:
+        candidates = sorted(parent.iterdir())
+    except OSError:
+        return
+    for path in candidates:
+        match = re.fullmatch(pattern, path.name)
+        try:
+            if (
+                not match
+                or path == keep
+                or path.is_symlink()
+                or not path.is_dir()
+                or path.stat().st_uid != os.getuid()
+                or not re.fullmatch(
+                    r"[0-9a-f]{40}",
+                    json.loads((path / "completed.json").read_text())["target_commit"],
+                )
+            ):
+                continue
+            shutil.rmtree(path)
+            record = records / match.group(1)
+            if record != path and (record / "workspace-backup.json").is_file():
+                shutil.rmtree(record)
+            print("Removed the copies kept by update " + match.group(1), flush=True)
+        except OSError, ValueError, KeyError, TypeError:
+            continue
+
+
 def update(config, target, installed, operation):
     import fcntl
 
@@ -379,7 +458,13 @@ def update(config, target, installed, operation):
                 p.stat().st_size for p in workspace.rglob("*") if p.is_file() and not p.is_symlink()
             )
             build_bytes = 4 * 1024**3
-            backup_bytes = data_bytes * 2
+            # The backup and the candidate are full copies, unless this filesystem makes
+            # copies that share their data: those need no room until they are changed.
+            home = private.parent
+            while not home.exists():
+                home = home.parent
+            shared = home.stat().st_dev == workspace.stat().st_dev and clones(home)
+            backup_bytes = 0 if shared else data_bytes * 2
             same_disk = root.stat().st_dev == workspace.stat().st_dev
             if shutil.disk_usage(root).free < 10 * 1024**3 + build_bytes + (
                 backup_bytes if same_disk else 0
@@ -424,6 +509,8 @@ def update(config, target, installed, operation):
             if project_ids(config) != preserved_projects:
                 raise RuntimeError("Workspace project verification failed.")
             phase("complete", "Update installed. Reconnecting to the new version…")
+            write_state(private / "completed.json", {"target_commit": target})
+            prune_backups(config, private)
         except Exception:
             import traceback
 

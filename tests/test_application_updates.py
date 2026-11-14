@@ -301,6 +301,8 @@ def test_workspace_activation_and_full_rollback(deployment, monkeypatch, failure
         runner.update(config, NEW, OLD, ident)
     backup = root / "private/application-updates" / ident / "backup"
     assert (backup / "workspace.sqlite3").read_bytes() == b"old schema fixture"
+    # Only an update that completed is marked; later updates may remove its copies.
+    assert (backup.parent / "completed.json").exists() is (failure is None)
     assert (backup / ".saved-config").read_bytes() == b"private fixture configuration"
     assert (root / "data/.saved-config").read_bytes() == b"private fixture configuration"
     assert (root / "data/workspace.sqlite3").read_bytes() == (
@@ -316,6 +318,157 @@ def test_workspace_activation_and_full_rollback(deployment, monkeypatch, failure
         else "complete"
     )
     assert events[-1] == "start"
+
+
+GIB = 1024**3
+
+
+def sized_workspace(root, monkeypatch, *, free, shared):
+    """A 30 GiB workspace (one sparse file) on a disk with ``free`` GiB left.
+
+    The update is stopped right after its disk check, so nothing is copied.
+    """
+    with (root / "data/recordings.bin").open("wb") as stream:
+        stream.truncate(30 * GIB)
+    monkeypatch.setattr(runner.shutil, "disk_usage", lambda *_: SimpleNamespace(free=free * GIB))
+    monkeypatch.setattr(runner, "clones", lambda directory: shared)
+    reached = []
+
+    def checked(*_):
+        reached.append("disk check passed")
+        raise RuntimeError("stop here")
+
+    monkeypatch.setattr(runner, "verify_target", checked)
+    return reached
+
+
+def test_copies_that_share_their_data_need_no_room_of_their_own(deployment, monkeypatch):
+    root, config, _ = deployment
+    # 14 GiB is the application build plus headroom; the 60 GiB two full copies would
+    # take is not asked for when a copy costs nothing until it is changed.
+    reached = sized_workspace(root, monkeypatch, free=15, shared=True)
+    with pytest.raises(RuntimeError, match="stop here"):
+        runner.update(config, NEW, OLD, "a" * 32)
+    assert reached == ["disk check passed"]
+
+
+def test_real_copies_still_need_room_for_two_workspaces(deployment, monkeypatch):
+    root, config, _ = deployment
+    reached = sized_workspace(root, monkeypatch, free=73, shared=False)
+    with pytest.raises(ValueError, match="Insufficient disk space"):
+        runner.update(config, NEW, OLD, "a" * 32)
+    assert reached == []
+    # 10 GiB headroom + 4 GiB build + 2 x 30 GiB: one more gibibyte is enough.
+    reached = sized_workspace(root, monkeypatch, free=75, shared=False)
+    with pytest.raises(RuntimeError, match="stop here"):
+        runner.update(config, NEW, OLD, "b" * 32)
+    assert reached == ["disk check passed"]
+    assert (root / "data/workspace.sqlite3").read_bytes() == b"old schema fixture"
+
+
+def test_even_shared_copies_keep_the_headroom_for_the_build(deployment, monkeypatch):
+    root, config, _ = deployment
+    reached = sized_workspace(root, monkeypatch, free=13, shared=True)
+    with pytest.raises(ValueError, match="Insufficient disk space"):
+        runner.update(config, NEW, OLD, "a" * 32)
+    assert reached == []
+
+
+def test_the_copy_is_complete_and_independent_of_the_original(tmp_path):
+    source = tmp_path / "workspace"
+    (source / "jobs/run").mkdir(parents=True)
+    (source / "jobs/run/model.bin").write_bytes(os.urandom(300_000))
+    (source / "workspace.sqlite3").write_bytes(b"projects")
+    (source / "secret.json").write_text("{}")
+    (source / "secret.json").chmod(0o600)
+    (source / "datasets").symlink_to("/somewhere/outside/the/workspace")
+    copy = tmp_path / "copy"
+    runner.copy_workspace(source, copy)
+    assert (copy / "jobs/run/model.bin").read_bytes() == (
+        source / "jobs/run/model.bin"
+    ).read_bytes()
+    assert (copy / "secret.json").stat().st_mode & 0o777 == 0o600
+    # A link to data kept elsewhere is copied as a link, never followed.
+    assert os.readlink(copy / "datasets") == "/somewhere/outside/the/workspace"
+    # Each side can change without the other noticing, shared data or not.
+    (copy / "workspace.sqlite3").write_bytes(b"migrated")
+    with (source / "jobs/run/model.bin").open("r+b") as stream:
+        stream.write(b"changed afterwards")
+    assert (source / "workspace.sqlite3").read_bytes() == b"projects"
+    assert not (copy / "jobs/run/model.bin").read_bytes().startswith(b"changed afterwards")
+
+
+def test_asking_whether_copies_share_data_leaves_nothing_behind(tmp_path, monkeypatch):
+    assert runner.clones(tmp_path) in {True, False}
+    assert list(tmp_path.iterdir()) == []
+    # A platform with no way to ask is answered with the cautious no.
+    monkeypatch.setattr(runner.sys, "platform", "win32")
+    assert runner.clones(tmp_path) is False
+    assert list(tmp_path.iterdir()) == []
+    # So is a folder that cannot be written to.
+    assert runner.clones(tmp_path / "missing") is False
+
+
+def test_only_copies_of_earlier_completed_updates_are_removed(deployment):
+    root, config, _ = deployment
+    records = root / "private/application-updates"
+
+    def kept(ident, *, completed):
+        folder = records / ident
+        (folder / "backup").mkdir(parents=True)
+        (folder / "backup/workspace.sqlite3").write_bytes(b"an earlier workspace")
+        if completed:
+            runner.write_state(folder / "completed.json", {"target_commit": OLD})
+        return folder
+
+    earlier, failed, newest = (
+        kept("a" * 32, completed=True),
+        kept("b" * 32, completed=False),
+        kept("c" * 32, completed=True),
+    )
+    forged = kept("d" * 32, completed=False)
+    (forged / "completed.json").write_text('{"target_commit": "not a commit"}')
+    other = records / "notes-kept-by-the-operator"
+    other.mkdir()
+    runner.write_state(other / "completed.json", {"target_commit": OLD})
+    runner.prune_backups(config, newest)
+    assert not earlier.exists()
+    # The newest copy, a failed update's evidence and anything not named by the updater stay.
+    assert (newest / "backup/workspace.sqlite3").read_bytes() == b"an earlier workspace"
+    assert (failed / "backup").is_dir() and (forged / "backup").is_dir() and other.is_dir()
+    assert (root / "data/workspace.sqlite3").read_bytes() == b"old schema fixture"
+
+
+def test_an_ordinary_installation_keeps_its_copies_beside_the_workspace(tmp_path):
+    """Started with ``jensen serve``, the copies live next to the workspace, not in the cache."""
+    root, workspace = tmp_path / "cache", tmp_path / "share/openjensen"
+    workspace.mkdir(parents=True)
+    (workspace / "workspace.sqlite3").write_bytes(b"live projects")
+    config = {"kind": "native", "root": str(root), "workspace": str(workspace)}
+
+    def kept(ident, *, completed):
+        folder = workspace.parent / (".openjensen-update-" + ident)
+        (folder / "previous-data").mkdir(parents=True)
+        (folder / "previous-data/workspace.sqlite3").write_bytes(b"an earlier workspace")
+        record = root / "private/application-updates" / ident
+        record.mkdir(parents=True)
+        runner.write_state(record / "workspace-backup.json", {"directory": str(folder)})
+        if completed:
+            runner.write_state(folder / "completed.json", {"target_commit": OLD})
+        return folder, record
+
+    (earlier, earlier_record), (failed, failed_record), (newest, newest_record) = (
+        kept("a" * 32, completed=True),
+        kept("b" * 32, completed=False),
+        kept("c" * 32, completed=True),
+    )
+    neighbour = workspace.parent / "another-application"
+    neighbour.mkdir()
+    runner.prune_backups(config, newest)
+    assert not earlier.exists() and not earlier_record.exists()
+    assert failed.is_dir() and failed_record.is_dir()
+    assert newest.is_dir() and newest_record.is_dir() and neighbour.is_dir()
+    assert (workspace / "workspace.sqlite3").read_bytes() == b"live projects"
 
 
 @pytest.mark.parametrize("invalid", ["remote", "moved", "diverged"])
