@@ -387,11 +387,11 @@ test('shared workspace shell preserves training, defaults, and separate diagnost
   await expect(page.getByRole('navigation', { name: 'Training setup' })).toHaveCount(0);
   await page.getByRole('link', { name: 'Settings', exact: true }).click();
   await page.getByRole('button', { name: 'Workflow settings', exact: true }).click();
-  await expect(page.getByLabel('Quantization recipe')).toHaveValue('Q8_0');
+  await expect(pressed(page, 'Quantization recipe')).toHaveAttribute('data-value', 'Q8_0');
   await expect(page.getByLabel('Also quantize vision to Q8 (experimental)')).not.toBeChecked();
   await page.getByRole('button', { name: 'Diagnostics', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Run diagnostics' })).toBeVisible();
-  await expect(page.getByLabel('Quantization recipe')).toHaveCount(0);
+  await expect(page.getByRole('radiogroup', { name: 'Quantization recipe', exact: true })).toHaveCount(0);
   await expect(page.getByText('No policy runs in this project yet.', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Start diagnostics', exact: true })).toBeDisabled();
   await expectNoPageOverflow(page);
@@ -581,6 +581,12 @@ const trainingRuntimes: Record<string, any>[] = [
     gpu_memory_mib: { L4: 24576, T4: 16384, A100: 40960 }[accelerator],
   })),
 ];
+
+// A choice shown as buttons: the pressed one carries the value.
+const pressed = (page: Page, name: string) =>
+  page.getByRole('radiogroup', { name, exact: true }).getByRole('radio', { checked: true });
+const press = (page: Page, name: string, value: string | number) =>
+  page.getByRole('radiogroup', { name, exact: true }).locator(`[data-value="${value}"]`).click();
 
 function gpuOption(page: Page, value: string, label = value) {
   const option = page
@@ -1990,7 +1996,7 @@ test('quantization submits Q4 only after an explicit experimental choice', async
   await expect(restoredCompare).toBeChecked();
   await restoredCompare.uncheck();
   await expect(restoredCompare).not.toBeChecked();
-  await page.getByLabel('Quantization recipe').selectOption('Q4_0');
+  await press(page, 'Quantization recipe', 'Q4_0');
   await submitQuantization(3);
   expect(requests[2].candidates).toEqual([{ language: 'Q4_0', vision: null }]);
 });
@@ -2034,10 +2040,10 @@ test('Spatial settings require explicit task and parity choices in the submitted
   try {
     await page.getByRole('link', { name: 'Settings', exact: true }).click();
     await page.getByRole('button', { name: 'Workflow settings', exact: true }).click();
-    await expect(page.getByLabel('Task suite')).toBeDisabled();
-    await expect(page.getByLabel('Quantization recipe')).toBeDisabled();
+    await expect(pressed(page, 'Task suite')).toBeDisabled();
+    await expect(pressed(page, 'Quantization recipe')).toBeDisabled();
     await page.getByRole('button', { name: 'Diagnostics', exact: true }).click();
-    await expect(page.getByLabel('Diagnostic mode')).toBeDisabled();
+    await expect(pressed(page, 'Diagnostic mode')).toBeDisabled();
     await expect(page.getByRole('heading', { name: 'Run diagnostics', exact: true })).toBeVisible();
     await page.getByRole('link', { name: 'Quantize', exact: true }).click();
     await expect(
@@ -2055,11 +2061,11 @@ test('Spatial settings require explicit task and parity choices in the submitted
   }
   await page.getByRole('link', { name: 'Settings', exact: true }).click();
   await page.getByRole('button', { name: 'Workflow settings', exact: true }).click();
-  await page.getByLabel('Task suite').selectOption('libero_spatial');
+  await press(page, 'Task suite', 'libero_spatial');
   await expect(page.getByLabel('Spatial task IDs')).toHaveValue('0,1,2,3,4,5,6,7,8,9');
   await expect(page.getByLabel('Approved parity profile')).toHaveValue('');
-  await expect(page.getByRole('combobox', { name: 'Protocol', exact: true })).toHaveValue('libero');
-  await expect(page.getByRole('combobox', { name: 'Protocol', exact: true })).toBeDisabled();
+  await expect(pressed(page, 'Protocol')).toHaveAttribute('data-value', 'libero');
+  await expect(pressed(page, 'Protocol')).toBeDisabled();
   await expect(page.getByLabel('Episode step limit')).toHaveValue('280');
   await expect(page.getByLabel('Episode step limit')).toBeDisabled();
   await page.getByLabel('Spatial task IDs').fill('0,2');
@@ -2089,7 +2095,7 @@ test('Spatial settings require explicit task and parity choices in the submitted
   await page.reload();
   await page.getByRole('link', { name: 'Settings', exact: true }).click();
   await page.getByRole('button', { name: 'Workflow settings', exact: true }).click();
-  await expect(page.getByRole('combobox', { name: 'Protocol', exact: true })).toHaveValue('libero');
+  await expect(pressed(page, 'Protocol')).toHaveAttribute('data-value', 'libero');
   await expect(page.getByLabel('Episode step limit')).toHaveValue('280');
   await page.getByRole('link', { name: 'Quantize', exact: true }).click();
   await chooseTransformationModel(page, 'quantization', 'Choose Synthetic policy · source');
@@ -2180,7 +2186,7 @@ test('restored workflow preferences and submitted requests stay isolated when sw
   await expect(page.getByLabel('Episode step limit')).toHaveValue('280');
   await page.getByLabel('Spatial task IDs').fill('1,3');
   await selectProject(page, 'preferences-b');
-  await expect(page.getByLabel('Task suite')).toHaveValue('libero_object');
+  await expect(pressed(page, 'Task suite')).toHaveAttribute('data-value', 'libero_object');
   await expect(page.getByLabel('Timed predictions')).toHaveValue('6');
   await page.getByLabel('Timed predictions').fill('9');
   const projectB = await fixture.submit();
@@ -2235,9 +2241,9 @@ for (const state of ['empty', 'error'] as const) {
     await page.goto('/datasets/');
     await page.getByRole('link', { name: 'Settings', exact: true }).click();
     await page.getByRole('button', { name: 'Workflow settings', exact: true }).click();
-    await expect(page.getByLabel('Task suite')).toBeDisabled();
+    await expect(pressed(page, 'Task suite')).toBeDisabled();
     await page.getByRole('button', { name: 'Diagnostics', exact: true }).click();
-    await expect(page.getByLabel('Diagnostic mode')).toBeDisabled();
+    await expect(pressed(page, 'Diagnostic mode')).toBeDisabled();
     await expect(page.getByRole('button', { name: 'Start diagnostics', exact: true })).toBeDisabled();
     await expect(page.getByRole('heading', { name: 'Run diagnostics', exact: true })).toBeVisible();
     await page.getByRole('link', { name: 'Quantize', exact: true }).click();
@@ -2280,9 +2286,9 @@ for (const storage of ['invalid JSON', 'unavailable'] as const) {
     await page.goto('/datasets/');
     await page.getByRole('link', { name: 'Settings', exact: true }).click();
     await page.getByRole('button', { name: 'Workflow settings', exact: true }).click();
-    await expect(page.getByLabel('Quantization recipe')).toHaveValue('Q8_0');
-    await page.getByLabel('Quantization recipe').selectOption('Q4_0');
-    await expect(page.getByLabel('Quantization recipe')).toHaveValue('Q4_0');
+    await expect(pressed(page, 'Quantization recipe')).toHaveAttribute('data-value', 'Q8_0');
+    await press(page, 'Quantization recipe', 'Q4_0');
+    await expect(pressed(page, 'Quantization recipe')).toHaveAttribute('data-value', 'Q4_0');
     // Unavailable storage supports the current mount; persistence is not claimed.
     expect(errors).toEqual([]);
   });

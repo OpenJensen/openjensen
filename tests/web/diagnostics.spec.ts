@@ -36,6 +36,12 @@ async function policy(request: APIRequestContext, id: string) {
   return artifacts[0].id as string;
 }
 
+// A choice shown as buttons: the pressed one carries the value.
+const pressed = (page: Page, name: string) =>
+  page.getByRole('radiogroup', { name, exact: true }).getByRole('radio', { checked: true });
+const press = (page: Page, name: string, value: string | number) =>
+  page.getByRole('radiogroup', { name, exact: true }).locator(`[data-value="${value}"]`).click();
+
 test('an empty diagnostics workspace requires configured compute and has no static benchmark reports', async ({
   page,
   request,
@@ -89,15 +95,15 @@ test('keeps the Spatial protocol locked and labels the selected suite', async ({
     steps: 10,
     taskIds: '1,2',
   });
-  const mode = page.getByRole('combobox', { name: 'Diagnostic mode', exact: true });
-  await expect(mode).toHaveValue('libero');
+  const mode = pressed(page, 'Diagnostic mode');
+  await expect(mode).toHaveAttribute('data-value', 'libero');
   await expect(mode).toBeDisabled();
   await page.getByText('Protocol details', { exact: true }).click();
   await expect(page.getByText('Evaluates LIBERO Spatial tasks 1,2', { exact: false })).toContainText(
     'full 280-step horizon',
   );
   await page.getByRole('button', { name: 'Edit diagnostic settings', exact: true }).click();
-  await page.getByRole('combobox', { name: 'Task suite', exact: true }).selectOption('libero_object');
+  await press(page, 'Task suite', 'libero_object');
   await page.getByRole('button', { name: 'Diagnostics', exact: true }).click();
   await expect(mode).toBeEnabled();
   await mode.selectOption('engine');
@@ -154,7 +160,7 @@ test('guides an empty project to Quantize and blocks unsupported simulation', as
   await page.getByRole('combobox', { name: 'Diagnostic execution target' }).selectOption('cpu-only');
   await expect(page.getByText('This target has no LIBERO simulator.', { exact: false })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Start diagnostics', exact: true })).toBeDisabled();
-  await page.getByRole('combobox', { name: 'Diagnostic mode' }).selectOption('engine');
+  await press(page, 'Diagnostic mode', 'engine');
   await expect(page.getByRole('button', { name: 'Start diagnostics', exact: true })).toBeEnabled();
 });
 

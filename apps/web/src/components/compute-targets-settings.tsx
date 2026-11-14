@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { computeTargets, type ComputeTarget } from '@/lib/compute-targets';
 import { Icon } from './icon';
+import { Segmented } from './ui/choice';
 import { WorkbenchDisclosure } from './workbench-disclosure';
 import './compute-targets-settings.css';
 
@@ -204,12 +205,12 @@ export function ComputeTargetsSettings() {
                 placeholder="GPU server"
               />
             </label>
-            <label>
-              Infrastructure
-              <select
+            <div className="choice-field">
+              <span>Infrastructure</span>
+              <Segmented
+                label="Infrastructure"
                 value={draft.infrastructure}
-                onChange={(event) => {
-                  const infrastructure = event.target.value as ComputeTarget['infrastructure'];
+                onChange={(infrastructure) =>
                   setDraft({
                     ...draft,
                     infrastructure,
@@ -221,16 +222,14 @@ export function ComputeTargetsSettings() {
                     account: null,
                     qos: null,
                     operations: [],
-                  });
-                }}
-              >
-                {Object.entries(infrastructureLabels).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </label>
+                  })
+                }
+                options={Object.entries(infrastructureLabels).map(([value, label]) => ({
+                  value: value as ComputeTarget['infrastructure'],
+                  label,
+                }))}
+              />
+            </div>
             <label>
               Worker runtime
               <select
@@ -341,25 +340,27 @@ export function ComputeTargetsSettings() {
                 onChange={(event) => resource('memory_gib', Number(event.target.value))}
               />
             </label>
-            <label>
-              GPU count
-              <select
+            <div className="choice-field">
+              <span>GPU count</span>
+              <Segmented
+                label="GPU count"
                 value={draft.resources.gpu_count}
-                onChange={(event) =>
+                onChange={(count) =>
                   setDraft({
                     ...draft,
                     resources: {
                       ...draft.resources,
-                      gpu_count: Number(event.target.value),
-                      accelerator: event.target.value === '0' ? null : draft.resources.accelerator,
+                      gpu_count: count,
+                      accelerator: count === 0 ? null : draft.resources.accelerator,
                     },
                   })
                 }
-              >
-                <option value={0}>CPU only</option>
-                <option value={1}>One GPU</option>
-              </select>
-            </label>
+                options={[
+                  { value: 0, label: 'CPU only' },
+                  { value: 1, label: 'One GPU' },
+                ]}
+              />
+            </div>
             {draft.resources.gpu_count > 0 && (
               <label>
                 Accelerator type
