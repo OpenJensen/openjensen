@@ -19,6 +19,8 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, Field, StrictInt
 
+from vla_platform import build
+from vla_platform.agent_control import kinematics
 from vla_platform.agent_control.robot_target import RobotTarget
 from vla_platform.agent_control.settings import Profiles
 from vla_platform.datasets.local_preview import reader_python
@@ -39,6 +41,26 @@ def save(path, value):
     pending.replace(path)
 
 
+class Annotation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    label: Literal["clean_success", "failure", "recovery", "unknown", "intervention", "reset"]
+    first_frame: int = Field(ge=0, strict=True)
+    last_frame: int = Field(ge=0, strict=True)
+    note: str = Field(min_length=1, max_length=500)
+    confidence: float = Field(ge=0, le=1)
+    reset_minutes: float | None = Field(None, ge=0)
+
+
+class Experiment(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    configuration_id: str | None = Field(None, min_length=1, max_length=128)
+    attempt: int = Field(1, ge=1, strict=True)
+    subtask: str | None = Field(None, max_length=200)
+    success_criterion: str | None = Field(None, max_length=500)
+    parent_run_id: str | None = Field(None, pattern=r"^[0-9a-f]{32}$")
+    mock_timing_fixture: bool = False
+
+
 class CollectionInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     mode: Literal["mock", "physical"] = "mock"
@@ -56,6 +78,7 @@ class CollectionInput(BaseModel):
     confirm: str = ""
     operator_present: bool = Field(default=False, strict=True)
     workspace_clear: bool = Field(default=False, strict=True)
+    experiment: Experiment = Field(default_factory=Experiment)
 
 
 class CollectionRuns:
@@ -118,11 +141,27 @@ class CollectionRuns:
                 raise ValueError("Confirm ARM AI CONTROL, operator presence and a clear workspace")
             if not Profiles(self.root.parent).shared_key():
                 raise ValueError("Configure an OpenAI API key in Settings first")
+        if config.experiment.mock_timing_fixture and config.mode != "mock":
+            raise ValueError("Timing fixture requires the mock provider and synthetic companion")
         ident = uuid4().hex
+        family = ident + "-0"
+        if config.experiment.parent_run_id:
+            try:
+                parent = self.get(config.experiment.parent_run_id)
+            except FileNotFoundError:
+                raise ValueError("Unknown replay parent") from None
+            if parent["project_id"] != project_id or parent["status"] not in TERMINAL:
+                raise ValueError("Replay parent must be a finished run from this project")
+            family = parent.get("source_family_id", parent["episode_id"])
+            if not config.experiment.configuration_id:
+                config.experiment.configuration_id = (
+                    parent["config"].get("experiment", {}).get("configuration_id")
+                )
         directory = self.directory(ident)
         directory.mkdir(mode=0o700)
         value = {
             "id": ident,
+            "source_family_id": family,
             "project_id": project_id,
             "episode_id": ident + "-0",
             "created_at": time.time(),
@@ -150,6 +189,7 @@ class CollectionRuns:
         value = {
             "run_id": ident,
             "episode_id": ident + "-0",
+            "event_id": uuid4().hex,
             "core_monotonic_ns": time.monotonic_ns(),
             "unix_ns": time.time_ns(),
             **event,
@@ -174,7 +214,19 @@ class CollectionRuns:
                 raise ValueError("Operator page heartbeat expired")
             await target.heartbeat(ident, epoch)
             if live["recording"]:
+                before = time.monotonic_ns()
                 state = await live["bridge"].request("GET", "collection/status")
+                after = time.monotonic_ns()
+                if "robot_clock_ns" in state:
+                    await self.event(
+                        ident,
+                        {
+                            "type": "clock_probe",
+                            "core_before_ns": before,
+                            "core_after_ns": after,
+                            "robot_ns": state["robot_clock_ns"],
+                        },
+                    )
                 self.update(ident, frames=state.get("frames", 0), recording=state)
                 if state["status"] not in {"recording", "saved"}:
                     raise ValueError(state.get("error") or "Recording stopped")
@@ -223,7 +275,11 @@ class CollectionRuns:
                 generation = config.expected_generation
             live["bridge"] = bridge
             # Detect an outdated USB companion before transferring controller authority.
-            await bridge.request("GET", "collection/status")
+            before = time.monotonic_ns()
+            handshake = await bridge.request("GET", "collection/status")
+            after = time.monotonic_ns()
+            if handshake.get("contract_version", 1) < 2:
+                raise ValueError("Update the USB companion for version 2 collection evidence")
             target = RobotTarget(bridge)
             acquired = await target.acquire(
                 ident,
@@ -244,12 +300,42 @@ class CollectionRuns:
                     "run_id": ident,
                     "camera_indices": config.camera_indices,
                     "fps": config.fps,
+                    "source_family_id": self.get(ident)["source_family_id"],
+                    "experiment": config.experiment.model_dump(),
+                    "application_build": build.current().label,
+                    "run_parameters": {
+                        **config.model_dump(exclude={"confirm"}),
+                        "max_retries": 0,
+                        "reasoning": "low",
+                        "max_output_tokens": 2048,
+                    },
+                    "kinematics": {
+                        "model": kinematics.MODEL,
+                        "frame": kinematics.FRAME,
+                        "tip_link": "gripper_frame_link",
+                        "units": "metres",
+                        "joint_order": kinematics.JOINTS,
+                        "chain": kinematics.CHAIN,
+                        "tip_offset_m": kinematics.TIP,
+                        "kind": "nominal FK on calibrated encoders",
+                        "physical_geometry_verified": False,
+                    },
                     "task": config.task,
                     "model": "deterministic-pi" if config.mode == "mock" else config.model,
                     "environment_kind": "synthetic" if config.mode == "mock" else "physical",
                 },
             )
+            live["supervision_started"] = time.monotonic()
             live["recording"] = True
+            await self.event(
+                ident,
+                {
+                    "type": "clock_probe",
+                    "core_before_ns": before,
+                    "core_after_ns": after,
+                    "robot_ns": handshake["robot_clock_ns"],
+                },
+            )
             await self.event(
                 ident,
                 {
@@ -257,6 +343,7 @@ class CollectionRuns:
                     "configuration": config.model_dump(),
                     "runtime": "pi-agent-core@1.5.1",
                     "authority_epoch": epoch,
+                    "operator_supervision_started": config.mode == "physical",
                 },
             )
             self.update(ident, status="running")
@@ -274,8 +361,10 @@ class CollectionRuns:
                     if not any(s in k.upper() for s in ("KEY", "TOKEN", "SECRET"))
                 },
             )
+            live["worker"] = worker
             start = {
                 "type": "start",
+                "core_send_ns": time.monotonic_ns(),
                 **config.model_dump(),
                 "api_key": Profiles(self.root.parent).shared_key()
                 if config.mode == "physical"
@@ -309,6 +398,21 @@ class CollectionRuns:
                     raise ValueError("Pi worker exited before completion")
                 message = json.loads(line)
                 kind = message["type"]
+                if kind == "clock_request":
+                    worker.stdin.write(
+                        (
+                            json.dumps(
+                                {
+                                    "type": "clock_reply",
+                                    "core_ns": time.monotonic_ns(),
+                                    "worker_before_ns": message["worker_before_ns"],
+                                }
+                            )
+                            + "\n"
+                        ).encode()
+                    )
+                    await worker.stdin.drain()
+                    continue
                 if kind == "tool":
                     call_id = message["id"]
                     fingerprint = hashlib.sha256(
@@ -316,6 +420,15 @@ class CollectionRuns:
                     ).hexdigest()
                     if call_id in calls:
                         previous, response = calls[call_id]
+                        await self.event(
+                            ident,
+                            {
+                                "type": "tool_deduplicated",
+                                "tool_call_id": call_id,
+                                "request_sha256": fingerprint,
+                                "retry_of": call_id,
+                            },
+                        )
                         if previous != fingerprint:
                             raise ValueError("Tool identity reused with different arguments")
                     else:
@@ -336,12 +449,33 @@ class CollectionRuns:
                             if operation not in done:
                                 raise ValueError("Episode time budget reached")
                             response = await operation
+                        except Exception as exc:
+                            await self.event(
+                                ident,
+                                {
+                                    "type": "tool_error",
+                                    "tool_call_id": call_id,
+                                    "error_type": type(exc).__name__,
+                                    "retry": False,
+                                    "timeout": isinstance(exc, TimeoutError),
+                                },
+                            )
+                            raise
                         finally:
                             if not operation.done():
                                 operation.cancel()
                                 with contextlib.suppress(asyncio.CancelledError):
                                     await operation
                         calls[call_id] = (fingerprint, response)
+                    await self.event(
+                        ident,
+                        {
+                            "type": "tool_result",
+                            "tool_call_id": call_id,
+                            "result": response.get("result"),
+                            "dedup_id": fingerprint,
+                        },
+                    )
                     worker.stdin.write(
                         (json.dumps({"type": "result", "id": call_id, **response}) + "\n").encode()
                     )
@@ -373,7 +507,20 @@ class CollectionRuns:
             if live["recording"]:
                 with contextlib.suppress(Exception):
                     await self.event(
-                        ident, {"type": "run_ended", "outcome": outcome, "error": error}
+                        ident,
+                        {
+                            "type": "run_ended",
+                            "outcome": outcome,
+                            "error": error,
+                            "intervention": "operator_stop" if outcome == "stopped" else None,
+                            "supervised_minutes": (
+                                (time.monotonic() - live["supervision_started"]) / 60
+                                if config.mode == "physical" and "supervision_started" in live
+                                else None
+                            ),
+                            "task_outcome": "unknown",
+                            "annotation_source": "runtime",
+                        },
                     )
                 try:
                     state = await bridge.request(
@@ -432,16 +579,10 @@ class CollectionRuns:
             raise ValueError("Tool called after stop")
         if name == "observe":
             raw = await target.observe(ident, epoch)
-            side = await self.live[ident]["bridge"].request(
-                "GET",
-                "camera.jpg",
-                query={
-                    "index": config.camera_indices[1],
-                    "cameras": ",".join(map(str, config.camera_indices)),
-                },
-                image=True,
+            side_frame = await self.live[ident]["bridge"].request(
+                "POST", "collection/side_frame", payload={"run_id": ident}
             )
-            side = side[0] if isinstance(side, tuple) else side
+            side = base64.b64decode(side_frame.pop("jpeg"), validate=True)
             oid = raw["observation_id"]
             directory = self.directory(ident) / "observations"
             directory.mkdir(exist_ok=True)
@@ -450,6 +591,8 @@ class CollectionRuns:
                 (directory / (oid + "-" + role + ".jpg")).write_bytes(data)
             clean = {k: v for k, v in raw.items() if k != "image_data_url"}
             clean.update(
+                wrist_frame_id=f"wrist-{raw['camera_read_end_monotonic_ns']}",
+                side_frame=side_frame,
                 side_image_sha256=hashlib.sha256(side).hexdigest(),
                 side_acquired_core_monotonic_ns=time.monotonic_ns(),
             )
@@ -488,6 +631,27 @@ class CollectionRuns:
                     },
                 ],
             }
+        if name == "dwell":
+            duration = args["duration_seconds"]
+            if type(duration) not in (int, float) or not 0.1 <= duration <= 3:
+                raise ValueError("Dwell must be between 0.1 and 3 seconds")
+            reason = args["reason"]
+            if reason not in ("grasp_settling", "release_settling", "inspection"):
+                raise ValueError("Unknown dwell reason")
+            await self.event(
+                ident,
+                {
+                    "type": "dwell_start",
+                    "tool_call_id": call_id,
+                    "duration_seconds": duration,
+                    "reason": reason,
+                },
+            )
+            await asyncio.sleep(duration)
+            await self.event(ident, {"type": "dwell_end", "tool_call_id": call_id})
+            return {
+                "result": {"waited_seconds": duration, "reason": reason, "contact_verified": False}
+            }
         if name not in {"move", "set_gripper"}:
             raise ValueError("Unregistered tool")
         oid = args.get("observation_id")
@@ -502,6 +666,7 @@ class CollectionRuns:
                 "arguments": args,
                 "observation_id": oid,
             }
+            await self.event(ident, {"type": "approval_pending", **proposal})
             self.live[ident]["approved"].clear()
             self.update(ident, status="awaiting_approval", proposal=proposal)
             await asyncio.wait_for(self.live[ident]["approved"].wait(), 60)
@@ -537,11 +702,14 @@ class CollectionRuns:
                 "tool_call_id": call_id,
                 "command_id": command_id,
                 "requested": requested,
+                "parent_id": call_id,
+                "dedup_id": command_id,
+                "retry_of": None,
                 "model_observation_id": oid,
                 "validation_observation": {k: v for k, v in fresh.items() if k != "image_data_url"},
             },
         )
-        receipt = await target.execute(
+        operation = target.execute(
             ident,
             epoch,
             fresh,
@@ -551,6 +719,23 @@ class CollectionRuns:
             command_id,
             model_observation=original,
         )
+        if config.experiment.mock_timing_fixture and name == "move":
+            # Overlap a read-only synthetic provider request with fake motor movement.
+            async def probe():
+                await asyncio.sleep(0.2)
+                worker = self.live[ident]["worker"]
+                worker.stdin.write(b'{"type":"mock_motion_probe"}\n')
+                await worker.stdin.drain()
+
+            probe_task = asyncio.create_task(probe())
+            try:
+                receipt = await operation
+            finally:
+                probe_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await probe_task
+        else:
+            receipt = await operation
         await self.event(
             ident,
             {
@@ -618,6 +803,29 @@ async def action(project_id: str, ident: str, action: str, request: Request):
     live = service.live.get(ident)
     if action == "stop":
         return await service.stop(ident)
+    if action == "annotate":
+        try:
+            annotation = Annotation.model_validate(await request.json())
+        except ValueError as exc:
+            raise HTTPException(422, "Invalid episode annotation") from exc
+        if not 0 <= annotation.first_frame <= annotation.last_frame < value["frames"]:
+            raise HTTPException(409, "Choose recorded frame indices from this episode")
+        event = {
+            "type": "annotation",
+            "annotation_id": uuid4().hex,
+            "source": "operator",
+            "episode_id": value["episode_id"],
+            "unix_ns": time.time_ns(),
+            **annotation.model_dump(),
+        }
+        if live and live["recording"] and not live.get("finalizing"):
+            await service.event(ident, event)
+        elif value["status"] in TERMINAL:
+            # Each review is a fresh immutable overlay. The downloaded raw ZIP remains unchanged.
+            save(service.directory(ident) / ("review-" + event["annotation_id"] + ".json"), event)
+        else:
+            raise HTTPException(409, "Wait for recording or finalization")
+        return event
     if action == "heartbeat" and live:
         live["operator"] = time.monotonic()
         return {"ok": True}
@@ -628,6 +836,15 @@ async def action(project_id: str, ident: str, action: str, request: Request):
         live["approved"].set()
         return {"ok": True}
     raise HTTPException(409, "Run action unavailable")
+
+
+@router.get("/projects/{project_id}/robot-lab/collection-runs/{ident}/reviews")
+async def reviews(project_id: str, ident: str, request: Request):
+    service = await project(request, project_id)
+    owned(service, project_id, ident)
+    return [
+        json.loads(p.read_text()) for p in sorted(service.directory(ident).glob("review-*.json"))
+    ]
 
 
 @router.get("/projects/{project_id}/robot-lab/collection-runs/{ident}/trace")

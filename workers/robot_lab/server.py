@@ -2530,18 +2530,28 @@ class RobotLab:
                 }
                 measured_ns = time.monotonic_ns()
                 active_command = self.agent.active_id
+                write_begin = time.monotonic_ns()
                 completed = self.agent.tick(raw)
-                self.agent_collection.sample(
-                    {
-                        "sample_id": str(measured_ns),
-                        "command_id": active_command,
-                        "state_read_monotonic_ns": measured_ns,
-                        "write_returned_monotonic_ns": time.monotonic_ns(),
-                        "measured": dict(self.positions),
-                        "sent": dict(self.action),
-                        "sent_raw": dict(self.commanded_raw),
-                    }
-                )
+                write_end = time.monotonic_ns()
+                if generation != self.generation or self.mode != "agent":
+                    return
+                if self.agent_collection.state.get("status") == "recording":
+                    applied = self.controller.bridge.last_raw
+                    self.agent_collection.sample(
+                        {
+                            "sample_id": str(measured_ns),
+                            "command_id": active_command,
+                            "state_read_monotonic_ns": measured_ns,
+                            "write_returned_monotonic_ns": write_end,
+                            "dispatch_begin_monotonic_ns": write_begin,
+                            "controller_state": "executing" if active_command else "holding",
+                            "measured": dict(self.positions),
+                            "sent": {
+                                j: normalized(j, applied[j], self.calibration) for j in JOINTS
+                            },
+                            "sent_raw": {j: applied[j] for j in JOINTS},
+                        }
+                    )
             if completed is not None:
                 # Disk acknowledgement cannot delay the independent Stop path's
                 # serial torque-off command.
@@ -3006,6 +3016,7 @@ class Handler(BaseHTTPRequestHandler):
                 result = lab.agent.command(path.rsplit("/", 1)[-1], payload)
             elif path in {
                 "/v1/collection/start",
+                "/v1/collection/side_frame",
                 "/v1/collection/finish",
                 "/v1/collection/event",
                 "/v1/collection/stop",

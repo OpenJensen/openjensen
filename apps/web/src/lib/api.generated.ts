@@ -1728,6 +1728,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects/{project_id}/robot-lab/collection-runs/{ident}/reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Reviews */
+        get: operations["reviews_api_v1_projects__project_id__robot_lab_collection_runs__ident__reviews_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects/{project_id}/robot-lab/collection-runs/{ident}/trace": {
         parameters: {
             query?: never;
@@ -4143,6 +4160,7 @@ export interface components {
              * @default 0
              */
             expected_generation: number;
+            experiment?: components["schemas"]["Experiment"];
             /**
              * Fps
              * @default 10
@@ -4674,6 +4692,27 @@ export interface components {
             simulated_seconds?: number | null;
             /** Speed Limit Clipped */
             speed_limit_clipped: boolean[];
+        };
+        /** Experiment */
+        Experiment: {
+            /**
+             * Attempt
+             * @default 1
+             */
+            attempt: number;
+            /** Configuration Id */
+            configuration_id?: string | null;
+            /**
+             * Mock Timing Fixture
+             * @default false
+             */
+            mock_timing_fixture: boolean;
+            /** Parent Run Id */
+            parent_run_id?: string | null;
+            /** Subtask */
+            subtask?: string | null;
+            /** Success Criterion */
+            success_criterion?: string | null;
         };
         /** FetchRequest */
         FetchRequest: {
@@ -10725,6 +10764,38 @@ export interface operations {
                 project_id: string;
                 ident: string;
                 role: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reviews_api_v1_projects__project_id__robot_lab_collection_runs__ident__reviews_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                ident: string;
             };
             cookie?: never;
         };
