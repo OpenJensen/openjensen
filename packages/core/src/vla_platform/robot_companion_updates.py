@@ -5,6 +5,10 @@ Only an owned user service, matching live process arguments and matching private
 pairing credential permit replacement. Existing installer receipts must also
 match. Runtime, device data and credentials stay at their existing paths. No
 dependency installation or motor command is issued.
+
+A service this application may not replace (another platform, a tunnel, an
+installation made by hand) is only asked which code it runs: it reports a
+fingerprint of its sources, compared here with the application's own copy.
 """
 
 import configparser
@@ -29,6 +33,11 @@ HELP = (
     "Run deploy/install_robot_lab.py on the USB computer "
     "with its existing --prefix, --runtime and --data-dir, then restart OpenJensen. "
     "The application update does not replace an external or unverified service."
+)
+MISMATCH = (
+    "Robot control service runs different code from this application. On the computer "
+    "with the USB cables, run deploy/install_robot_lab.py with its existing --prefix, "
+    "--runtime and --data-dir, then check for updates again."
 )
 
 
@@ -300,6 +309,62 @@ def code_files(source):
     return files
 
 
+def source_identity(source):
+    """The fingerprint the service computes over its own code; see its source_identity.py."""
+    import hashlib
+
+    root = Path(source)
+    digest = hashlib.sha256()
+    names = []
+    for path in root.rglob("*"):
+        relative = path.relative_to(root)
+        if (
+            path.is_symlink()
+            or not path.is_file()
+            or "tests" in relative.parts
+            or "__pycache__" in relative.parts
+            or (path.suffix != ".py" and relative.as_posix() != "requirements-hardware.txt")
+        ):
+            continue
+        names.append(relative.as_posix())
+    for name in sorted(names):
+        digest.update(name.encode() + b"\0")
+        digest.update(hashlib.sha256((root / name).read_bytes()).digest())
+    return digest.hexdigest()
+
+
+def compare(source, pairing):
+    """Whether a service that is not replaced from here runs this application's code.
+
+    The service answers for itself, so this works across platforms and through a
+    tunnel. A service that cannot be reached says nothing here: Robot Lab already
+    reports that it is unavailable.
+    """
+    try:
+        reported = status(pairing).get("source_sha256")
+    except OSError, ValueError, KeyError, TypeError, AttributeError, RuntimeError:
+        return None
+    if not isinstance(reported, str) or not reported:
+        # A service from before it could describe itself.
+        return result("needs_update", HELP)
+    if hmac.compare_digest(reported, source_identity(source)):
+        return result("current", "Robot control service matches this application.")
+    return result("needs_update", MISMATCH)
+
+
+def observe(source, pairing_path):
+    """Ask the paired service again, without inspecting or replacing anything."""
+    token = DEADLINE.set(time.monotonic() + 10)
+    try:
+        if not pairing_path.exists():
+            return None
+        return compare(source, json.loads(private_bytes(pairing_path)))
+    except OSError, ValueError, TypeError:
+        return result("needs_update", HELP)
+    finally:
+        DEADLINE.reset(token)
+
+
 def status(pairing):
     request = Request(
         pairing["url"] + "/v1/status", headers={"Authorization": "Bearer " + pairing["token"]}
@@ -360,7 +425,14 @@ def _reconcile(source, pairing_path, *, allow_update=False):
         return None
     try:
         pairing = json.loads(private_bytes(pairing_path))
+    except OSError, ValueError, TypeError:
+        return result("needs_update", HELP)
+    try:
         local = attest(pairing)
+    except OSError, ValueError, KeyError, TypeError, RuntimeError, subprocess.SubprocessError:
+        # Not a service to replace from here. It can still say which code it runs.
+        return compare(source, pairing)
+    try:
         installed = Path(local["source"])
         desired = code_files(source)
         previous = code_files(installed)

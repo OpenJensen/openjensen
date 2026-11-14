@@ -35,6 +35,28 @@ test('current app still reports a robot control service requiring an update', as
   await expect(page.getByRole('dialog').getByRole('alert')).toContainText('robot control service needs an update');
 });
 
+test('a robot control service that runs the same code is an ordinary line, not a warning', async ({ page }) => {
+  await page.route('**/api/v1/updates**', (route) =>
+    route.fulfill({
+      json: {
+        ...initial,
+        state: 'current',
+        message: 'Up to date with upstream main.',
+        companion_update: {
+          state: 'current',
+          managed: false,
+          message: 'Robot control service matches this application.',
+        },
+      },
+    }),
+  );
+  await page.goto('/dashboard/');
+  await page.getByRole('button', { name: 'Version and updates' }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByText('Robot control service matches this application.', { exact: true })).toBeVisible();
+  await expect(dialog.getByRole('alert')).toHaveCount(0);
+});
+
 test('a branch build never passes for the release that shares its number', async ({ page }) => {
   const branch = '6'.repeat(40);
   await page.route('**/api/v1/updates**', (route) =>
