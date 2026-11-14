@@ -143,6 +143,7 @@ def test_source_archive_updates_and_recovers_without_supervisor_or_source_change
     assert json.loads((source / ".openjensen-build.json").read_text())["commit"] == OLD
     snapshots = workspace.parent / (".openjensen-update-" + operation)
     assert (snapshots / "backup/workspace.sqlite3").read_bytes() == b"old schema"
+    assert (snapshots / "completed.json").exists() is (not fails)
     assert json.loads(
         (root / "private/application-updates" / operation / "workspace-backup.json").read_text()
     )["directory"] == str(snapshots)
