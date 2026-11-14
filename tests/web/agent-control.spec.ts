@@ -817,8 +817,11 @@ test('a rejected in-flight manual heartbeat cannot stop a legitimate AI ownershi
 });
 
 test('implicit manual cleanup is fenced against a newer controller', async ({ page }) => {
-  const { requests, robot } = await fixture(page, { physical: true });
+  const { requests, robot } = await fixture(page, { physical: true, deferManualHeartbeat: true });
   await connectPhysical(page);
+  // The page's first heartbeat is held, so no other heartbeat can notice the change below
+  // and stop control before unchecking does. It is sent once the page holds the arm.
+  await expect.poll(() => requests.some((request) => request.path === '/robot-lab/control/heartbeat')).toBe(true);
   robot.session.generation = 8;
   await page.getByLabel('I am at the arm, supporting it where needed, with Stop within reach.').uncheck();
   await expect.poll(() => requests.some((request) => request.path === '/robot-lab/stop')).toBe(true);
@@ -831,8 +834,11 @@ test('implicit manual cleanup is fenced against a newer controller', async ({ pa
 });
 
 test('implicit preflight cleanup cannot stop an agent that took over the same generation', async ({ page }) => {
-  const { requests, robot } = await fixture(page, { physical: true });
+  const { requests, robot } = await fixture(page, { physical: true, deferManualHeartbeat: true });
   await connectPhysical(page);
+  // The page's first heartbeat is held, so no other heartbeat can notice the change below
+  // and stop control before unchecking does. It is sent once the page holds the arm.
+  await expect.poll(() => requests.some((request) => request.path === '/robot-lab/control/heartbeat')).toBe(true);
   robot.session.mode = 'agent';
   robot.agent_control.owner = 'different-controller';
   await page.getByLabel('I am at the arm, supporting it where needed, with Stop within reach.').uncheck();

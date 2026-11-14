@@ -782,13 +782,19 @@ class PolicyTests(unittest.TestCase):
         self.camera_at(8)
         self.chunked(runner, 1000)
         runner.start(self.run_payload())
+        generation = self.lab.generation
 
         def control_loop():
             while self.lab.mode == "policy":
                 try:
+                    # The camera check needs about two seconds of steps, as long as one
+                    # operator heartbeat lasts, so keep the operator present as the page does.
+                    runner.heartbeat({"expected_generation": generation})
                     runner.apply(dict(self.lab.positions), time.monotonic())
                 except HardwareError as error:
                     self.lab.stop(str(error))
+                    return
+                except ValueError:
                     return
                 time.sleep(0.01)
 
