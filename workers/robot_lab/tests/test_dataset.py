@@ -183,6 +183,9 @@ class DatasetTests(unittest.TestCase):
         writer.add_frame(
             dict.fromkeys(JOINTS, 1.0), {}, np.ones((2, 3, 3), dtype=np.uint8), captured_at=0
         )
+        # Images are written in the background under a temporary name first; compare the
+        # files once they have their final names, or a slow machine is caught mid-write.
+        writer.image_writer.wait_until_done()
         before = {
             path.relative_to(writer.root): path.read_bytes()
             for path in writer.root.rglob("*")

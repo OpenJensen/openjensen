@@ -700,7 +700,9 @@ class PolicyTests(unittest.TestCase):
     def test_a_camera_slower_than_the_policy_fails_the_check(self):
         runner, _, _ = self.install()
         runner.load({"policy_id": "pen"})
-        self.camera_at(8)  # The policy runs at 13 FPS.
+        # The policy runs at 13 FPS. At 4 FPS most steps see a frame older than one step
+        # whatever the machine's timer does; at 8 every other step sat exactly on the limit.
+        self.camera_at(4)
         runner.preflight({"camera_index": 0})
         check = runner.check
         self.assertFalse(check["passed"])
