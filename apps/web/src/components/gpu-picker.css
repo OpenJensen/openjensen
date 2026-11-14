@@ -11,7 +11,7 @@
 }
 .gpu-picker-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 230px), 1fr));
   gap: 8px;
   min-width: 0;
 }
@@ -112,14 +112,15 @@
 .gpu-picker-copy {
   display: grid;
   flex: 1;
-  min-width: 0;
+  /* A short name such as T4 stays whole beside its badges; a long one wraps at its spaces. */
+  min-width: min-content;
   gap: 3px;
 }
 .gpu-picker-copy strong {
   font-size: 13px;
   font-weight: 550;
   line-height: 1.35;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 .gpu-picker-copy small {
   color: var(--muted);
