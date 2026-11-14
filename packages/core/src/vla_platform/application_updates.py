@@ -191,9 +191,9 @@ class ApplicationUpdates:
                         "The application launcher is unavailable. Restart OpenJensen and retry."
                     ) from exc
             raise UpdateError(
-                "This server was started outside the OpenJensen launcher. "
-                "Restart it with jensen serve to enable built-in updates; "
-                "no update configuration is needed."
+                "This server was started without the OpenJensen launcher, so it cannot "
+                "restart into a new version. Run jensen app install once on this computer; "
+                "after that, Update works from here."
             )
         if os.name != "posix":
             raise UpdateError("Automatic updates require a managed macOS/Linux server.")

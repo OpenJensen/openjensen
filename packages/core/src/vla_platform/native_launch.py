@@ -342,6 +342,18 @@ def serve(port):
     ):
         if value := getattr(settings, field):
             launcher.env[name] = str(value.absolute())
+    if sys.platform == "darwin" and getenv("JENSEN_KEEP_AWAKE") == "1":
+        # Set by the login service (app_service): idle sleep would stop downloads and
+        # robot runs. caffeinate exits by itself when this launcher does.
+        try:
+            subprocess.Popen(
+                ["/usr/bin/caffeinate", "-i", "-w", str(os.getpid())],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        except OSError:
+            pass
     raise SystemExit(launcher.run())
 
 
