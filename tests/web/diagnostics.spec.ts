@@ -105,8 +105,12 @@ test('keeps the Spatial protocol locked and labels the selected suite', async ({
   await page.getByRole('button', { name: 'Edit diagnostic settings', exact: true }).click();
   await press(page, 'Task suite', 'libero_object');
   await page.getByRole('button', { name: 'Diagnostics', exact: true }).click();
-  await expect(mode).toBeEnabled();
-  await mode.selectOption('engine');
+  const engine = page
+    .getByRole('radiogroup', { name: 'Diagnostic mode', exact: true })
+    .locator('[data-value="engine"]');
+  await expect(engine).toBeEnabled();
+  await engine.click();
+  await expect(mode).toHaveAttribute('data-value', 'engine');
   await page.getByText('Protocol details', { exact: true }).click();
   await expect(page.getByText('Checks loading, finite actions', { exact: false })).toBeVisible();
 });
