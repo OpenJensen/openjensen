@@ -5,9 +5,11 @@ cancel installation; service shutdown cancels its whole installer process group.
 """
 
 import asyncio
+import hashlib
 import json
 import os
 import platform
+import re
 import shutil
 import signal
 import subprocess
@@ -330,6 +332,39 @@ class ModuleInstallations:
             self._save()
             self.task = asyncio.create_task(self._install(value, target, state.ready))
             return self.operation.model_copy(deep=True)
+
+    async def restore_after_update(self):
+        """Put dataset tools back when an update built this release without them.
+
+        The updater builds each release without worker environments, so a reader
+        that lived beside the previous version (the source install's
+        workers/_cpu_readers/.venv) is not here. The workspace copy installed
+        instead is found by every later release, and an outdated one is brought up
+        to this release's pins. One automatic attempt per release: Settings →
+        Modules shows its progress and offers a retry. A source checkout, where the
+        owner manages environments, is left alone.
+        """
+        try:
+            build = json.loads((self.root / ".openjensen-build.json").read_text())
+            commit = build["commit"]
+            if not isinstance(commit, str) or not re.fullmatch(r"[0-9a-f]{40}", commit):
+                return None
+            from vla_platform.modules import module_installed
+
+            if self.problem or not module_installed(self.data_dir, "datasets"):
+                return None
+            identifier = hashlib.sha256(("restore-datasets:" + commit).encode()).hexdigest()
+            if self.operation is not None and self.operation.id == identifier[:32]:
+                return None
+            self.cached.pop("datasets", None)
+            state = await asyncio.to_thread(self.inspect, "datasets")
+            if state.ready or not state.installable or state.location != "server":
+                return None
+            return await self.start(
+                InstallRequest(profile="datasets", operation_id=identifier[:32])
+            )
+        except OSError, ValueError, KeyError, TypeError:
+            return None
 
     async def _stop(self, process):
         try:

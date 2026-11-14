@@ -197,6 +197,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             except OSError, ValueError:
                 # Preserve the saved registry for repair while keeping Core available.
                 pass
+            # An updated release has no dataset reader of its own: restore one to the workspace.
+            await app.state.module_installations.restore_after_update()
             await app.state.application_updates.reconcile_companion(app.state.robot_lab.config_path)
             yield
         finally:
