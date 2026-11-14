@@ -7,6 +7,9 @@ export async function openModuleTask(page: Page) {
   });
   const back = page.getByRole('button', { name: 'Back to jobs', exact: true });
   await expect.poll(async () => (await start.isVisible()) || (await back.isVisible())).toBe(true);
+  // The page being left can still show its own Back button for a moment: give the
+  // destination's list a chance to appear before concluding a task is already open.
+  if (!(await start.isVisible())) await start.waitFor({ state: 'visible', timeout: 400 }).catch(() => undefined);
   if (await start.isVisible()) await start.click();
 }
 

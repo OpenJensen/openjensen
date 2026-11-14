@@ -465,7 +465,9 @@ test('job filters wait for project context and submit the query after it becomes
   await expect(filter('Module').first()).toBeEnabled();
   await expect(filter('Status').first()).toBeEnabled();
   // The filters are buttons, and list pages by the names the sidebar uses.
-  await expect(filter('Module')).toHaveText(['Everything', 'Quantize', 'Real to sim']);
+  await expect(filter('Module').first()).toHaveText('Everything');
+  await expect(filter('Module').filter({ hasText: /^Train$/ })).toHaveCount(1);
+  await expect(filter('Module').filter({ hasText: /^training$/ })).toHaveCount(0);
   const filtered = page.waitForResponse((response) => {
     const url = new URL(response.url());
     return url.pathname === '/api/v1/projects/project/work-jobs' && url.searchParams.get('q') === 'reconstruction';

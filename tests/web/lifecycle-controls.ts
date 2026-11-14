@@ -63,7 +63,8 @@ export async function chooseTransformationModel(
     const id = name.split(' · ').at(-1)!;
     const checkpoint = page.getByLabel('Checkpoint', { exact: true });
     async function selectCheckpoint() {
-      if ((await checkpoint.inputValue()) !== id) await checkpoint.selectOption(id);
+      // A paused form cannot be changed; it restores its saved choice by itself a moment after it appears.
+      if ((await checkpoint.inputValue()) !== id && (await checkpoint.isEnabled())) await checkpoint.selectOption(id);
       await expect(checkpoint).toHaveValue(id);
     }
     if ((await checkpoint.count()) && (await checkpoint.locator(`option[value="${id}"]`).count())) {
