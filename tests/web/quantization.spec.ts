@@ -13,18 +13,17 @@ function choice(page: Page, group: string, value: string) {
 async function expectCompute(page: Page, id: string) {
   await expect
     .poll(async () => {
-      const picker = page.getByRole('combobox', { name: 'Compute', exact: true });
-      if (await picker.count()) return (await picker.getAttribute('value')) === id;
+      const picker = page.getByRole('radiogroup', { name: 'Compute', exact: true });
+      if (await picker.count()) return (await picker.getAttribute('data-value')) === id;
       const radio = choice(page, 'Compute', id);
       return (await radio.count()) ? await radio.isChecked() : false;
     })
     .toBe(true);
 }
 async function selectCompute(page: Page, label: string) {
-  await page.getByRole('combobox', { name: 'Compute', exact: true }).click();
   await page
-    .getByRole('listbox', { name: 'Compute', exact: true })
-    .getByRole('option', { name: label, exact: true })
+    .getByRole('radiogroup', { name: 'Compute', exact: true })
+    .getByRole('radio', { name: label, exact: true })
     .click();
 }
 
@@ -837,7 +836,7 @@ test('quantization uses one compute picker and preserves compression and checkpo
   );
   await page.getByRole('link', { name: 'Quantize', exact: true }).click();
   await chooseTransformationModel(page, 'quantization', 'Choose LoRA checkpoint · recent-100');
-  await expect(page.getByRole('combobox', { name: 'Compute', exact: true })).toBeVisible();
+  await expect(page.getByRole('radiogroup', { name: 'Compute', exact: true })).toBeVisible();
   await expect(page.getByRole('group', { name: 'Compute', exact: true })).toHaveCount(0);
   const memory = page.getByRole('region', { name: 'Estimated quantization memory', exact: true });
   await expect(memory).toContainText('≈ 4 GiB');
@@ -853,12 +852,11 @@ test('quantization uses one compute picker and preserves compression and checkpo
   await expect(
     page.getByText('This policy is stored on Google Cloud. Choose a cloud target.', { exact: true }),
   ).toBeVisible();
-  await page.getByRole('combobox', { name: 'Compute', exact: true }).click();
-  const menu = page.getByRole('listbox', { name: 'Compute', exact: true });
-  await expect(menu.getByRole('option')).toHaveCount(4);
-  await expect(menu.getByRole('option', { name: 'Local CPU', exact: true })).toBeVisible();
-  await expect(menu.getByRole('option', { name: 'A100', exact: true })).toContainText('80 GB');
-  await menu.getByRole('option', { name: 'A100', exact: true }).click();
+  const menu = page.getByRole('radiogroup', { name: 'Compute', exact: true });
+  await expect(menu.getByRole('radio')).toHaveCount(4);
+  await expect(menu.getByRole('radio', { name: 'Local CPU', exact: true })).toBeVisible();
+  await expect(menu.getByRole('radio', { name: 'A100', exact: true })).toContainText('80 GB');
+  await menu.getByRole('radio', { name: 'A100', exact: true }).click();
   await expectSelectedPolicy(page, 'recent-20');
   await expect(choice(page, 'Language compression', 'Q4_0')).toBeChecked();
   await expect(choice(page, 'Vision compression', 'Q8_0')).toBeChecked();

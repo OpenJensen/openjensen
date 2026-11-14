@@ -1,4 +1,5 @@
 import type { Preferences } from '@/lib/workflow-preferences';
+import { Segmented } from './ui/choice';
 
 /** Project defaults for compression, evaluation and training used by later workflow runs. */
 export function WorkflowSettingsForm({
@@ -18,13 +19,19 @@ export function WorkflowSettingsForm({
     <fieldset className="workflow-fields workflow-controls" disabled={!ready}>
       <legend className="visually-hidden">Project workflow settings</legend>
       <h2>Compression defaults</h2>
-      <label>
-        Quantization recipe
-        <select value={language} onChange={(e) => update('precision', e.target.value as Preferences['precision'])}>
-          <option value="Q4_0">LM Q4 (experimental)</option>
-          <option value="Q8_0">LM Q8</option>
-        </select>
-      </label>
+      <div className="choice-field">
+        <span>Quantization recipe</span>
+        <Segmented
+          label="Quantization recipe"
+          value={language}
+          disabled={!ready}
+          onChange={(value) => update('precision', value)}
+          options={[
+            { value: 'Q8_0', label: 'LM Q8' },
+            { value: 'Q4_0', label: 'LM Q4 (experimental)' },
+          ]}
+        />
+      </div>
       <label className="workflow-check">
         <input
           type="checkbox"
@@ -38,18 +45,21 @@ export function WorkflowSettingsForm({
         Also quantize vision to Q8 (experimental)
       </label>
       <h2>Evaluation</h2>
-      <label>
-        Task suite
-        <select
+      <div className="choice-field">
+        <span>Task suite</span>
+        <Segmented
+          label="Task suite"
           value={preferences.suite}
-          onChange={(e) => {
-            if (ready) onSuite(e.target.value as Preferences['suite']);
+          disabled={!ready}
+          onChange={(value) => {
+            if (ready) onSuite(value);
           }}
-        >
-          <option value="libero_object">LIBERO Object (legacy policy)</option>
-          <option value="libero_spatial">LIBERO Spatial (pinned SmolVLA policy)</option>
-        </select>
-      </label>
+          options={[
+            { value: 'libero_object', label: 'LIBERO Object (legacy policy)' },
+            { value: 'libero_spatial', label: 'LIBERO Spatial (pinned SmolVLA policy)' },
+          ]}
+        />
+      </div>
       {preferences.suite === 'libero_spatial' && (
         <>
           <label>
@@ -86,17 +96,19 @@ export function WorkflowSettingsForm({
           </label>
         </>
       )}
-      <label>
-        Protocol
-        <select
+      <div className="choice-field">
+        <span>Protocol</span>
+        <Segmented
+          label="Protocol"
           value={preferences.mode}
-          disabled={preferences.suite === 'libero_spatial'}
-          onChange={(e) => update('mode', e.target.value as Preferences['mode'])}
-        >
-          <option value="engine">Engine diagnostics</option>
-          <option value="libero">Paired LIBERO episodes</option>
-        </select>
-      </label>
+          disabled={!ready || preferences.suite === 'libero_spatial'}
+          onChange={(value) => update('mode', value)}
+          options={[
+            { value: 'engine', label: 'Engine diagnostics' },
+            { value: 'libero', label: 'Paired LIBERO episodes' },
+          ]}
+        />
+      </div>
       <label>
         Timed predictions
         <input

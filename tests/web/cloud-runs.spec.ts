@@ -29,6 +29,10 @@ async function openCloud(page: Page) {
   await expect(page.getByRole('heading', { name: 'External observations' })).toBeVisible();
 }
 
+const jobs = (page: Page) => page.getByRole('radiogroup', { name: 'Application cloud job', exact: true });
+const cloudRun = (page: Page, id: string) =>
+  page.getByRole('radiogroup', { name: 'Cloud run', exact: true }).locator(`[data-value="${id}"]`);
+
 test('cloud monitor is disabled by default and never launches a job', async ({ page, request }) => {
   // Read the real test application, not an invented enabled response.
   expect((await (await request.get('/api/v1/cloud-runs')).json()).enabled).toBe(false);
@@ -71,7 +75,7 @@ test('cloud log switching preserves explicit outcomes and safely displays bounde
   await expect(page.getByText('Calibration', { exact: true }).locator('..')).toContainText('unverified');
   await page.getByRole('button', { name: 'VLA logs', exact: true }).click();
   await expect(page.getByRole('region', { name: 'VLA log tail' })).toHaveText('VLA first fixture');
-  await page.getByLabel('Cloud run', { exact: true }).selectOption('second');
+  await cloudRun(page, 'second').click();
   await expect(page.getByRole('region', { name: 'VLA log tail' })).toHaveText('x'.repeat(48 * 1024));
   await expect(page.getByText('Stale or unavailable observation', { exact: true })).toBeVisible();
   await expect(page.locator('.cloud-runs').getByRole('alert')).toContainText('Synthetic remote collection failure');
@@ -82,7 +86,7 @@ test('cloud log switching preserves explicit outcomes and safely displays bounde
     content: document.documentElement.scrollWidth,
   }));
   expect(width.content).toBeLessThanOrEqual(width.viewport + 1);
-  await page.getByLabel('Cloud run', { exact: true }).selectOption('recent-error');
+  await cloudRun(page, 'recent-error').click();
   await expect(page.getByText('Last observation (refresh failed)', { exact: true })).toBeVisible();
 });
 
@@ -223,13 +227,14 @@ async function managedWorkspace(page: Page) {
 test('managed cloud jobs use persisted targets and open the exact training run', async ({ page }) => {
   const { posts } = await managedWorkspace(page);
   await expect(page.getByRole('heading', { name: 'Jobs' })).toBeVisible();
-  await expect(page.getByLabel('Application cloud job', { exact: true })).toHaveValue('cloud-finished');
-  await expect(page.getByLabel('Application cloud job', { exact: true }).locator('option')).toHaveCount(2);
+  // Every cloud job is listed by what it was and how it ended; none hides in a dropdown.
+  await expect(jobs(page).getByRole('radio', { checked: true })).toHaveAttribute('data-value', 'cloud-finished');
+  await expect(jobs(page).getByRole('radio')).toHaveCount(2);
   await expect(page.getByRole('region', { name: 'Application job event log' })).toContainText(
     'Recorded cloud-finished',
   );
   await expect(page.getByText('External rollout monitoring is not configured.', { exact: false })).toBeVisible();
-  await page.getByLabel('Application cloud job', { exact: true }).selectOption('cloud-old-failed');
+  await jobs(page).locator('[data-value="cloud-old-failed"]').click();
   await expect(page.getByRole('region', { name: 'Application job event log' })).toContainText(
     'Recorded cloud-old-failed',
   );
@@ -256,7 +261,7 @@ test('cloud observation failure and project switch cannot show another projects 
   await expect(page.getByRole('button', { name: 'Open training job' })).toBeDisabled();
   state.eventsOffline = false;
   await selectProject(page, 'beta');
-  await expect(page.getByLabel('Application cloud job', { exact: true })).toHaveValue('beta-cloud');
+  await expect(jobs(page).getByRole('radio', { checked: true })).toHaveAttribute('data-value', 'beta-cloud');
   await expect(page.getByRole('region', { name: 'Application job event log' })).toContainText('Recorded beta-cloud');
   await expect(page.getByRole('region', { name: 'Application job event log' })).not.toContainText('cloud-finished');
   expect(posts).toEqual([]);

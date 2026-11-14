@@ -388,7 +388,9 @@ test('verified native record exposes fixed video/download paths without claiming
   await expect(page.getByText(/The recorded video is unavailable/)).toBeVisible();
   await expect(page.getByText('Execution completed. Cup pickup was not scored.')).toBeVisible();
   await page.getByRole('link', { name: 'Cloud runs', exact: true }).click();
-  await expect(page.getByLabel('Application cloud job', { exact: true })).toHaveValue('done');
+  await expect(
+    page.getByRole('radiogroup', { name: 'Application cloud job', exact: true }).getByRole('radio', { checked: true }),
+  ).toHaveAttribute('data-value', 'done');
   await expect(page.getByText('Execution target', { exact: true }).locator('..')).toContainText('L4 + H100');
   await page.getByRole('button', { name: 'Open simulation job' }).click();
   await expect(page.getByRole('article', { name: 'Native simulation job details' })).toHaveAttribute(
@@ -462,9 +464,13 @@ test('native and Cloud event views display bounded observed worker states as the
   );
   state.tasks = { isaac: 'UNRECOGNIZED_STATUS', vla: 'arbitrary-not-a-worker-state' };
   await page.getByRole('button', { name: 'Refresh application jobs' }).click();
-  await expect(page.getByRole('region', { name: 'Application job event log', exact: true })).toHaveText(
-    `${timestamp} · simulation · Generated event for observed`,
-  );
+  // A state the application does not recognise is never shown as if a worker had reported it.
+  const log = page.getByRole('region', { name: 'Application job event log', exact: true });
+  await expect(log.getByRole('listitem')).toHaveCount(1);
+  await expect(log).toContainText('Generated event for observed');
+  await expect(log).toContainText('simulation');
+  await expect(log).not.toContainText('Isaac:');
+  await expect(log).not.toContainText('UNRECOGNIZED_STATUS');
   expect(state.posts).toHaveLength(0);
 });
 
