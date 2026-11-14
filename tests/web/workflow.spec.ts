@@ -62,10 +62,9 @@ class WorkflowPage {
       'browser-slow': 'slow fixture',
       'browser-failure': 'Synthetic failure fixture',
     };
-    const compute = this.page.getByRole('combobox', { name: 'Compute', exact: true });
-    await compute.click();
-    await this.page.getByRole('option', { name: runtimeLabels[runtime], exact: true }).click();
-    await expect(compute).toHaveAttribute('value', runtime);
+    const compute = this.page.getByRole('radiogroup', { name: 'Compute', exact: true });
+    await compute.getByRole('radio', { name: runtimeLabels[runtime], exact: true }).click();
+    await expect(compute).toHaveAttribute('data-value', runtime);
     await expect(selectedQuantizationModel(this.page)).toHaveValue(this.modelId);
     const created = this.page.waitForResponse(
       (response) => response.url().endsWith('/policy-jobs') && response.request().method() === 'POST',

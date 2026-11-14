@@ -584,26 +584,24 @@ const trainingRuntimes: Record<string, any>[] = [
 
 function gpuOption(page: Page, value: string, label = value) {
   const option = page
-    .getByRole('listbox', { name: 'GPU', exact: true })
-    .getByRole('option', { name: value === 'A100-80GB' ? 'A100' : label, exact: true });
+    .getByRole('radiogroup', { name: 'GPU', exact: true })
+    .getByRole('radio', { name: value === 'A100-80GB' ? 'A100' : label, exact: true });
   return value === 'A100' || value === 'A100-80GB'
     ? option.filter({ hasText: value === 'A100' ? '40 GB' : '80 GB' })
     : option;
 }
 
 async function chooseGpu(page: Page, value: string, label = value) {
-  const picker = page.getByRole('combobox', { name: 'GPU', exact: true });
-  await picker.click();
+  const picker = page.getByRole('radiogroup', { name: 'GPU', exact: true });
   await gpuOption(page, value, label).click();
-  await expect(picker).toHaveAttribute('value', value);
+  await expect(picker).toHaveAttribute('data-value', value);
 }
 
+// Every GPU is on the page at once; nothing has to be opened to see them.
 async function expectGpuChoices(page: Page, labels: string[]) {
-  await page.getByRole('combobox', { name: 'GPU', exact: true }).click();
-  const list = page.getByRole('listbox', { name: 'GPU', exact: true });
-  await expect(list.getByRole('option')).toHaveCount(labels.length);
+  const list = page.getByRole('radiogroup', { name: 'GPU', exact: true });
+  await expect(list.getByRole('radio')).toHaveCount(labels.length);
   for (const label of labels) await expect(gpuOption(page, label)).toBeVisible();
-  await page.keyboard.press('Escape');
 }
 
 function trainingDataset(id: string, repo: string, camera = 'front', created = trainingTimestamp) {
@@ -1076,7 +1074,7 @@ test('training choices submit both selected cameras, pinned model, method and GP
   await expect(page.getByRole('radio', { name: 'LoRA', exact: true })).toBeChecked();
   await page.getByRole('radio', { name: 'QLoRA', exact: true }).locator('..').click();
   await page.getByRole('button', { name: 'Next', exact: true }).click();
-  const compute = page.getByRole('combobox', { name: 'GPU', exact: true });
+  const compute = page.getByRole('radiogroup', { name: 'GPU', exact: true });
   await expectGpuChoices(page, ['L4', 'T4', 'A100', 'A100-80GB']);
   await chooseGpu(page, 'L4');
   await page
@@ -1240,12 +1238,12 @@ test('training honors the configured model recipe and its eligible runtime IDs',
   await expect(page.getByRole('radio', { name: 'LoRA', exact: true })).toBeChecked();
   await expect(page.getByRole('radio', { name: 'QLoRA', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Next', exact: true }).click();
-  const gpu = page.getByRole('combobox', { name: 'GPU', exact: true });
+  const gpu = page.getByRole('radiogroup', { name: 'GPU', exact: true });
   await chooseGpu(page, 'L4');
   await expect(page.getByRole('button', { name: 'Start training', exact: true })).toBeDisabled();
-  await expect(gpu).toHaveAttribute('value', 'L4');
+  await expect(gpu).toHaveAttribute('data-value', 'L4');
   await chooseGpu(page, 'A100');
-  await expect(gpu).toHaveAttribute('value', 'A100');
+  await expect(gpu).toHaveAttribute('data-value', 'A100');
   await page.getByRole('button', { name: 'Start training', exact: true }).click();
   await expect.poll(() => submitted.length).toBe(1);
   expect(submitted[0]).toMatchObject({
@@ -1271,7 +1269,7 @@ test('training cannot start when no CUDA training runtime is configured', async 
   await page.getByRole('button', { name: 'Next', exact: true }).click();
   await expectGpuChoices(page, ['L4', 'T4', 'A100', 'A100-80GB']);
   await chooseGpu(page, 'T4');
-  await expect(page.getByRole('combobox', { name: 'GPU', exact: true })).toHaveAttribute('value', 'T4');
+  await expect(page.getByRole('radiogroup', { name: 'GPU', exact: true })).toHaveAttribute('data-value', 'T4');
   await expect(page.getByRole('button', { name: 'Start training', exact: true })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Connect account', exact: true })).toBeVisible();
   await expectNoPageOverflow(page);
@@ -1300,12 +1298,11 @@ test('training cards and step navigation work from the keyboard at 320px', async
   await steps.getByRole('button', { name: 'Compute', exact: true }).focus();
   await page.keyboard.press('Enter');
   await expect(page.getByRole('heading', { name: 'Compute', level: 2, exact: true })).toBeFocused();
-  const runtime = page.getByRole('combobox', { name: 'GPU', exact: true });
-  await runtime.focus();
-  await expect(runtime).toBeFocused();
-  // Playwright's native picker API is portable across desktop/mobile OS menus.
+  const runtime = page.getByRole('radiogroup', { name: 'GPU', exact: true });
+  await runtime.getByRole('radio', { checked: true }).focus();
+  await expect(runtime.getByRole('radio', { checked: true })).toBeFocused();
   await chooseGpu(page, 'T4');
-  await expect(runtime).toHaveAttribute('value', 'T4');
+  await expect(runtime).toHaveAttribute('data-value', 'T4');
   await page
     .locator('summary')
     .filter({ hasText: /^Advanced settings/ })
@@ -1356,17 +1353,17 @@ test('resuming an interrupted run keeps its original dataset, method and trainin
 });
 
 for (const gpu of ['L4', 'T4', 'A100']) {
-  test(`simple GPU dropdown sends the exact ${gpu} selection with Kite UI defaults`, async ({ page }, testInfo) => {
+  test(`the GPU choice sends the exact ${gpu} selection with Kite UI defaults`, async ({ page }, testInfo) => {
     const { submitted, unexpectedRequests } = await mockTrainingWorkspace(page);
     await page
       .getByRole('navigation', { name: 'Training setup' })
       .getByRole('button', { name: 'Compute', exact: true })
       .click();
     const form = page.locator('.training-workspace');
-    const select = form.getByRole('combobox', { name: 'GPU', exact: true });
+    const select = form.getByRole('radiogroup', { name: 'GPU', exact: true });
     await expectGpuChoices(page, ['L4', 'T4', 'A100', 'A100-80GB']);
     await chooseGpu(page, gpu);
-    await expect(select).toHaveAttribute('value', gpu);
+    await expect(select).toHaveAttribute('data-value', gpu);
     await expect(form.getByRole('radio', { name: /Google Cloud|Local machine/ })).toHaveCount(0);
     await expect(form.getByText(/SkyPilot|GiB|1 GPU per run/)).toHaveCount(0);
     await expect(form.getByRole('button', { name: 'Refresh', exact: true })).toHaveCount(0);
@@ -1381,12 +1378,9 @@ for (const gpu of ['L4', 'T4', 'A100']) {
     await expect(form.getByRole('spinbutton', { name: 'Learning rate', exact: true })).toHaveValue('0.0001');
     await expectNoPageOverflow(page);
     if (gpu === 'A100') {
-      await select.click();
-      await expect(page.getByRole('listbox', { name: 'GPU', exact: true })).toBeVisible();
-      const screenshot = testInfo.outputPath('training-compute-dropdown.png');
+      const screenshot = testInfo.outputPath('training-compute-choices.png');
       await page.screenshot({ path: screenshot, fullPage: true });
-      await testInfo.attach('training-compute-dropdown', { path: screenshot, contentType: 'image/png' });
-      await page.keyboard.press('Escape');
+      await testInfo.attach('training-compute-choices', { path: screenshot, contentType: 'image/png' });
     }
     await form.getByRole('button', { name: 'Start training', exact: true }).click();
     await expect.poll(() => submitted.length).toBe(1);
@@ -1411,7 +1405,7 @@ test('a saved account starts training in one click while setup happens in the qu
     .getByRole('button', { name: 'Compute', exact: true })
     .click();
   const form = page.locator('.training-workspace');
-  const picker = form.getByRole('combobox', { name: 'GPU', exact: true });
+  const picker = form.getByRole('radiogroup', { name: 'GPU', exact: true });
   await chooseGpu(page, 'L4');
   await expect(form.getByRole('button', { name: /Prepare|Check SkyPilot|Connect account/ })).toHaveCount(0);
   await expect(form.getByText(/SkyPilot|setup commands|gcloud auth/i)).toHaveCount(0);
@@ -1462,33 +1456,31 @@ test('an unavailable selected GPU remains selected and never falls back to a rea
     .getByRole('navigation', { name: 'Training setup' })
     .getByRole('button', { name: 'Compute', exact: true })
     .click();
-  const gpu = page.getByRole('combobox', { name: 'GPU', exact: true });
+  const gpu = page.getByRole('radiogroup', { name: 'GPU', exact: true });
   await expect(page.getByRole('button', { name: 'Start training', exact: true })).toBeEnabled();
   await chooseGpu(page, 'T4');
-  await expect(gpu).toHaveAttribute('value', 'T4');
+  await expect(gpu).toHaveAttribute('data-value', 'T4');
   await expect(page.getByRole('button', { name: 'Start training', exact: true })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Connect account', exact: true })).toHaveCount(0);
   await expect(page.locator('.training-workspace').getByText('Mock GPU setup required', { exact: true })).toHaveCount(
     0,
   );
   await chooseGpu(page, 'L4');
-  await expect(gpu).toHaveAttribute('value', 'L4');
+  await expect(gpu).toHaveAttribute('data-value', 'L4');
   await expect(page.getByRole('button', { name: 'Start training', exact: true })).toBeEnabled();
   expect(submitted).toEqual([]);
   expect(unexpectedRequests).toEqual([]);
 });
 
-test('local GPUs stay out of the dropdown until local runs are explicitly enabled', async ({ page }) => {
+test('local GPUs are not offered until local runs are explicitly enabled', async ({ page }) => {
   const { submitted, unexpectedRequests } = await mockTrainingWorkspace(page);
   await page
     .getByRole('navigation', { name: 'Training setup' })
     .getByRole('button', { name: 'Compute', exact: true })
     .click();
-  const gpu = page.getByRole('combobox', { name: 'GPU', exact: true });
+  const gpu = page.getByRole('radiogroup', { name: 'GPU', exact: true });
   await expectGpuChoices(page, ['L4', 'T4', 'A100', 'A100-80GB']);
-  await gpu.click();
-  await expect(page.getByRole('listbox').getByRole('option', { name: /RTX/ })).toHaveCount(0);
-  await page.keyboard.press('Escape');
+  await expect(gpu.getByRole('radio', { name: /RTX/ })).toHaveCount(0);
   await expect(page.getByText('Local runs disabled', { exact: true })).toHaveCount(0);
   expect(submitted).toEqual([]);
   expect(unexpectedRequests).toEqual([]);
@@ -1502,10 +1494,10 @@ test('an explicitly enabled local GPU can be selected without adding provider co
     .getByRole('navigation', { name: 'Training setup' })
     .getByRole('button', { name: 'Compute', exact: true })
     .click();
-  const gpu = page.getByRole('combobox', { name: 'GPU', exact: true });
+  const gpu = page.getByRole('radiogroup', { name: 'GPU', exact: true });
   await expectGpuChoices(page, ['L4', 'T4', 'A100', 'A100-80GB', 'RTX 4060 workstation', 'RTX 4090 workstation']);
   await chooseGpu(page, 'gpu-4090', 'RTX 4090 workstation');
-  await expect(gpu).toHaveAttribute('value', 'gpu-4090');
+  await expect(gpu).toHaveAttribute('data-value', 'gpu-4090');
   await page.getByRole('button', { name: 'Start training', exact: true }).click();
   await expect.poll(() => submitted.length).toBe(1);
   expect(submitted[0].runtime_id).toBe('gpu-4090');
@@ -1775,7 +1767,7 @@ test('visiting compute settings preserves the draft through the jobs-first entry
     .getByRole('button', { name: 'Compute', exact: true })
     .click();
   await expect(page.getByRole('heading', { name: 'Compute', level: 2, exact: true })).toBeVisible();
-  await expect(page.getByRole('combobox', { name: 'GPU', exact: true })).toHaveAttribute('value', 'T4');
+  await expect(page.getByRole('radiogroup', { name: 'GPU', exact: true })).toHaveAttribute('data-value', 'T4');
   await page
     .locator('summary')
     .filter({ hasText: /^Advanced settings/ })

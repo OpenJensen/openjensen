@@ -105,59 +105,47 @@ async function openGpuPicker(page: Page, local = false) {
     .getByRole('navigation', { name: 'Training setup' })
     .getByRole('button', { name: 'Compute', exact: true })
     .click();
-  const picker = page.getByRole('combobox', { name: 'GPU', exact: true });
+  const picker = page.getByRole('radiogroup', { name: 'GPU', exact: true });
   await expect(picker).toBeVisible();
-  await expect(picker).toHaveAttribute('value', 'A100');
+  await expect(picker).toHaveAttribute('data-value', 'A100');
   return { picker, writes, unexpected };
 }
 
-test('GPU picker supports keyboard navigation, explicit selection and Escape without submitting', async ({ page }) => {
+const gpuCard = (page: Page, name: string, memory?: string) => {
+  const card = page.getByRole('radiogroup', { name: 'GPU', exact: true }).getByRole('radio', { name, exact: true });
+  return memory ? card.filter({ hasText: memory }) : card;
+};
+
+test('every GPU is on the page and a click or a key press chooses it, without submitting', async ({ page }) => {
   const { picker, writes, unexpected } = await openGpuPicker(page);
-  await picker.focus();
-  await page.keyboard.press('ArrowDown');
-  const menu = page.getByRole('listbox', { name: 'GPU', exact: true });
-  await expect(menu).toBeVisible();
-  await expect(menu.getByRole('option')).toHaveCount(4);
-  await expect(menu.getByRole('option', { name: 'A100', exact: true }).filter({ hasText: '40 GB' })).toHaveAttribute(
-    'aria-selected',
-    'true',
-  );
-  await page.keyboard.press('Home');
-  await expect(picker).toHaveAttribute(
-    'aria-activedescendant',
-    (await menu.getByRole('option', { name: 'L4', exact: true }).getAttribute('id'))!,
-  );
-  await expect(picker).toHaveAttribute('value', 'A100');
-  await page.keyboard.press('ArrowDown');
-  await expect(picker).toHaveAttribute(
-    'aria-activedescendant',
-    (await menu.getByRole('option', { name: 'T4', exact: true }).getAttribute('id'))!,
-  );
-  await page.keyboard.press('ArrowUp');
-  await page.keyboard.press('End');
-  await expect(picker).toHaveAttribute(
-    'aria-activedescendant',
-    (await menu.getByRole('option', { name: 'A100', exact: true }).filter({ hasText: '80 GB' }).getAttribute('id'))!,
-  );
-  await page.keyboard.press('Home');
+  // Nothing has to be opened: there is no dropdown to find the choices in.
+  await expect(page.getByRole('combobox', { name: 'GPU' })).toHaveCount(0);
+  await expect(page.getByRole('listbox')).toHaveCount(0);
+  await expect(picker.getByRole('radio')).toHaveCount(4);
+  await expect(gpuCard(page, 'A100', '40 GB')).toHaveAttribute('aria-checked', 'true');
+  await expect(picker.getByRole('radio', { checked: true })).toHaveCount(1);
+  await gpuCard(page, 'T4').click();
+  await expect(picker).toHaveAttribute('data-value', 'T4');
+  await expect(gpuCard(page, 'T4')).toHaveAttribute('aria-checked', 'true');
+  // From the keyboard each card is one Tab stop and Enter or Space chooses it.
+  await gpuCard(page, 'L4').focus();
   await page.keyboard.press('Enter');
-  await expect(menu).toHaveCount(0);
-  await expect(picker).toHaveAttribute('value', 'L4');
-  await expect(picker).toBeFocused();
+  await expect(picker).toHaveAttribute('data-value', 'L4');
+  await page.keyboard.press('Tab');
+  await expect(gpuCard(page, 'T4')).toBeFocused();
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Tab');
+  await expect(gpuCard(page, 'A100', '80 GB')).toBeFocused();
   await page.keyboard.press('Space');
-  await page.keyboard.press('ArrowDown');
-  await page.keyboard.press('Escape');
-  await expect(menu).toHaveCount(0);
-  await expect(picker).toHaveAttribute('value', 'L4');
-  await expect(picker).toBeFocused();
+  await expect(picker).toHaveAttribute('data-value', 'A100-80GB');
+  await expect(picker.getByRole('radio', { checked: true })).toHaveCount(1);
   expect(writes).toEqual([]);
   expect(unexpected).toEqual([]);
 });
 
 test('changing to a large model removes undersized GPUs and clears the previous T4 selection', async ({ page }) => {
   const { picker, writes, unexpected } = await openGpuPicker(page, true);
-  await picker.click();
-  await page.getByRole('option', { name: 'T4', exact: true }).click();
+  await gpuCard(page, 'T4').click();
   const setup = page.getByRole('navigation', { name: 'Training setup' });
   await setup.getByRole('button', { name: 'Model', exact: true }).click();
   await chooseOnlyModel(page, 'π₀.₅');
@@ -165,12 +153,9 @@ test('changing to a large model removes undersized GPUs and clears the previous 
     page.getByRole('checkbox', { name: 'π₀.₅', exact: true }).locator('..').locator('.training-model-memory strong'),
   ).toHaveText('40 GB+');
   await setup.getByRole('button', { name: 'Compute', exact: true }).click();
-  await expect(picker).toHaveAttribute('value', 'A100');
-  await picker.click();
-  const menu = page.getByRole('listbox', { name: 'GPU', exact: true });
-  await expect(menu.getByRole('option')).toHaveCount(2);
-  await expect(menu.getByRole('option', { name: 'A100', exact: true }).filter({ hasText: '40 GB' })).toBeVisible();
-  await page.keyboard.press('Escape');
+  await expect(picker).toHaveAttribute('data-value', 'A100');
+  await expect(picker.getByRole('radio')).toHaveCount(2);
+  await expect(gpuCard(page, 'A100', '40 GB')).toBeVisible();
   await page
     .locator('summary')
     .filter({ hasText: /^Advanced settings/ })
@@ -197,60 +182,32 @@ test('changing to a large model removes undersized GPUs and clears the previous 
   expect(unexpected).toEqual([]);
 });
 
-test('GPU picker supports pointer choice, typeahead, Tab and outside dismissal', async ({ page }) => {
-  const { picker, writes, unexpected } = await openGpuPicker(page);
-  await picker.click();
-  await page.getByRole('option', { name: 'T4', exact: true }).click();
-  await expect(picker).toHaveAttribute('value', 'T4');
-  await expect(picker).toBeFocused();
-  await page.keyboard.press('l');
-  await page.keyboard.press('Enter');
-  await expect(picker).toHaveAttribute('value', 'L4');
-  await picker.click();
-  await page.keyboard.press('End');
-  await page.keyboard.press('Tab');
-  await expect(page.getByRole('listbox')).toHaveCount(0);
-  await expect(picker).toHaveAttribute('value', 'L4');
-  await expect(picker).not.toBeFocused();
-  await picker.click();
-  // The menu can flip above and cover the section heading on mobile.
-  await page.locator('body').click({ position: { x: 2, y: 2 } });
-  await expect(page.getByRole('listbox')).toHaveCount(0);
-  await expect(picker).toHaveAttribute('value', 'L4');
-  expect(writes).toEqual([]);
-  expect(unexpected).toEqual([]);
-});
-
 for (const theme of ['Light', 'Dark']) {
-  test(`GPU picker menu fits 320px and shows memory badges in ${theme.toLowerCase()} mode`, async ({
-    page,
-  }, testInfo) => {
+  test(`GPU cards fit 320px and show their memory in ${theme.toLowerCase()} mode`, async ({ page }, testInfo) => {
     await page.setViewportSize({ width: 320, height: 740 });
     const { picker, writes, unexpected } = await openGpuPicker(page, true);
     await page.getByRole('button', { name: theme, exact: true }).click();
-    await picker.click();
-    const menu = page.getByRole('listbox', { name: 'GPU', exact: true });
-    await expect(menu.getByRole('option')).toHaveCount(5);
+    await expect(picker.getByRole('radio')).toHaveCount(5);
     for (const [gpu, memory] of [
       ['L4', '24 GB'],
       ['T4', '16 GB'],
       ['A100', '40 GB'],
     ]) {
-      await expect(
-        menu.getByRole('option', { name: gpu, exact: true }).filter({ hasText: memory }).locator('.gpu-picker-memory'),
-      ).toHaveText(memory);
+      await expect(gpuCard(page, gpu, memory).locator('.gpu-picker-memory')).toHaveText(memory);
     }
-    const bounds = await menu.boundingBox();
-    expect(bounds).not.toBeNull();
-    expect(bounds!.x).toBeGreaterThanOrEqual(0);
-    expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(320);
+    for (const card of await picker.getByRole('radio').all()) {
+      const bounds = await card.boundingBox();
+      expect(bounds).not.toBeNull();
+      expect(bounds!.x).toBeGreaterThanOrEqual(0);
+      expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(320);
+    }
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
     const screenshot = testInfo.outputPath(`gpu-picker-${theme.toLowerCase()}-320.png`);
     await page.screenshot({ path: screenshot, fullPage: true });
     await testInfo.attach(`gpu-picker-${theme.toLowerCase()}-320`, { path: screenshot, contentType: 'image/png' });
-    await menu.getByRole('option', { name: 'Robotics lab RTX 4060', exact: true }).click();
-    await expect(picker).toHaveAttribute('value', 'local-4060');
-    await expect(picker).toContainText('Robotics lab RTX 4060');
+    await gpuCard(page, 'Robotics lab RTX 4060').click();
+    await expect(picker).toHaveAttribute('data-value', 'local-4060');
+    await expect(picker.getByRole('radio', { checked: true })).toContainText('Robotics lab RTX 4060');
     expect(writes).toEqual([]);
     expect(unexpected).toEqual([]);
   });

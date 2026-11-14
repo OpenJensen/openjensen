@@ -875,6 +875,25 @@ test('a failed run is set up again with its dataset and model, leaving only wher
   expect(unexpected).toEqual([]);
 });
 
+test('the GPU the recipe fits best is marked on its card, whichever one is chosen', async ({ page }) => {
+  const { monitor, submitted, unexpected } = await workspace(page, 'failed');
+  await monitor.getByRole('button', { name: 'Train again', exact: true }).click();
+  const picker = page.getByRole('radiogroup', { name: 'GPU', exact: true });
+  const advice = page.locator('.training-memory-estimate small').filter({ hasText: 'Suggested GPU: ' });
+  const suggested = ((await advice.textContent()) ?? '').replace('Suggested GPU: ', '').trim();
+  const marked = picker.getByRole('radio').filter({ hasText: 'Suggested' });
+  await expect(marked).toHaveCount(1);
+  await expect(marked).toHaveAttribute('data-value', suggested);
+  // The mark is advice, not a selection: choosing another card leaves it where it is.
+  const other = picker.getByRole('radio', { checked: false }).filter({ hasNotText: 'Suggested' }).first();
+  const chosen = await other.getAttribute('data-value');
+  await other.click();
+  await expect(picker).toHaveAttribute('data-value', chosen!);
+  await expect(marked).toHaveAttribute('data-value', suggested);
+  expect(submitted).toEqual([]);
+  expect(unexpected).toEqual([]);
+});
+
 test('can cancel an active run and preserves its last recorded progress', async ({ page }) => {
   const { monitor, cancelled, unexpected } = await workspace(page);
   await monitor.getByRole('button', { name: 'Cancel run' }).click();
@@ -3209,11 +3228,10 @@ test('native SmolVLA selects the 80 GB target with grouped settings and centered
   await chooseOnlyModel(page, 'SmolVLA');
   await page.getByRole('group', { name: 'Training method', exact: true }).locator('input[value="full"]').check();
   await setup.getByRole('button', { name: 'Compute', exact: true }).click();
-  const gpu = page.getByRole('combobox', { name: 'GPU', exact: true });
-  await gpu.click();
-  await expect(page.getByRole('option', { name: /T4/ })).toHaveCount(0);
-  await page.getByRole('option', { name: 'A100', exact: true }).filter({ hasText: '80 GB' }).click();
-  await expect(gpu).toContainText('80 GB');
+  const gpu = page.getByRole('radiogroup', { name: 'GPU', exact: true });
+  await expect(gpu.getByRole('radio', { name: /T4/ })).toHaveCount(0);
+  await gpu.getByRole('radio', { name: 'A100', exact: true }).filter({ hasText: '80 GB' }).click();
+  await expect(gpu.getByRole('radio', { checked: true })).toContainText('80 GB');
   await page
     .locator('summary')
     .filter({ hasText: /^Advanced settings/ })
@@ -3420,8 +3438,10 @@ test('ACT can explicitly select this Mac and submit its bounded local recipe', a
   await steps.getByRole('button', { name: 'Model', exact: true }).click();
   await chooseOnlyModel(page, 'ACT');
   await steps.getByRole('button', { name: 'Compute', exact: true }).click();
-  await page.getByRole('combobox', { name: 'GPU', exact: true }).click();
-  await page.getByRole('option', { name: 'This Mac · Apple GPU', exact: false }).click();
+  await page
+    .getByRole('radiogroup', { name: 'GPU', exact: true })
+    .getByRole('radio', { name: 'This Mac · Apple GPU', exact: false })
+    .click();
   const review = page.getByRole('region', { name: 'Training recipe review' });
   await expect(review).toContainText('batch 1');
   await expect(review).toContainText('Predict 32 · execute 8');

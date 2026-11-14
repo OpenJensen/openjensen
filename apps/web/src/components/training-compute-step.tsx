@@ -61,6 +61,24 @@ export function TrainingComputeStep({
     update,
     updateTiming,
   } = panel;
+  // With one model the recipe has one best fit; its card in the GPU choice says so.
+  const suggestedGpu = (() => {
+    if (resumeId || selectedModels.length !== 1 || runtime?.device === 'mps') return null;
+    const item = selectedModels[0];
+    const family = temporalFamily(item.id);
+    const draft = family ? (temporalDrafts[family] ?? defaultTemporal(family)) : null;
+    const modelTiming = family ? (draft?.enabled ? draft : defaultTemporal(family)) : null;
+    return (
+      trainingMemory(
+        item,
+        methodFor(item),
+        batchFor(item),
+        activeCameraKeys,
+        activeDataset?.result,
+        modelTiming?.prediction,
+      )?.recommended ?? null
+    );
+  })();
   return (
     <section aria-labelledby="training-compute-title">
       <div className="training-heading">
@@ -222,6 +240,7 @@ export function TrainingComputeStep({
           value={selectedGpu}
           onChange={setRuntimeId}
           disabled={busy}
+          suggested={suggestedGpu}
           choices={[
             ...gpuChoices.map((gpu) => ({
               id: gpu,
