@@ -10,7 +10,7 @@ from pathlib import Path
 from urllib.request import urlopen
 
 import pytest
-from vla_platform import native_launch, update_runner
+from vla_platform import build, native_launch, update_runner
 from vla_platform.application_updates import ApplicationUpdates
 
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="Native launcher requires POSIX")
@@ -143,6 +143,7 @@ def test_source_archive_updates_and_recovers_without_supervisor_or_source_change
     assert json.loads((source / ".openjensen-build.json").read_text())["commit"] == OLD
     snapshots = workspace.parent / (".openjensen-update-" + operation)
     assert (snapshots / "backup/workspace.sqlite3").read_bytes() == b"old schema"
+    assert (snapshots / "completed.json").exists() is (not fails)
     assert json.loads(
         (root / "private/application-updates" / operation / "workspace-backup.json").read_text()
     )["directory"] == str(snapshots)
@@ -245,6 +246,9 @@ def test_archive_discovery_and_apply_use_the_automatic_launcher(ordinary_install
     config.update(uv=sys.executable, pnpm=sys.executable, node_bin=str(Path(sys.executable).parent))
     update_runner.write_state(path, config)
     calls = []
+    # The build label is read through git once and remembered; read it before process
+    # creation is replaced, or this test passes only when an earlier one already did.
+    build.current()
     monkeypatch.setattr(subprocess, "Popen", lambda *args, **kwargs: calls.append((args, kwargs)))
 
     def respond(request):
