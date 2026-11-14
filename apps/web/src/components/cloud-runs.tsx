@@ -1,6 +1,6 @@
 'use client';
 
-import { jobStatusLabel, jobStatusWord } from '@/lib/job-status';
+import { jobStatusLabel } from '@/lib/job-status';
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api, isActive } from '@/lib/api';

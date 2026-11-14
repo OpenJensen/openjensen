@@ -72,8 +72,13 @@ async function openLocalCompute(page: Page) {
   await page.getByRole('link', { name: 'Settings', exact: true }).click();
   await page.getByRole('button', { name: 'Compute targets', exact: true }).click();
   const setup = page.getByText('Local worker setup', { exact: true });
-  if (!(await page.getByRole('region', { name: 'Local runs', exact: true }).isVisible())) await setup.click();
-  await expect(page.getByRole('region', { name: 'Local runs', exact: true })).toBeVisible();
+  const local = page.getByRole('region', { name: 'Local runs', exact: true });
+  // The page can open this section by itself a moment after it appears; clicking at
+  // that moment would close it again. Give it that moment before opening it by hand.
+  await expect(local)
+    .toBeVisible({ timeout: 1500 })
+    .catch(() => setup.click());
+  await expect(local).toBeVisible();
 }
 
 async function mockWorkspace(

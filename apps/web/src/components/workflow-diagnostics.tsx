@@ -4,7 +4,6 @@ import { jobStatusWord } from '@/lib/job-status';
 import { JobStatus } from '@/components/ui/job-status';
 import { isActive } from '@/lib/api';
 import { conciseRunError, runLabel, runSummary } from '@/lib/run-summary';
-import type { Preferences } from '@/lib/workflow-preferences';
 import type { SettingsTab } from './workflow-shared';
 import type { WorkflowState } from './workflow-state';
 import { Segmented } from './ui/choice';
