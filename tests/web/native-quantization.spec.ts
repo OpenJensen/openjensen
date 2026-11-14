@@ -409,7 +409,7 @@ test('completed candidate shows measured storage and drift separately from exact
       .map((item) => ({ tag: item.tagName, cls: item.className, right: item.getBoundingClientRect().right })),
   }));
   expect(widths.scroll, JSON.stringify(widths)).toBeLessThanOrEqual(widths.width + 1);
-  await page.getByRole('link', { name: 'Run', exact: true }).click();
+  await page.getByRole('link', { name: 'Simulate', exact: true }).click();
   await openModuleTask(page);
   await page.getByRole('button', { name: '3D simulation', exact: true }).click();
   await expect(page.locator('.native-simulation').locator('input[type=radio][value="packed-result"]')).toHaveCount(0);
@@ -441,7 +441,7 @@ test('cancellation requires confirmation bound to the freshly read selected job'
   await expect(page.getByRole('group', { name: 'Confirm ACT quantization cancellation' })).toHaveCount(0);
   await page.getByRole('button', { name: 'Cancel selected ACT quantization' }).click();
   await page.getByRole('button', { name: 'Confirm cancellation', exact: true }).click();
-  await expect(page.getByRole('article', { name: 'ACT quantization job details' })).toContainText('cancelled');
+  await expect(page.getByRole('article', { name: 'ACT quantization job details' })).toContainText('Cancelled');
   expect(state.gets).toContain('two');
   expect(state.cancels).toEqual(['two']);
 });
@@ -547,7 +547,7 @@ test('a fast terminal transition refetches the final events after an empty activ
   await page.getByText('Activity and recorded report', { exact: true }).click();
   await expect(page.getByRole('region', { name: 'ACT quantization event log' })).toHaveText('No recorded events yet.');
   armed = true;
-  await expect(page.getByRole('article', { name: 'ACT quantization job details' })).toContainText('succeeded', {
+  await expect(page.getByRole('article', { name: 'ACT quantization job details' })).toContainText('Completed', {
     timeout: 7000,
   });
   await expect(page.getByRole('region', { name: 'ACT quantization event log' })).toContainText(

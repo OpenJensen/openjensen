@@ -9,21 +9,24 @@ export function RobotLabPolicyPreview({
   lab,
   selectedId,
   requiresTask,
+  cameras,
 }: {
   lab: RobotLabState;
   selectedId: string;
   requiresTask: boolean;
+  /** One camera for each view of a policy trained on several; absent for one view. */
+  cameras?: Record<string, number>;
 }) {
   const [values, setValues] = useState([0, 0, 0, 0, 0, 0]);
   const [image, setImage] = useState<string | null>(null);
   const [imageError, setImageError] = useState<string | null>(null);
   const policy = lab.state?.policy;
+  const loaded = policy?.phase === 'ready' && policy.policy_id === selectedId;
   const ready =
     !!lab.state?.capabilities?.policy_preview &&
     lab.canAct &&
     !lab.active &&
-    policy?.phase === 'ready' &&
-    policy.policy_id === selectedId &&
+    loaded &&
     (!requiresTask || !!lab.task.trim());
   const task = requiresTask ? lab.task : undefined;
   const preview = policy?.preview;
@@ -32,35 +35,26 @@ export function RobotLabPolicyPreview({
       robotApi.previewPolicy({ ...input, ...(task ? { task } : {}) }),
     );
   return (
-    <div className="robot-lab-form">
-      {requiresTask ? (
-        <label>
-          Task instruction
-          <textarea
-            value={lab.task}
-            maxLength={1000}
-            disabled={lab.busy || lab.active}
-            onChange={(event) => lab.setTask(event.target.value)}
-            placeholder="Describe what the policy should do."
-          />
-        </label>
-      ) : (
-        <p className="robot-lab-subtle">ACT inference uses images and state values.</p>
-      )}
-      <h3>Try inference</h3>
+    <div className="robot-lab-form" role="group" aria-label="Try inference">
       {!lab.state?.capabilities?.policy_preview && (
         <Notice kind="warning">Update the robot control service to preview policies without arm control.</Notice>
       )}
-      <p>
-        Preview model output without connecting or moving robot arms. Output values use the model’s own coordinates and
-        units.
-      </p>
-      <button disabled={!ready} onClick={() => run({ synthetic: true })}>
-        Try with test inputs
-      </button>
-      <small>
-        Explicit test: a blank image and six zero state values. This checks inference; it does not test task success.
-      </small>
+      <p>The policy predicts one action and nothing moves. Values are in the model’s own units.</p>
+      <div className="robot-lab-actions">
+        {!loaded && (
+          <button
+            className="secondary-button"
+            disabled={!lab.canAct || lab.active || !selectedId}
+            onClick={() => void lab.perform('Policy loaded.', () => robotApi.loadPolicy(selectedId))}
+          >
+            {policy?.phase === 'loading' ? 'Loading policy…' : 'Load policy'}
+          </button>
+        )}
+        <button className="secondary-button" disabled={!ready} onClick={() => run({ synthetic: true })}>
+          Try with test inputs
+        </button>
+      </div>
+      <small>Test inputs are a blank image and six zeros: this shows the policy runs, not that it does the task.</small>
       <details>
         <summary>Use an observation image and state</summary>
         <div className="robot-lab-form">
@@ -106,6 +100,7 @@ export function RobotLabPolicyPreview({
           <small>Supply state values in this model’s expected order and units.</small>
           <div className="robot-lab-actions">
             <button
+              className="secondary-button"
               disabled={!ready || !image || !values.every(Number.isFinite)}
               onClick={() => {
                 if (image) run({ state: values, jpeg: image });
@@ -114,15 +109,20 @@ export function RobotLabPolicyPreview({
               Preview uploaded observation
             </button>
             <button
+              className="secondary-button"
               disabled={!ready || !lab.availableCameras.length || !values.every(Number.isFinite)}
-              onClick={() => run({ state: values, camera_index: lab.cameraIndex })}
+              onClick={() => run({ state: values, camera_index: lab.cameraIndex, ...(cameras ? { cameras } : {}) })}
             >
-              Preview selected camera
+              {cameras ? 'Preview selected cameras' : 'Preview selected camera'}
             </button>
           </div>
         </div>
       </details>
-      {lab.pending === 'Prediction preview ready.' && <button onClick={lab.stop}>Cancel preview</button>}
+      {lab.pending === 'Prediction preview ready.' && (
+        <button className="secondary-button" onClick={lab.stop}>
+          Cancel preview
+        </button>
+      )}
       {preview && preview.policy_id === policy?.policy_id && (
         <div role="status">
           <strong>Latest prediction · {preview.inference_ms} ms · no movement</strong>

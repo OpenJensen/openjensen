@@ -12,17 +12,17 @@ export type WorkspaceRoute = { name: string; icon: IconName; path: string; modul
 // those IDs; legacy addresses stay mapped to the same workspace state.
 export const workspaceRoutes: Record<StageId, WorkspaceRoute> = {
   jobs: { name: 'Jobs', icon: 'layers', path: '/jobs/' },
-  dashboard: { name: 'Dashboard', icon: 'home', path: '/dashboard/' },
-  'robot-lab': { name: 'Initial setup', icon: 'robot', path: '/robot-lab/', module: true },
+  dashboard: { name: 'Home', icon: 'home', path: '/dashboard/' },
+  'robot-lab': { name: 'Robot Lab', icon: 'robot', path: '/robot-lab/', module: true },
   teaching: { name: 'AI teleoperation', icon: 'record', path: '/ai-teleoperation/', module: true },
   datasets: { name: 'Datasets', icon: 'database', path: '/datasets/', module: true },
   augmentation: { name: 'Augmentation', icon: 'spark', path: '/augmentation/', module: true },
   'real-to-sim': { name: 'Real to sim', icon: 'box', path: '/real-to-sim/', module: true },
-  training: { name: 'Fine-tune', icon: 'sliders', path: '/training/', module: true },
+  training: { name: 'Train', icon: 'sliders', path: '/training/', module: true },
   distillation: { name: 'Distill', icon: 'funnel', path: '/distillation/', module: true },
   quantization: { name: 'Quantize', icon: 'compress', path: '/quantization/', module: true },
   evaluation: { name: 'Evaluate', icon: 'chart', path: '/evaluation/', module: true },
-  simulation: { name: 'Run', icon: 'play', path: '/simulation/', module: true },
+  simulation: { name: 'Simulate', icon: 'play', path: '/simulation/', module: true },
   'decision-lab': { name: 'Decision Lab', icon: 'branch', path: '/decision-lab/', module: true },
   models: { name: 'Models', icon: 'box', path: '/models/', module: true },
   'cloud-runs': { name: 'Cloud runs', icon: 'cloud', path: '/cloud-runs/', module: true },
@@ -33,13 +33,16 @@ export const workspaceRoutes: Record<StageId, WorkspaceRoute> = {
 
 export const isModule = (id: StageId): id is FeatureModuleId => !!workspaceRoutes[id].module;
 
+// The sidebar follows the journey: set up the robot and record, keep datasets, train,
+// test, then look at what came out. It lists the same pages on a first visit as later.
 export const navigationGroups: { name?: string; items: StageId[] }[] = [
-  { items: ['dashboard', 'jobs'] },
-  { name: 'Robot Lab', items: ['robot-lab', 'teaching'] },
+  { items: ['dashboard'] },
+  { name: 'Robot', items: ['robot-lab', 'teaching'] },
   { name: 'Data', items: ['datasets', 'augmentation', 'real-to-sim'] },
   { name: 'Train', items: ['training', 'distillation', 'quantization'] },
   { name: 'Test', items: ['evaluation', 'simulation', 'decision-lab'] },
-  { name: 'Manage', items: ['models', 'cloud-runs', 'modules', 'cloud-apis', 'settings'] },
+  { name: 'Results', items: ['models', 'jobs', 'cloud-runs'] },
+  { items: ['modules', 'cloud-apis', 'settings'] },
 ];
 
 export function moduleStage(id: ModuleId): StageId {

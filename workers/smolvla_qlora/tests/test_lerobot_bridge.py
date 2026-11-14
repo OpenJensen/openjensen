@@ -72,6 +72,35 @@ def test_native_smolvla_supervised_training_uses_expert_weights_without_peft():
     assert native_profile_for_recipe(job["parameters"]["training"], "lora") is None
 
 
+def test_training_defaults_keep_the_gpu_busy():
+    """A run that decodes frames on one thread and validates every 100 steps leaves the
+    GPU idle most of the time: the reason SmolVLA on a large GPU took many hours."""
+    from jensen_vla.lerobot_application import evaluation_interval, loader_workers
+
+    assert [loader_workers(cpus) for cpus in (1, 2, 4, 12, 64)] == [0, 0, 2, 8, 8]
+    assert [evaluation_interval(steps) for steps in (20, 100, 2000, 20000, 100000)] == [
+        20,
+        100,
+        100,
+        1000,
+        5000,
+    ]
+    job = request()
+    job["parameters"]["training"]["steps"] = 20000
+    recipe, profile = resolve_recipe(job)
+    assert recipe["num_workers"] == loader_workers()
+    assert recipe["eval_every"] == 1000 and recipe["eval_batches"] == 8
+    args = cli_arguments(recipe, profile, output="out", dataset_root="dataset")
+    assert f"--num_workers={loader_workers()}" in args
+    assert "--cudnn_deterministic=false" in args
+    assert "--eval_steps=1000" in args
+    # What a person chooses is never replaced by a default.
+    job = request()
+    job["parameters"]["training"].update(steps=20000, num_workers=0, eval_every=100)
+    recipe, _ = resolve_recipe(job)
+    assert recipe["num_workers"] == 0 and recipe["eval_every"] == 100
+
+
 def test_native_recipe_rejects_unknown_arguments_and_moving_models():
     with pytest.raises(ValueError, match="Unsupported native"):
         resolve_recipe(request(command="arbitrary command"))
@@ -362,3 +391,88 @@ def test_mps_device_admission_bounds_allocator_and_keeps_cuda_default(monkeypatc
     monkeypatch.setattr(platform, "system", lambda: "Linux")
     with pytest.raises(RuntimeError, match="ACT/MPS"):
         configure_training_device(torch, "act", "mps")
+
+
+FRONT, SIDE = "observation.images.front", "observation.images.camera_4"
+
+
+def test_a_fine_tuned_policy_declares_only_the_cameras_it_was_trained_on():
+    """SmolVLA fine-tuned on two cameras was saved asking for five and could not be run."""
+    from types import SimpleNamespace
+
+    from jensen_vla.lerobot_train import close_camera_inputs
+
+    visual = SimpleNamespace(type=SimpleNamespace(name="VISUAL"))
+    base = [f"observation.images.camera{n}" for n in (1, 2, 3)]
+    config = SimpleNamespace(
+        input_features={
+            "observation.state": SimpleNamespace(type=SimpleNamespace(name="STATE")),
+            **dict.fromkeys(base, visual),  # inherited from the pretrained base model
+            FRONT: visual,
+            SIDE: visual,
+        }
+    )
+    assert close_camera_inputs(config, [FRONT, SIDE]) == base
+    assert list(config.input_features) == ["observation.state", FRONT, SIDE]
+    assert close_camera_inputs(config, [FRONT, SIDE]) == []
+    # A policy that names its cameras differently is not second-guessed.
+    assert close_camera_inputs(config, [FRONT, "observation.images.wrist"]) == []
+    assert list(config.input_features) == ["observation.state", FRONT, SIDE]
+
+
+def test_backbone_files_are_found_before_training_and_copied_into_a_checkpoint(tmp_path):
+    from jensen_vla.lerobot_train import (
+        BACKBONE_ASSETS,
+        BACKBONE_REQUIRED_FILES,
+        backbone_asset_files,
+        save_backbone_assets,
+    )
+
+    # A Hub cache: a snapshot folder of symbolic links into a blob store.
+    blobs, snapshot = tmp_path / "blobs", tmp_path / "snapshots/revision"
+    blobs.mkdir()
+    snapshot.mkdir(parents=True)
+    for name in (*BACKBONE_REQUIRED_FILES, "special_tokens_map.json", "model.safetensors"):
+        (blobs / name).write_text("data of " + name)
+        (snapshot / name).symlink_to(blobs / name)
+    asked = []
+
+    def download(name, allow_patterns):
+        asked.append((name, allow_patterns))
+        return str(snapshot)
+
+    files = backbone_asset_files("organization/backbone", download)
+    assert asked[0][0] == "organization/backbone" and "model.safetensors" not in asked[0][1]
+    assert set(files) == {*BACKBONE_REQUIRED_FILES, "special_tokens_map.json"}
+    model = tmp_path / "checkpoint/pretrained_model"
+    model.mkdir(parents=True)
+    target = save_backbone_assets(files, model)
+    assert target == model / BACKBONE_ASSETS
+    saved = sorted(target.iterdir())
+    assert {path.name for path in saved} == set(files)
+    assert not any(path.is_symlink() for path in saved)  # a checkpoint refuses links
+    assert (target / "tokenizer.json").read_text() == "data of tokenizer.json"
+    # A local folder is used as it is; saving again over an earlier copy is harmless.
+    assert set(backbone_asset_files(str(snapshot), lambda *a, **k: 1 / 0)) == set(files)
+    save_backbone_assets(files, model)
+    # A missing required file stops the run during preparation, by name.
+    (snapshot / "processor_config.json").unlink()
+    with pytest.raises(ValueError, match="processor_config.json"):
+        backbone_asset_files(str(snapshot))
+
+
+def test_saved_backbone_files_are_the_ones_the_robot_service_accepts():
+    import importlib.util
+
+    from jensen_vla import lerobot_train
+
+    path = Path(__file__).resolve().parents[2] / "robot_lab/policy_contract.py"
+    spec = importlib.util.spec_from_file_location("robot_lab_policy_contract", path)
+    contract = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(contract)
+    assert set(lerobot_train.BACKBONE_REQUIRED_FILES) == contract.SMOLVLM_REQUIRED_FILES
+    assert {
+        *lerobot_train.BACKBONE_REQUIRED_FILES,
+        *lerobot_train.BACKBONE_OPTIONAL_FILES,
+    } == contract.SMOLVLM_ASSET_FILES
+    assert lerobot_train.BACKBONE_ASSETS == contract.SMOLVLM_ASSET_PATH

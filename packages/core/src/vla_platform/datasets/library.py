@@ -637,6 +637,68 @@ class DatasetLibrary:
             self.save(value)
             return self.public(value)
 
+    async def combine(self, project_id, idents, name):
+        """Join saved datasets that share cameras and frame rate into one new dataset.
+
+        The originals stay as they are. A recording that holds a single episode cannot
+        be trained on; fifty of them, combined, can.
+        """
+        if not isinstance(idents, list) or len(set(idents)) != len(idents) or len(idents) < 2:
+            raise LibraryError("Choose at least two different datasets to combine")
+        sources = [self.get(ident, project_id) for ident in idents]
+        roots = [self.resolve(ident, project_id) for ident in idents]
+        total = sum(value["total_bytes"] for value in sources)
+        if total > MAX_BYTES:
+            raise LibraryError(
+                f"Together these datasets hold {total / 1024**3:.1f} GiB; "
+                f"a saved dataset holds at most {MAX_BYTES // 1024**3} GiB. Combine fewer.",
+                413,
+            )
+        if shutil.disk_usage(self.root).free < total + DISK_HEADROOM:
+            raise LibraryError("Not enough free storage to combine these datasets", 507)
+        created = self.begin(project_id, name)
+        ident = created["id"]
+        operation = self.get(ident).get("_import_job_id")
+        try:
+            result = await self.worker(
+                {
+                    "operation": "merge",
+                    "roots": [str(root) for root in roots],
+                    "output": str(self.directory(ident) / "source"),
+                },
+                timeout=600,
+            )
+            async with self.lock:
+                value = self.get(ident)
+                source = self.directory(ident) / "source"
+                value["files"] = {
+                    path.relative_to(source).as_posix(): path.stat().st_size
+                    for path in sorted(source.rglob("*"))
+                    if path.is_file()
+                }
+                value["total_bytes"] = sum(value["files"].values())
+                value["combined_from"] = [
+                    {"id": item["id"], "name": item["name"]} for item in sources
+                ]
+                self.save(value)
+            # Combining the same datasets again yields the same bytes; finalize then
+            # returns the dataset that already exists instead of keeping a duplicate.
+            combined = await self.finalize(ident)
+            if combined["status"] != "ready":
+                raise LibraryError("The combined dataset could not be read back")
+            return {**combined, "combined": result}
+        except BaseException as exc:
+            # Leave no half-made dataset and no job that looks as if it is still uploading.
+            shutil.rmtree(self.directory(ident), ignore_errors=True)
+            if operation:
+                self.operations.update(
+                    operation,
+                    status="failed",
+                    stage="combining",
+                    error=str(exc) or "Combining these datasets was interrupted",
+                )
+            raise
+
     async def example(self, project_id):
         for value in self.records():
             if value["project_id"] == project_id and value.get("example"):
@@ -874,7 +936,7 @@ class DatasetLibrary:
                         "id": "inspection:" + job.id,
                         "job_id": job.id,
                         "project_id": project.id,
-                        "name": profile.repo_id or Path(job.request.path or "Local dataset").name,
+                        "name": profile.repo_id or Path(job.request.path or "Unnamed dataset").name,
                         "source": profile.source,
                         "created_at": job.created_at,
                         "status": "ready",

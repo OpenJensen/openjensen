@@ -118,7 +118,7 @@ export function TrainingAdvancedSettings({
           />
           <NumberField
             label="Learning rate"
-            help="Size of each optimizer update."
+            help="Size of each optimizer update. Left at 0.0001, each model trains at its own recommended rate (ACT uses 0.00001)."
             min="0.000000001"
             step="any"
             value={recipe.learningRate}

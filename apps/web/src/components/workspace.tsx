@@ -151,7 +151,7 @@ function Workbench({ children }: { children: ReactNode }) {
                   items.length > 0 && (
                     <div
                       className="navigation-group"
-                      key={group.name ?? 'home'}
+                      key={group.name ?? group.items[0]}
                       role={group.name ? 'group' : undefined}
                       aria-label={group.name}
                     >
@@ -248,15 +248,18 @@ function Workbench({ children }: { children: ReactNode }) {
               </button>
             </section>
           )}
-        {showingJobs && moduleInstalled(activeStage as Parameters<typeof moduleInstalled>[0]) && (
-          <WorkJobs
-            key={`${workflowProjectId}:${activeStage}`}
-            projectId={workflowProjectId}
-            module={activeStage}
-            onNew={newWorkJob}
-            onOpen={openWorkJob}
-          />
-        )}
+        {/* While another page is opening, the page being left must not flash its own job list. */}
+        {showingJobs &&
+          state.isSectionCurrent(activeStage) &&
+          moduleInstalled(activeStage as Parameters<typeof moduleInstalled>[0]) && (
+            <WorkJobs
+              key={`${workflowProjectId}:${activeStage}`}
+              projectId={workflowProjectId}
+              module={activeStage}
+              onNew={newWorkJob}
+              onOpen={openWorkJob}
+            />
+          )}
         {workloadModule && !showingJobs && (
           <JobComputeSelectionNotice
             key={`${workflowProjectId}:${activeStage}:${state.requestedJobOperation?.id ?? ''}`}

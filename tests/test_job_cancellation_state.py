@@ -191,7 +191,7 @@ def test_local_restart_never_confirms_unverified_cleanup(tmp_path, monkeypatch, 
     async def exercise():
         async with workspace(tmp_path) as execution:
 
-            async def recover(data_dir):
+            async def recover(data_dir, keep=None):
                 return []
 
             async def simulations():
@@ -219,7 +219,7 @@ def test_remote_cleanup_failure_can_be_reconciled_after_restart(
     async def exercise():
         async with workspace(tmp_path) as execution:
 
-            async def recover(data_dir):
+            async def recover(data_dir, keep=None):
                 return (
                     [{"job_id": "job-1", "error": "Cloud cleanup needs attention"}]
                     if recovery_failed

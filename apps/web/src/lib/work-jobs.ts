@@ -1,5 +1,6 @@
 import type { components } from './api.generated';
 import { apiOrigin } from './api';
+import { jobStatusLabels } from './job-status';
 
 type WorkJobSchema = components['schemas']['WorkJob'];
 export type WorkJob = Omit<WorkJobSchema, 'inputs' | 'outputs' | 'parent_ids' | 'events'> &
@@ -9,11 +10,11 @@ export type WorkSubmission = Omit<components['schemas']['WorkSubmission'], 'inpu
   inputs: NonNullable<components['schemas']['WorkSubmission']['inputs']>;
 };
 export const jobCategoryActions: Record<string, { operation: string; label: string; title: string }> = {
-  training: { operation: 'policy.finetune', label: 'Start a new fine-tuning', title: 'Fine-tuning jobs' },
+  training: { operation: 'policy.finetune', label: 'New training run', title: 'Training runs' },
   distillation: { operation: 'policy.distill', label: 'Start a new distillation', title: 'Distillation jobs' },
   quantization: { operation: 'policy.quantize', label: 'Start a new quantization', title: 'Quantization jobs' },
   evaluation: { operation: 'policy.evaluate', label: 'New evaluation', title: 'Evaluation jobs' },
-  simulation: { operation: 'policy.run', label: 'New run', title: 'Run jobs' },
+  simulation: { operation: 'policy.run', label: 'New simulation', title: 'Simulation runs' },
   augmentation: { operation: 'dataset.augment', label: 'New augmentation', title: 'Augmentation jobs' },
   'real-to-sim': { operation: 'scene.generate', label: 'New scene', title: 'Real-to-sim jobs' },
   teaching: { operation: 'agent.control', label: 'New teleoperation', title: 'Teleoperation jobs' },
@@ -23,6 +24,10 @@ const jobResultLabels: Record<string, string> = {
   'dataset.inspect': 'View dataset',
   'dataset.import': 'View dataset',
   'dataset.convert': 'View dataset',
+  'dataset.publish': 'View dataset',
+  'dataset.fetch': 'View dataset',
+  'policy.publish': 'View model',
+  'policy.fetch': 'View model',
   'dataset.augment': 'View augmentation',
   'scene.generate': 'Review scene',
   'policy.finetune': 'View training run',
@@ -36,17 +41,7 @@ const jobResultLabels: Record<string, string> = {
 };
 export const jobResultLabel = (operation: string) => jobResultLabels[operation] ?? 'View result';
 
-export const workStatusLabels: Record<string, string> = {
-  queued: 'Queued',
-  running: 'Running',
-  waiting: 'Needs attention',
-  succeeded: 'Completed',
-  failed: 'Failed',
-  cancelled: 'Cancelled',
-  interrupted: 'Interrupted',
-  cancelling: 'Cancelling',
-  preparing: 'Preparing',
-};
+export const workStatusLabels = jobStatusLabels;
 export const isWorkActive = (job: WorkJob) => ['queued', 'preparing', 'running', 'cancelling'].includes(job.status);
 
 export class WorkJobHttpError extends Error {

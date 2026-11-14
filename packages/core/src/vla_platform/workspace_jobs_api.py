@@ -21,6 +21,7 @@ from vla_platform.workspace_jobs import (
     WorkRecord,
     core_job,
     get_job,
+    job_names,
     list_jobs,
 )
 
@@ -163,7 +164,8 @@ async def submit(
             if source is None or source.project_id != project_id:
                 raise HTTPException(404, "Dataset source not found in this project")
             return core_job(
-                await state.execution.submit(project_id, body, idempotency_key=idempotency_key)
+                await state.execution.submit(project_id, body, idempotency_key=idempotency_key),
+                await job_names(state, project_id),
             )
         model = {
             "dataset.inspect": IntakeRequest,
@@ -193,7 +195,8 @@ async def submit(
             raw["operation"] = payload.operation
         body = model.model_validate(raw)
         return core_job(
-            await state.execution.submit(project_id, body, idempotency_key=idempotency_key)
+            await state.execution.submit(project_id, body, idempotency_key=idempotency_key),
+            await job_names(state, project_id),
         )
     except ValidationError:
         raise HTTPException(422, "Job inputs do not match the selected operation") from None
@@ -240,4 +243,11 @@ async def cancel(project_id: str, key: str, request: Request):
         await state.dataset_library.cancel_conversion(
             job.inputs["dataset_id"], expected_job_id=job.source_id
         )
+    elif key.startswith("share:"):
+        from vla_platform.huggingface_transfer import TransferError
+
+        try:
+            await state.huggingface_sharing.cancel(job.source_id)
+        except TransferError as exc:
+            raise HTTPException(exc.status, str(exc)) from None
     return await get_job(state, project_id, key)

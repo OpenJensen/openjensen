@@ -1,9 +1,10 @@
-import { trainingRunModelLabel } from '@/lib/checkpoints';
+import { isProjectDataset, type LibraryDataset } from '@/lib/dataset-library';
+import { runName } from '@/lib/run-names';
 import { Icon } from '@/components/icon';
 import { TrainingMonitor } from '@/components/training-monitor';
 import type { TrainingPanelState } from './training-state';
 
-/** One fine-tuning job: its monitor, cancel, export and resume actions. */
+/** One training run: its monitor, cancel, export and resume actions. */
 export function TrainingJobDetail({
   panel,
   preferredRunId,
@@ -27,17 +28,18 @@ export function TrainingJobDetail({
     cancel,
     headingRef,
     jobs,
+    library,
     models,
     options,
     projectId,
     resumeOptions,
     resumeRun,
+    trainAgain,
     selectedRun,
     showHistory,
-    trainingRuns,
   } = panel;
   return (
-    <section className="training-activity training-job-detail" aria-label="Fine-tuning job">
+    <section className="training-activity training-job-detail" aria-label="Training run">
       <button type="button" className="text-button training-back" onClick={showHistory}>
         <Icon name="arrow" size={14} />
         Back to jobs
@@ -45,8 +47,19 @@ export function TrainingJobDetail({
       <div className="training-heading">
         <h2 ref={headingRef} tabIndex={-1}>
           {selectedRun
-            ? (trainingRunModelLabel(selectedRun, models, artifacts.data ?? [], trainingRuns) ?? 'Fine-tuning job')
-            : 'Fine-tuning job'}
+            ? runName(
+                selectedRun,
+                {
+                  jobs: jobs.data ?? [],
+                  artifacts: artifacts.data ?? [],
+                  library: (library.data ?? []).filter((entry): entry is LibraryDataset =>
+                    isProjectDataset(entry, projectId),
+                  ),
+                  catalog: models,
+                },
+                { date: true },
+              )
+            : 'Training run'}
         </h2>
         <button type="button" className="text-button" onClick={onDiagnostics}>
           Diagnostics <Icon name="arrow" size={14} />
@@ -75,6 +88,7 @@ export function TrainingJobDetail({
               ? (checkpointId) => resumeRun(selectedRun.id, checkpointId)
               : undefined
           }
+          onTrainAgain={() => trainAgain(selectedRun.id)}
         />
       )}
       {!selectedRun && <p className="muted">This job is no longer available.</p>}

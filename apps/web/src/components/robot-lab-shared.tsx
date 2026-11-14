@@ -38,7 +38,17 @@ export function Heading({ title }: { title: string }) {
 export function Notice({ children, kind = 'info' }: { children: ReactNode; kind?: 'info' | 'warning' | 'success' }) {
   return <SharedNotice tone={kind}>{children}</SharedNotice>;
 }
-export function HardwareNotice({ message, label, context }: { message: string; label?: string; context?: string }) {
+export function HardwareNotice({
+  message,
+  label,
+  context,
+  actions,
+}: {
+  message: string;
+  label?: string;
+  context?: string;
+  actions?: ReactNode;
+}) {
   const described = describeHardwareError(message);
   return (
     <SharedNotice
@@ -47,6 +57,7 @@ export function HardwareNotice({ message, label, context }: { message: string; l
       label={label}
       title={context ?? described.title}
       details={described.details}
+      actions={actions}
     >
       {context && <p>{described.title}</p>}
       {described.next}

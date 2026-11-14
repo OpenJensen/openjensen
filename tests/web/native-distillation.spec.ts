@@ -240,7 +240,7 @@ test('submits one complete local recipe, shows progress and cancels only the sel
   await page.getByRole('button', { name: 'Cancel selected distillation', exact: true }).click();
   expect(state.cancel).toEqual([]);
   await page.getByRole('button', { name: 'Confirm cancellation', exact: true }).click();
-  await expect(page.getByRole('article', { name: 'Distillation job details' })).toContainText('cancelled');
+  await expect(page.getByRole('article', { name: 'Distillation job details' })).toContainText('Cancelled');
   expect(state.cancel).toEqual(['student-001']);
 });
 for (const outcome of ['lost', 'wrong-teacher'])
@@ -636,7 +636,7 @@ for (const phase of ['submit', 'cancel-preflight', 'cancel-receipt'] as const)
       await expect(details).toHaveCount(0);
     } else {
       await expect(details).toHaveAttribute('data-job-id', 'student-001');
-      await expect(details.locator('.status')).toHaveText('running');
+      await expect(details.locator('.status')).toHaveText('Running');
       await expect(page.getByRole('button', { name: 'Confirm cancellation', exact: true })).toHaveCount(0);
       const recovery = await page.evaluate(() =>
         Object.keys(sessionStorage)

@@ -57,6 +57,86 @@ def compatible_model_snapshot(source, destination, policy_type):
     return destination
 
 
+# The data-only files of the vision-language backbone that a saved SmolVLA policy needs to
+# run without network access. The robot service accepts exactly these names under
+# ``pretrained_model/assets/smolvlm`` and requires the first five.
+BACKBONE_REQUIRED_FILES = (
+    "config.json",
+    "tokenizer.json",
+    "tokenizer_config.json",
+    "preprocessor_config.json",
+    "processor_config.json",
+)
+BACKBONE_OPTIONAL_FILES = (
+    "special_tokens_map.json",
+    "added_tokens.json",
+    "merges.txt",
+    "vocab.json",
+    "chat_template.json",
+    "generation_config.json",
+)
+BACKBONE_ASSETS = "assets/smolvlm"
+
+
+def close_camera_inputs(config, cameras):
+    """Make a policy declare exactly the cameras this run trains on.
+
+    ``--policy.input_features`` adds to the inputs of a pretrained configuration; it does
+    not replace them. A SmolVLA policy fine-tuned on two cameras therefore kept the base
+    model's three camera names beside its own. Training never noticed, because images
+    that are absent are skipped, but the saved policy asked for five cameras and could
+    not be run. Returns the names removed. A policy that does not declare every selected
+    camera under the dataset's own name is left as it is.
+    """
+    selected = set(cameras)
+    if selected - set(config.input_features):
+        return []
+    extra = [
+        key
+        for key, feature in config.input_features.items()
+        if key not in selected
+        and (
+            key.startswith(("observation.images.", "observation.image"))
+            or getattr(getattr(feature, "type", None), "name", None) == "VISUAL"
+        )
+    ]
+    for key in extra:
+        del config.input_features[key]
+    return extra
+
+
+def backbone_asset_files(name, download=None):
+    """Locate the backbone's data-only files before training starts.
+
+    Resolved first so that a missing file stops the run during preparation, not at the
+    first checkpoint. ``name`` is a local folder or a Hub repository.
+    """
+    names = (*BACKBONE_REQUIRED_FILES, *BACKBONE_OPTIONAL_FILES)
+    root = Path(name)
+    if not root.is_dir():
+        if download is None:
+            from huggingface_hub import snapshot_download as download
+        root = Path(download(str(name), allow_patterns=list(names)))
+    files = {item: root / item for item in names if (root / item).is_file()}
+    missing = [item for item in BACKBONE_REQUIRED_FILES if item not in files]
+    if missing:
+        raise ValueError(
+            "The SmolVLA backbone is missing files needed to run the trained policy: "
+            + ", ".join(missing)
+        )
+    return files
+
+
+def save_backbone_assets(files, model):
+    """Put the backbone's data files beside the weights so the policy runs offline."""
+    target = Path(model) / BACKBONE_ASSETS
+    target.mkdir(parents=True, exist_ok=True)
+    for name, source in files.items():
+        # A real copy: the Hub cache holds symbolic links, which a checkpoint refuses.
+        shutil.copyfile(Path(source).resolve(), target / name)
+    return target
+
+
 def metric_value(value):
     value = getattr(value, "val", value)
     value = float(value)
@@ -236,6 +316,7 @@ def install_training_hooks(
     started=None,
     probe_devices=None,
     runtime_environment=None,
+    backbone_assets=None,
 ):
     """Bind the same versioned worker hooks to an upstream training invocation.
 
@@ -337,15 +418,21 @@ def install_training_hooks(
         )
         return datasets
 
-    if recipe.get("control_contract") is not None:
-        original_policy = trainer.make_policy
+    original_policy = trainer.make_policy
 
-        def make_policy(*args, **kwargs):
-            policy = original_policy(*args, **kwargs)
+    def make_policy(*args, **kwargs):
+        policy = original_policy(*args, **kwargs)
+        # The trainer builds the processors from the same configuration afterwards.
+        for config in {
+            id(c): c for c in (policy.config, kwargs.get("cfg"), *args[:1]) if c
+        }.values():
+            if hasattr(config, "input_features"):
+                close_camera_inputs(config, recipe["camera_keys"])
+        if recipe.get("control_contract") is not None:
             check_resolved(state.get("control"), policy.config, state.get("dataset_fps"))
-            return policy
+        return policy
 
-        trainer.make_policy = make_policy
+    trainer.make_policy = make_policy
     original_loaders = trainer.make_dataloaders
 
     def make_loaders(cfg, dataset, eval_dataset, step, parallel_dims):
@@ -490,6 +577,8 @@ def install_training_hooks(
         write_json(directory / "temporal-contract.json", state["temporal"])
         save_control(directory, state.get("control"))
         save_control(directory / "pretrained_model", state.get("control"))
+        if backbone_assets:
+            save_backbone_assets(backbone_assets, directory / "pretrained_model")
         torch.save(raw_batch, directory / "probe-batch.pt")
         torch.save(action, directory / "probe-action.pt")
         destination = commit_checkpoint(
@@ -647,8 +736,22 @@ def main():
             "--config_path=" + str(resume / "pretrained_model/train_config.json"),
         ]
     write_json(operation / "native-arguments.json", arguments)
+    backbone_assets = None
+    if profile["policy_type"] == "smolvla":
+        saved = (resume / "pretrained_model" if resume else model_root) / "config.json"
+        backbone = json.loads(saved.read_text()).get("vlm_model_name")
+        if not isinstance(backbone, str) or not backbone:
+            raise ValueError("The SmolVLA configuration does not name its backbone")
+        backbone_assets = backbone_asset_files(backbone)
     state = install_training_hooks(
-        trainer, recipe, profile, training, resume=resume, local_root=local_root, started=started
+        trainer,
+        recipe,
+        profile,
+        training,
+        resume=resume,
+        local_root=local_root,
+        started=started,
+        backbone_assets=backbone_assets,
     )
     sys.argv = ["lerobot-train", *arguments]
     trainer.main()

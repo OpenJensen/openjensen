@@ -1,7 +1,8 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import type { DatasetJob, DatasetProfile } from '@/lib/api';
-import type { LibraryDataset } from '@/lib/dataset-library';
+import { datasetStateLabel, type LibraryDataset } from '@/lib/dataset-library';
 import { datasetStarters } from '@/lib/dataset-starters';
+import { datasetName as savedName } from '@/lib/dataset-names';
 import { Icon } from './icon';
 import './training-dataset-picker.css';
 
@@ -19,15 +20,16 @@ type Props = {
   onImport: () => void;
 };
 
-function datasetName(job: InspectedDataset) {
+function datasetName(job: InspectedDataset, library: LibraryDataset[]) {
   const starter = datasetStarters.find(
     (item) => item.repoId === job.result.repo_id && item.revision === job.result.revision,
   );
-  return starter?.title ?? job.result.repo_id?.split('/').at(-1) ?? 'Local dataset';
+  return starter?.title ?? job.result.repo_id?.split('/').at(-1) ?? savedName(job, library);
 }
 
 function DatasetCard({
   job,
+  library,
   selected,
   disabled,
   reason,
@@ -35,6 +37,7 @@ function DatasetCard({
   prefix,
 }: {
   job: InspectedDataset;
+  library: LibraryDataset[];
   selected: boolean;
   disabled: boolean;
   reason: string | null;
@@ -50,7 +53,7 @@ function DatasetCard({
   return (
     <label
       className={`training-dataset${disabled ? ' unavailable' : ''}`}
-      title={profile.repo_id ?? 'Local dataset'}
+      title={savedName(job, library)}
       tabIndex={disabled && reason ? 0 : undefined}
       aria-describedby={reason ? reasonId : undefined}
     >
@@ -58,7 +61,7 @@ function DatasetCard({
         type="checkbox"
         name={prefix === 'recent' ? 'training-dataset' : 'browse-training-dataset'}
         value={job.id}
-        aria-label={profile.repo_id ?? 'Local dataset'}
+        aria-label={savedName(job, library)}
         checked={selected}
         disabled={disabled}
         aria-describedby={reason ? reasonId : undefined}
@@ -72,13 +75,13 @@ function DatasetCard({
         </span>
       )}
       <span className="training-dataset-copy">
-        <strong>{datasetName(job)}</strong>
+        <strong>{datasetName(job, library)}</strong>
         <small>
           {profile.total_episodes} episodes · {cameras} {cameras === 1 ? 'camera' : 'cameras'}
         </small>
         {prefix !== 'recent' && (
           <small>
-            {profile.repo_id ?? 'Local training copy'} · {profile.format.replace('lerobot_', 'LeRobot ')}
+            {profile.repo_id ?? 'Local files'} · {profile.format.replace('lerobot_', 'LeRobot ')}
           </small>
         )}
         {prefix !== 'recent' && reason && (
@@ -131,12 +134,12 @@ export function TrainingDatasetPicker(props: Props) {
   );
   const query = search.trim().toLocaleLowerCase();
   const matching = datasets.filter((job) =>
-    `${datasetName(job)} ${job.result.repo_id ?? ''} ${job.result.source} ${job.result.format} ${job.result.robot_type ?? ''}`
+    `${datasetName(job, library)} ${job.result.repo_id ?? ''} ${job.result.source} ${job.result.format} ${job.result.robot_type ?? ''}`
       .toLocaleLowerCase()
       .includes(query),
   );
   const matchingPending = pending.filter((entry) =>
-    `${entry.name} ${entry.source} ${entry.status}`.toLocaleLowerCase().includes(query),
+    `${entry.name} ${entry.source} ${datasetStateLabel(entry)}`.toLocaleLowerCase().includes(query),
   );
   const recent = datasets.slice(0, 3);
   const olderSelected = datasets.filter((job) => selectedIds.includes(job.id) && !recent.includes(job));
@@ -151,6 +154,7 @@ export function TrainingDatasetPicker(props: Props) {
       <DatasetCard
         key={job.id}
         job={job}
+        library={library}
         selected={selected}
         reason={reason}
         disabled={disabled || (!!reason && !selected)}
@@ -167,7 +171,7 @@ export function TrainingDatasetPicker(props: Props) {
           <section aria-label="Recent datasets">
             <div className="training-picker-heading">
               <h3>Latest datasets</h3>
-              <span>Recently inspected in this project</span>
+              <span>Recently imported in this project</span>
             </div>
             <div className="training-datasets">{recent.map((job) => card(job, selectedIds, false))}</div>
           </section>
@@ -275,12 +279,13 @@ export function TrainingDatasetPicker(props: Props) {
                     <span className="training-dataset-copy">
                       <strong>{entry.name}</strong>
                       <small>
-                        {entry.source === 'huggingface' ? 'Hugging Face' : 'Local files'} · {entry.status}
+                        {entry.source === 'huggingface' ? 'Hugging Face' : 'Local files'} · {datasetStateLabel(entry)}
                       </small>
                       <small className="training-picker-reason" id={`${id}-${entry.id}-pending`}>
                         {entry.status === 'uploading'
                           ? 'Finish importing before training.'
-                          : (entry.error ?? 'Inspect this dataset and prepare a training copy before selecting it.')}
+                          : (entry.error ??
+                            'Open this dataset in Datasets and choose Prepare for training before selecting it.')}
                       </small>
                     </span>
                   </label>

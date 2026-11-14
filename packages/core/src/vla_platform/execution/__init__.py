@@ -5,6 +5,7 @@ import logging
 import os
 import re
 import time
+from contextlib import AsyncExitStack
 from pathlib import Path
 from uuid import UUID, uuid4
 
@@ -462,9 +463,9 @@ class Execution:
             self._schedule(job.id)
         return job
 
-    def _schedule(self, job_id: str) -> None:
+    def _schedule(self, job_id: str, work=None) -> None:
         """Only the winning atomic insertion dispatches; existing receipts never dispatch."""
-        task = asyncio.create_task(self.run(job_id))
+        task = asyncio.create_task(work or self.run(job_id))
         self.tasks[job_id] = task
         task.add_done_callback(lambda _: self.tasks.pop(job_id, None))
 
@@ -736,31 +737,50 @@ class Execution:
             if owned_explorer:
                 await explorer.close()
 
-    async def run_policy(self, job: Job) -> None:
-        try:
-            # Each cloud run owns an isolated GPU; local native work shares one.
-            slots = (
-                self.simulation_slots
-                if job.simulation_target is not None
-                else self.cloud_slots
-                if job.compute_target is not None
-                or (job.execution and job.execution.adapter == "skypilot-target")
-                else self.native_slots
+    def _policy_slots(self, job: Job) -> tuple[asyncio.Semaphore, asyncio.Semaphore]:
+        # Each cloud run owns an isolated GPU; local native work shares one.
+        slots = (
+            self.simulation_slots
+            if job.simulation_target is not None
+            else self.cloud_slots
+            if job.compute_target is not None
+            or (job.execution and job.execution.adapter == "skypilot-target")
+            else self.native_slots
+        )
+        target_slots = asyncio.Semaphore(1)
+        if job.execution and job.execution.target_snapshot:
+            definition = job.execution.target_snapshot["definition"]
+            target_slots = self.target_slots.setdefault(
+                definition["id"], asyncio.Semaphore(definition["resources"]["concurrency"])
             )
-            target_slots = asyncio.Semaphore(1)
-            if job.execution and job.execution.target_snapshot:
-                definition = job.execution.target_snapshot["definition"]
-                target_slots = self.target_slots.setdefault(
-                    definition["id"], asyncio.Semaphore(definition["resources"]["concurrency"])
-                )
-            async with target_slots, slots:
+        return target_slots, slots
+
+    async def run_policy(self, job: Job, *, reattach: str | None = None, held=()) -> None:
+        """Run a policy job, or with ``reattach`` finish the stage a restart left running.
+
+        A re-attached run arrives holding its slots (``held``): recovery took them when
+        it decided to keep the machine, so the run only has to give them back.
+        """
+        try:
+            async with AsyncExitStack() as occupied:
+                if reattach:
+                    for slot in held:
+                        occupied.callback(slot.release)
+                else:
+                    for slot in self._policy_slots(job):
+                        await occupied.enter_async_context(slot)
                 async with self.lock:
                     current = await self.get(job.id)
                     if current.status in TERMINAL:
                         return
                     current.status = "running"
                     await self.save(current)
-                await asyncio.wait_for(self.lifecycle.run(current), job.request.timeout_seconds)
+                await asyncio.wait_for(
+                    self.lifecycle.reattach(current, reattach)
+                    if reattach
+                    else self.lifecycle.run(current),
+                    job.request.timeout_seconds,
+                )
                 async with self.lock:
                     current = await self.get(job.id)
                     if current.status not in TERMINAL:
@@ -792,6 +812,75 @@ class Execution:
                     self._unconfirmed_cancellation(current, exc, stage=current.stage or "execution")
                     await self.save(current)
 
+    async def reattach_policy(self, job: Job, stage: str, held) -> None:
+        """Own a cloud run that outlived a restart until its machine is released.
+
+        The machine exists before this task does. Whatever ends the task early (a
+        cancellation that lands before the runner takes over, a job already cancelled, an
+        unreadable saved request), the machine is torn down here. A stopping application
+        is the exception: the next start decides again.
+        """
+        try:
+            await self.run_policy(job, reattach=stage, held=held)
+        finally:
+            if not self._closing:
+                from vla_platform.lifecycle import sky_runner
+
+                problem = await sky_runner.release(self.settings.data_dir / "jobs" / job.id / stage)
+                if problem:
+                    await self._report_cloud_cleanup(job.id, problem)
+
+    async def _surviving_cloud_runs(self) -> dict[str, tuple]:
+        """Running cloud jobs whose machine is kept: ``{job id: (job, stage, held slots)}``.
+
+        While stopping, that is every run the runner left training. On startup it is each
+        of those whose cluster still answers for the job, as far as free slots allow: the
+        slots are taken here, so the limit on concurrent cloud runs holds across a restart
+        and a kept run cannot lose its place to a newly submitted one.
+        """
+        async with self.storage.engine.connect() as connection:
+            values = (
+                (await connection.execute(select(jobs.c.record).where(jobs.c.status == "running")))
+                .scalars()
+                .all()
+            )
+        running = {}
+        for job in sorted(map(Job.model_validate, values), key=lambda job: job.created_at):
+            stage = self.lifecycle.reattachable(job)
+            # A job this process is already running is not a survivor of a restart.
+            if stage and job.id not in self.tasks:
+                running[job.id] = (job, stage)
+        if not running:
+            return {}
+        from vla_platform.lifecycle import sky_runner
+
+        found = await sky_runner.attachable(
+            self.settings.data_dir,
+            {job_id: stage for job_id, (_, stage) in running.items()},
+            probe=not self._closing,
+        )
+        kept = {}
+        for job_id, stage in found.items():
+            job = running[job_id][0]
+            held = () if self._closing else self._policy_slots(job)
+            if any(slot.locked() for slot in held):
+                continue  # Over the limit: interrupted and torn down like any other run.
+            for slot in held:
+                await slot.acquire()
+            kept[job_id] = (job, stage, held)
+        return kept
+
+    async def _report_cloud_cleanup(self, job_id: str, message: str) -> None:
+        job = await self.get(job_id)
+        if job is None:
+            return
+        await self.lifecycle.event(job, "cloud_cleanup", message)
+        async with self.lock:
+            current = await self.get(job.id)
+            if current and message not in (current.error or ""):
+                current.error = f"{current.error}\n{message}" if current.error else message
+                await self.save(current)
+
     async def reconcile(self) -> None:
         """Fence abandoned work before serving requests, or after shutdown drains tasks.
 
@@ -803,7 +892,14 @@ class Execution:
         old supervisor's timeout no longer exists. Workers cannot write application
         records. Completed native stage artifacts remain registered; an orphan
         cannot publish a later stage.
+
+        A cloud machine is different: it does not die with this process, and its saved
+        dispatch says where it is. A single cloud operation that was training is left
+        running when the application stops, and is followed again on the next start if
+        its cluster still answers for the job. Everything else, including a machine that
+        was still being provisioned or cannot be reached, is interrupted and torn down.
         """
+        survivors = await self._surviving_cloud_runs()
         recovered_jobs = []
         # Serialize with cancel/finish and commit the entire recovery batch atomically.
         # A crash before commit rolls back; after commit, repeated recovery is a no-op.
@@ -820,6 +916,8 @@ class Execution:
                 )
                 for value in values:
                     job = Job.model_validate(value)
+                    if job.id in survivors:
+                        continue
                     previous_status, previous_update = job.status, job.updated_at
                     job.status = RECOVERY_TRANSITIONS[previous_status]
                     job.updated_at = now()
@@ -874,23 +972,20 @@ class Execution:
                 stage="recovery",
                 severity="warning",
             )
+        if not self._closing:
+            for job, stage, held in survivors.values():
+                self._schedule(job.id, self.reattach_policy(job, stage, held))
         # SkyPilot clusters outlive the API process. Reconcile only durable,
         # job-owned dispatch records, never unrelated operator clusters.
         from vla_platform.lifecycle.sky_runner import recover
 
-        failures = await recover(self.settings.data_dir)
+        failures = await recover(
+            self.settings.data_dir,
+            keep={job_id: stage for job_id, (_, stage, _) in survivors.items()},
+        )
         self.cloud_cleanup_pending = any("cleanup" in item["error"].lower() for item in failures)
         for failure in failures:
-            job = await self.get(failure["job_id"])
-            if job is None:
-                continue
-            message = failure["error"]
-            await self.lifecycle.event(job, "cloud_cleanup", message)
-            async with self.lock:
-                current = await self.get(job.id)
-                if current and message not in (current.error or ""):
-                    current.error = f"{current.error}\n{message}" if current.error else message
-                    await self.save(current)
+            await self._report_cloud_cleanup(failure["job_id"], failure["error"])
 
         # A process restart cannot prove that a local orphan stopped. Keep
         # cancellation unresolved rather than reporting successful cleanup.

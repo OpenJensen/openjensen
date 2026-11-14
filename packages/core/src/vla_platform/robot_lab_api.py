@@ -11,6 +11,7 @@ from pydantic import (
     StrictBool,
     StrictFloat,
     StrictInt,
+    StringConstraints,
     ValidationError,
     model_validator,
 )
@@ -26,6 +27,21 @@ class PolicyLoadRequest(BaseModel):
     policy_id: str = Field(pattern=r"^[A-Za-z0-9_-]{1,80}$")
 
 
+# A policy trained on several views names one camera of this computer for each of them.
+PolicyCameras = Annotated[
+    dict[
+        Annotated[
+            str,
+            StringConstraints(
+                pattern=r"^observation\.(?:images\.[a-zA-Z0-9_.-]{1,64}|image[0-9]*)$"
+            ),
+        ],
+        Annotated[StrictInt, Field(ge=0, le=63)],
+    ],
+    Field(min_length=1, max_length=3),
+]
+
+
 class PolicyStartRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     task: str = Field(default="", max_length=1000)
@@ -33,7 +49,10 @@ class PolicyStartRequest(BaseModel):
     operator_present: Literal[True]
     workspace_clear: Literal[True]
     camera_index: StrictInt = Field(ge=0, le=63)
-    duration_seconds: StrictInt = Field(ge=1, le=120)
+    cameras: PolicyCameras | None = None
+    # The operator's choice to let this run pause while the policy plans its actions.
+    allow_planning_pause: StrictBool = False
+    duration_seconds: StrictInt = Field(ge=1, le=600)
     expected_generation: StrictInt
 
 
@@ -41,12 +60,15 @@ class PolicyPreflightRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     task: str = Field(default="", max_length=1000)
     camera_index: StrictInt = Field(ge=0, le=63)
+    cameras: PolicyCameras | None = None
+    allow_planning_pause: StrictBool = False
 
 
 class PolicyPreviewRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     synthetic: StrictBool = False
     camera_index: StrictInt | None = Field(default=None, ge=0, le=63)
+    cameras: PolicyCameras | None = None
     state: list[float] | None = Field(default=None, min_length=6, max_length=6)
     jpeg: str | None = Field(default=None, max_length=3 * 1024**2)
     task: str = Field(default="", max_length=1000)
@@ -58,6 +80,8 @@ class PolicyPreviewRequest(BaseModel):
                 raise ValueError("Use either synthetic test inputs or one supplied observation")
         elif self.state is None or (self.camera_index is None) == (self.jpeg is None):
             raise ValueError("Supply six state values and one image or camera")
+        if self.cameras is not None and self.camera_index is None:
+            raise ValueError("Choose cameras only together with a camera observation")
         return self
 
 
@@ -101,6 +125,17 @@ class CalibrationImportRequest(BaseModel):
     port: str | None = None
     replace_existing: StrictBool = False
     confirm: Literal["IMPORT CALIBRATION"]
+
+
+class CalibrationReuseRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    robot_id: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
+    role: Literal["follower", "leader"]
+    port: str = Field(min_length=1, max_length=200)
+    source: Literal["saved", "motors"]
+    profile_key: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
+    same_arm: StrictBool
+    confirm: Literal["REUSE CALIBRATION"]
 
 
 class CameraModeRequest(BaseModel):
@@ -236,6 +271,13 @@ async def proxy(path: str, request: Request):
                 DeviceVisibilityRequest.model_validate(payload)
             except ValidationError:
                 raise HTTPException(422, "Choose a saved device") from None
+        if path == "calibration/reuse":
+            try:
+                CalibrationReuseRequest.model_validate(payload)
+            except ValidationError:
+                raise HTTPException(
+                    422, "Choose a calibration source and confirm the same arm"
+                ) from None
         if path == "calibration/import":
             try:
                 CalibrationImportRequest.model_validate(payload)
@@ -286,6 +328,7 @@ PROTOCOL = {
         "camera/settings",
         "diagnostics",
         "calibration/export",
+        "calibration/profiles",
         "policy/catalog",
     },
     "POST": {
@@ -305,6 +348,7 @@ PROTOCOL = {
         "setup/assembled/finish",
         "setup/assembled/cancel",
         "calibration/start",
+        "calibration/reuse",
         "calibration/import",
         "calibration/center",
         "calibration/finish",
@@ -395,6 +439,8 @@ for method, protocol_paths in PROTOCOL.items():
                                 if protocol_path == "devices/configure"
                                 else DeviceVisibilityRequest
                                 if protocol_path in {"devices/remove", "devices/restore"}
+                                else CalibrationReuseRequest
+                                if protocol_path == "calibration/reuse"
                                 else CalibrationImportRequest
                                 if protocol_path == "calibration/import"
                                 else RecordingStartRequest
@@ -419,6 +465,7 @@ for method, protocol_paths in PROTOCOL.items():
                 "recording/collection/next",
                 "recording/collection/rerecord",
                 "calibration/import",
+                "calibration/reuse",
                 "devices/configure",
                 "devices/remove",
                 "devices/restore",

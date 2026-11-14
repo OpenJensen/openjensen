@@ -21,15 +21,36 @@ from pathlib import Path
 from hardware import JOINTS, HardwareError
 from motion import control_limits
 from policy_contract import (
+    TOKENIZER_ARTIFACT,
     read_json,
     validate_policy_config,
     validate_processors,
     validate_smolvla_assets,
+    validate_tokenizer_artifact,
 )
 
 UNITS = ["degrees"] * 5 + ["percent"]
 MAX_SPEED = 10.0
 MAX_ACCELERATION = 20.0
+MAX_RUN_SECONDS = 600
+# Model predictions may slightly overshoot an endpoint: degrees for arm joints,
+# percentage points for the gripper. Commanded motion keeps its original bounds.
+PREDICTION_TOLERANCE = 5.0
+# A policy that plans a whole chunk of actions at once may need longer than the usual
+# prediction limit on a laptop. The operator can allow that for one run; the arm holds
+# its last target while the policy plans, and a longer pause still disables torque.
+# Planning that takes 0.6 s on an idle laptop GPU was measured at 1.7 s while other
+# programs used the same GPU, so the allowance leaves room for that.
+PLANNING_PAUSE_SECONDS = 3.0
+
+
+def prediction_limit(fps, planning_pause=False):
+    """Seconds one prediction may take, and how old the applied prediction may get."""
+    return PLANNING_PAUSE_SECONDS if planning_pause else max(0.5, 3 / fps)
+
+
+# How long a passing camera and inference check allows a run to start.
+PREFLIGHT_VALID_SECONDS = 60
 
 
 def admit(root, ident):
@@ -82,12 +103,19 @@ def admit(root, ident):
         assets = validate_smolvla_assets(checkpoint)
         paths = [path for path in paths if path.name != "assets"]
         paths.extend(assets.iterdir())
+        tokenizer = checkpoint / TOKENIZER_ARTIFACT
+        if tokenizer.is_dir() and not tokenizer.is_symlink():
+            # The tokenizer LeRobot saved with the weights: known data files only.
+            validate_tokenizer_artifact(checkpoint)
+            paths = [path for path in paths if path != tokenizer]
+            paths.extend(tokenizer.iterdir())
     for path in paths:
         if (
             path.is_symlink()
             or not path.is_file()
             or path.suffix not in {".json", ".safetensors", ".md", ".txt"}
             and path.name != "LICENSE"
+            and not (kind == "smolvla" and path.parent.name == TOKENIZER_ARTIFACT)
         ):
             raise ValueError(
                 "Only native JSON, safetensors and closed tokenizer data are supported"
@@ -131,6 +159,8 @@ def admit(root, ident):
         "camera_key": manifest["camera_key"],
         "camera_keys": list(images),
         "image_shape": images[manifest["camera_key"]]["shape"],
+        # Lets the workspace tell which of its models is already installed here.
+        "source_manifest_sha256": manifest.get("source_manifest_sha256"),
         "checkpoint": checkpoint,
         "files": files,
         "manifest": manifest,
@@ -243,6 +273,9 @@ class PolicyRunner:
         self.started = None
         self.generation = None
         self.check = None
+        self.planning_pause = False
+        # Steps the loaded policy will answer from its plan without looking at the cameras.
+        self.replay = 0
         self.preview = None
         self.task = ""
         self.operation = 0
@@ -307,6 +340,10 @@ class PolicyRunner:
 
     def snapshot(self):
         with self.lock:
+            preflight = None
+            if self.check is not None:
+                remaining = PREFLIGHT_VALID_SECONDS - (time.monotonic() - self.check["checked_at"])
+                preflight = {**self.check, "valid_for_ms": max(0, int(remaining * 1000))}
             return {
                 "phase": self.phase,
                 "policy_id": self.model["id"] if self.model else None,
@@ -314,7 +351,7 @@ class PolicyRunner:
                 "error": self.error,
                 "fps": self.model["fps"] if self.model else None,
                 "steps": self.steps,
-                "preflight": self.check,
+                "preflight": preflight,
                 "preview": self.preview,
                 "policy_type": self.model["policy_type"] if self.model else None,
                 "task_required": self.model["task_required"] if self.model else False,
@@ -327,8 +364,11 @@ class PolicyRunner:
                 "limits": {
                     "max_speed": MAX_SPEED,
                     "max_acceleration": MAX_ACCELERATION,
-                    "max_run_seconds": 120,
+                    "prediction_tolerance_degrees": PREDICTION_TOLERANCE,
+                    "prediction_tolerance_gripper_percent": PREDICTION_TOLERANCE,
+                    "max_run_seconds": MAX_RUN_SECONDS,
                     "operator_heartbeat_seconds": 2,
+                    "planning_pause_seconds": PLANNING_PAUSE_SECONDS,
                 },
                 "device": self.runtime.info.get("device") if self.runtime else None,
             }
@@ -359,6 +399,7 @@ class PolicyRunner:
             runtime = self.process_factory(
                 python, model["checkpoint"], device, self.root / "runtime.log", model["camera_key"]
             )
+            self.replay = 0  # A newly loaded policy has no plan.
             if runtime.info.get("camera_key") != model["camera_key"]:
                 runtime.close()
                 raise ValueError("Loaded policy camera differs from its admitted manifest")
@@ -389,9 +430,87 @@ class PolicyRunner:
             raise ValueError("This policy needs a task instruction of at most 1000 characters")
         return task
 
+    def _cameras(self, payload):
+        """Which camera of this computer feeds each camera input of the loaded policy.
+
+        A policy trained on two views needs both at run time. ``cameras`` names one
+        distinct camera for every input; ``camera_index`` stays the first input's camera,
+        so a one-camera policy is requested exactly as before. Call with the lock held.
+        """
+        keys, primary = self.model["camera_keys"], self.model["camera_key"]
+        chosen = payload.get("cameras")
+        if chosen is None:
+            if len(keys) > 1:
+                raise ValueError(
+                    f"This policy was trained on {len(keys)} cameras. Choose a camera for each: "
+                    + ", ".join(key.rsplit(".", 1)[-1] for key in keys)
+                )
+            return {primary: payload["camera_index"]}
+        if (
+            not isinstance(chosen, dict)
+            or set(chosen) != set(keys)
+            or any(type(index) is not int or not 0 <= index <= 63 for index in chosen.values())
+            or len(set(chosen.values())) != len(chosen)
+            or chosen[primary] != payload["camera_index"]
+        ):
+            raise ValueError("Choose a different available camera for each policy camera input")
+        return {key: chosen[key] for key in keys}
+
+    def _reset_policy(self):
+        """Clear the policy's plan; its next step plans again and needs the cameras."""
+        self.runtime.request({"reset": True})
+        self.replay = 0
+
+    def _predict(self, message, timeout):
+        """One step of the policy, remembering how many replay steps follow it."""
+        reply = self.runtime.request(message, timeout=timeout)
+        queued = reply.get("queued") if isinstance(reply, dict) else None
+        self.replay = queued if type(queued) is int and queued > 0 else 0
+        return reply
+
+    def _camera_rate(self, index, since, until):
+        """Frames a second the camera delivered between two moments, or None if unknown.
+
+        The camera pool records when every frame arrived. That is the direct answer to
+        whether a camera keeps up with the policy; what a step happens to see is not,
+        because frames arrive unevenly while the computer is busy.
+        """
+        times = getattr(self.lab.camera, "capture_times", None)
+        lock = getattr(self.lab.camera, "frame_lock", None)
+        if not isinstance(times, dict) or lock is None:
+            return None
+        with lock:
+            arrived = [stamp for stamp in times.get(index, ()) if since <= stamp <= until]
+        if len(arrived) < 2 or arrived[-1] <= arrived[0]:
+            return None
+        return (len(arrived) - 1) / (arrived[-1] - arrived[0])
+
+    def _observation(self, cameras, state, task, max_age):
+        """One request for the inference process and the capture time of each camera."""
+        if self.replay:
+            # The policy answers this step from its plan and does not look at the
+            # cameras, so the images are not encoded or sent. Each camera's latest frame
+            # time is still read: that is what the freshness rule watches on every step.
+            stamps = {
+                index: self.lab.camera.read_latest_timed(index, max_age)[1]
+                for index in cameras.values()
+            }
+            return {"state": state, "task": task}, stamps
+        captures = {
+            key: self.lab.camera.latest_timed_jpeg(index, max_age=max_age)
+            for key, index in cameras.items()
+        }
+        images = {key: base64.b64encode(item["jpeg"]).decode() for key, item in captures.items()}
+        message = {"state": state, "task": task}
+        if len(images) == 1:
+            message["jpeg"] = next(iter(images.values()))
+        else:
+            message["images"] = images
+        return message, {cameras[key]: item["captured_monotonic"] for key, item in captures.items()}
+
     def preview_prediction(self, payload):
         """One explicitly requested offline observation; never opens a motor bus."""
-        if set(payload) - {"synthetic", "camera_index", "state", "jpeg", "task"}:
+        if set(payload) - {"synthetic", "camera_index", "cameras", "state", "jpeg", "task"}:
             raise ValueError("Choose one preview observation")
         task = self._task(payload)
         synthetic = payload.get("synthetic") is True
@@ -412,11 +531,25 @@ class PolicyRunner:
                 or self.lab.pending_bus is not None
             ):
                 raise ValueError("Load a policy and stop hardware control before previewing")
+            views = len(self.model["camera_keys"])
+            cameras = (
+                self._cameras(payload)
+                if not synthetic and payload.get("camera_index") is not None and views > 1
+                else None
+            )
             self.phase, self.error = "checking", None
             self.operation += 1
             operation = self.operation
         try:
-            if synthetic:
+            images = None
+            if cameras:
+                images = {
+                    key: base64.b64encode(self.lab.camera.capture_timed(index)["jpeg"]).decode()
+                    for key, index in cameras.items()
+                }
+                jpeg = None
+                source = "Selected cameras and supplied model state"
+            elif synthetic:
                 # Explicit neutral test, not a claim of a measured robot observation.
                 import io
 
@@ -438,9 +571,19 @@ class PolicyRunner:
                     raise ValueError("Upload a bounded preview image")
                 base64.b64decode(jpeg, validate=True)
                 source = "Uploaded image and supplied model state"
-            self.runtime.request({"reset": True})
+            if images is None and views > 1:
+                source += f"; the same image shown to all {views} camera inputs"
+            self._reset_policy()
             before = time.monotonic()
-            result = self.runtime.request({"state": state, "jpeg": jpeg, "task": task}, timeout=60)
+            result = self.runtime.request(
+                {"state": state, "task": task}
+                | (
+                    {"images": images}
+                    if images
+                    else {"jpeg": jpeg} | ({"repeat": True} if views > 1 else {})
+                ),
+                timeout=60,
+            )
             action = result.get("action")
             if (
                 not isinstance(action, list)
@@ -474,12 +617,14 @@ class PolicyRunner:
     def preflight(self, payload):
         """Measure actual camera + normalized native inference, without motor writes."""
         if (
-            set(payload) - {"camera_index", "task"}
+            set(payload) - {"camera_index", "cameras", "task", "allow_planning_pause"}
             or "camera_index" not in payload
             or type(payload["camera_index"]) is not int
             or not 0 <= payload["camera_index"] <= 63
+            or type(payload.get("allow_planning_pause", False)) is not bool
         ):
             raise ValueError("Choose a camera for the policy check")
+        pause = payload.get("allow_planning_pause", False)
         task = self._task(payload)
         with self.lock:
             if self.phase != "ready" or not self.runtime or not self.model:
@@ -493,40 +638,48 @@ class PolicyRunner:
                 and self.thread.is_alive()
             ):
                 raise ValueError("Stop motor control before running the policy check")
+            cameras = self._cameras(payload)
             self.phase, self.error, self.check = "checking", None, None
             self.operation += 1
             operation = self.operation
         camera, fps = payload["camera_index"], self.model["fps"]
         try:
-            self.lab.camera.start_reader(camera)
+            for index in cameras.values():
+                self.lab.camera.start_reader(index)
             warm_deadline = time.monotonic() + 3
-            while True:
-                try:
-                    self.lab.camera.latest_timed_jpeg(camera)
-                    break
-                except RuntimeError, TimeoutError:
-                    if time.monotonic() >= warm_deadline:
-                        raise ValueError("Policy camera did not provide a fresh frame") from None
-                    time.sleep(0.02)
-            self.runtime.request({"reset": True})
-            samples, starts, stamps = [], [], []
+            for index in cameras.values():
+                while True:
+                    try:
+                        self.lab.camera.latest_timed_jpeg(index)
+                        break
+                    except RuntimeError, TimeoutError:
+                        if time.monotonic() >= warm_deadline:
+                            raise ValueError(
+                                "Policy camera did not provide a fresh frame"
+                            ) from None
+                        time.sleep(0.02)
+            self._reset_policy()
+            samples, starts, stamps = [], [], {index: [] for index in cameras.values()}
+            ages = {index: [] for index in cameras.values()}
             count = max(16, 2 * fps)
             due = time.monotonic()
+            late, lost = 0, 0.0
             for _ in range(count):
                 with self.lock:
                     if operation != self.operation or self.phase != "checking":
                         raise ValueError("Policy check was cancelled")
                 started = time.monotonic()
-                capture = self.lab.camera.latest_timed_jpeg(camera, max_age=max(0.15, 2 / fps))
+                if started - due > max(0.15, 2 / fps):
+                    # The step before this one was slow, as when a policy plans its next
+                    # chunk of actions. Measure it as a run treats it: continue from now.
+                    late, lost, due = late + 1, lost + started - due, started
                 positions = self.lab.positions
-                reply = self.runtime.request(
-                    {
-                        "state": [positions.get(j, 0.0) for j in JOINTS],
-                        "jpeg": base64.b64encode(capture["jpeg"]).decode(),
-                        "task": task,
-                    },
-                    timeout=max(0.5, 3 / fps),
+                message, captured = self._observation(
+                    cameras, [positions.get(j, 0.0) for j in JOINTS], task, max(0.15, 2 / fps)
                 )
+                # No motor is involved here, so wait long enough to measure a slow
+                # prediction instead of ending the check with a timeout.
+                reply = self._predict(message, PLANNING_PAUSE_SECONDS + 0.5)
                 action = reply.get("action")
                 if (
                     not isinstance(action, list)
@@ -536,23 +689,64 @@ class PolicyRunner:
                     raise ValueError("Policy normalization did not produce six finite actions")
                 samples.append(time.monotonic() - started)
                 starts.append(started)
-                stamps.append(capture["captured_monotonic"])
+                for index, stamp in captured.items():
+                    stamps[index].append(stamp)
+                    ages[index].append(started - stamp)
                 due += 1 / fps
                 time.sleep(max(0, due - time.monotonic()))
-            self.runtime.request({"reset": True})
-            actual = (count - 1) / (starts[-1] - starts[0])
-            unique = len(set(stamps))
-            mean = sum(samples) / count
+            self._reset_policy()
+            # The rate between slow steps; how many slow steps there may be is checked too.
+            actual = (count - 1) / max(1e-6, starts[-1] - starts[0] - lost)
+            # Every camera must keep up; the slowest one decides. A camera keeps up when
+            # the frame a step uses is younger than one policy step. Counting frames that
+            # differ from the previous step's would also fail a faster camera whenever
+            # two steps run close together, which any slow step causes.
+            fresh = {
+                key: sum(age <= 1 / fps for age in ages[index]) for key, index in cameras.items()
+            }
+            unique = min(fresh.values())
+            # Where the camera pool can say how many frames arrived, that decides.
+            rates = {
+                key: self._camera_rate(index, starts[0], time.monotonic())
+                for key, index in cameras.items()
+            }
+            if all(rate is not None for rate in rates.values()):
+                cameras_keep_up = min(rates.values()) >= fps * 0.9
+            else:
+                cameras_keep_up = unique >= count * 0.9
+            # The longest wait between two different frames of each camera, as seen here.
+            waits = {}
+            for key, index in cameras.items():
+                seen = sorted(set(stamps[index]))
+                waits[key] = round(
+                    max((later - earlier for earlier, later in zip(seen, seen[1:])), default=0)
+                    * 1000
+                )
             longest = max(samples)
-            passed = (
+            # The steps where the policy plans are judged by ``longest`` and by how many
+            # there are. The ordinary steps between them must fit the frame period.
+            ordinary = [sample for sample in samples if sample <= max(0.15, 2 / fps)]
+            mean = sum(ordinary) / len(ordinary) if ordinary else longest
+            steady = (
                 actual >= fps * 0.95
                 and mean <= 0.85 / fps
-                and longest <= max(0.5, 3 / fps)
-                and unique >= count * 0.9
+                and late <= max(1, count // 20)
+                and count - len(ordinary) <= max(1, count // 20)
+                and cameras_keep_up
+            )
+            passed = steady and longest <= prediction_limit(fps, pause)
+            # Everything holds except that planning takes longer than the usual limit:
+            # the operator may allow planning pauses and check again.
+            pause_needed = (
+                steady and not pause and prediction_limit(fps) < longest <= PLANNING_PAUSE_SECONDS
             )
             check = {
                 "passed": passed,
+                "planning_pause": pause,
+                "planning_pause_needed": pause_needed,
+                "prediction_limit_ms": round(prediction_limit(fps, pause) * 1000),
                 "camera_index": camera,
+                "cameras": cameras,
                 "checked_at": time.monotonic(),
                 "task_sha256": hashlib.sha256(task.encode()).hexdigest(),
                 "fps": fps,
@@ -560,9 +754,21 @@ class PolicyRunner:
                 "mean_latency_ms": round(mean * 1000, 1),
                 "max_latency_ms": round(longest * 1000, 1),
                 "fresh_frames": unique,
+                "camera_fresh_frames": fresh,
+                "camera_fps": {
+                    key: None if rate is None else round(rate, 1) for key, rate in rates.items()
+                },
+                "camera_longest_wait_ms": waits,
                 "samples": count,
                 "message": "Camera and local ACT inference meet the trained frame rate"
                 if passed
+                else (
+                    f"This policy takes {longest * 1000:.0f} ms to plan its next actions; "
+                    f"{prediction_limit(fps) * 1000:.0f} ms is allowed. To run it, allow "
+                    "planning pauses and check again. The arm holds its last target while "
+                    "the policy plans."
+                )
+                if pause_needed
                 else (
                     "This camera or local runtime cannot sustain the trained frame rate. "
                     "Use a faster inference device or matching camera; "
@@ -581,7 +787,7 @@ class PolicyRunner:
         return self.lab.status()
 
     def start(self, payload):
-        if set(payload) - {"task"} != {
+        if set(payload) - {"task", "cameras", "allow_planning_pause"} != {
             "confirm",
             "operator_present",
             "workspace_clear",
@@ -598,13 +804,17 @@ class PolicyRunner:
             raise ValueError("An attending operator and clear workspace are required")
         task = self._task(payload)
         duration, camera = payload["duration_seconds"], payload["camera_index"]
+        pause = payload.get("allow_planning_pause", False)
         if (
             type(duration) is not int
-            or not 1 <= duration <= 120
+            or not 1 <= duration <= MAX_RUN_SECONDS
             or type(camera) is not int
             or not 0 <= camera <= 63
+            or type(pause) is not bool
         ):
-            raise ValueError("Run duration must be 1–120 seconds with an available camera")
+            raise ValueError(
+                f"Run duration must be 1–{MAX_RUN_SECONDS} seconds with an available camera"
+            )
         with self.lab.lock, self.lock, self.lab.lifecycle_lock:
             if self.phase != "ready" or not self.runtime or not self.model:
                 raise ValueError("Load and verify a policy first")
@@ -627,11 +837,21 @@ class PolicyRunner:
                 )
             if time.monotonic() - self.lab.heartbeat > 2:
                 raise ValueError("The manual operator heartbeat expired")
+            cameras = self._cameras(payload)
+            if (
+                self.check
+                and time.monotonic() - self.check["checked_at"] >= PREFLIGHT_VALID_SECONDS
+            ):
+                raise ValueError(
+                    "Camera and inference check expired. Stop the arm and run the check again."
+                )
             if (
                 not self.check
                 or not self.check["passed"]
                 or self.check["camera_index"] != camera
-                or time.monotonic() - self.check["checked_at"] > 60
+                or self.check.get("cameras", cameras) != cameras
+                # A run may pause for planning only if its check measured it that way.
+                or self.check.get("planning_pause", False) != pause
                 or (
                     self.model["task_required"]
                     and self.check.get("task_sha256") != hashlib.sha256(task.encode()).hexdigest()
@@ -646,12 +866,20 @@ class PolicyRunner:
                 raise ValueError("Policy files changed; load the policy again")
             self.cancel = threading.Event()
             self.predicted = None
-            self.commanded = dict(self.lab.positions)
+            # The manual hold can start at a measured encoder position in the
+            # margin between the calibrated endpoints and the command inset.
+            # Seed the trajectory at the same bounded goal the motor bridge uses.
+            ranges = control_limits(self.lab.calibration)
+            self.commanded = {
+                joint: min(ranges[joint]["max"], max(ranges[joint]["min"], position))
+                for joint, position in self.lab.positions.items()
+            }
             self.velocity = {j: 0.0 for j in JOINTS}
             self.last_apply = time.monotonic()
             self.steps = 0
             self.generation = self.lab.generation
             self.task = task
+            self.planning_pause = pause
             self.started = time.monotonic()
             self.last_prediction = self.last_health = self.started
             self.operator_deadline = self.started + 2
@@ -660,7 +888,7 @@ class PolicyRunner:
             self.lab.mode = "policy"
             self.thread = threading.Thread(
                 target=self._run,
-                args=(camera, duration, self.generation, self.cancel),
+                args=(cameras, duration, self.generation, self.cancel),
                 name="robot-lab-policy",
                 daemon=True,
             )
@@ -718,10 +946,12 @@ class PolicyRunner:
             self.last_health = now
             if self.expired():
                 raise HardwareError("Policy operator heartbeat or run duration expired")
-            if now - self.last_prediction > max(0.5, 3 / self.model["fps"]):
+            if now - self.last_prediction > prediction_limit(
+                self.model["fps"], self.planning_pause
+            ):
                 raise HardwareError("Policy predictions fell behind the trained frame rate")
             if self.predicted is None:
-                return dict(measured)
+                return dict(self.commanded)
             dt = min(0.05, max(0.001, now - getattr(self, "last_apply", now - 0.025)))
             self.last_apply = now
             ranges = control_limits(self.lab.calibration)
@@ -730,8 +960,20 @@ class PolicyRunner:
                 if abs(measured[j] - self.commanded[j]) > 15:
                     raise HardwareError("Policy tracking error exceeded the motion envelope")
                 target = self.predicted[j]
-                if not ranges[j]["min"] <= target <= ranges[j]["max"]:
-                    raise HardwareError("Policy target is outside calibrated joint limits")
+                lower, upper = ranges[j]["min"], ranges[j]["max"]
+                if (
+                    not math.isfinite(target)
+                    or target < lower - PREDICTION_TOLERANCE
+                    or target > upper + PREDICTION_TOLERANCE
+                ):
+                    raise HardwareError(
+                        "Policy target is outside calibrated joint limits: "
+                        f"{j} predicted {target:.3f}, allowed {lower:.3f} to {upper:.3f} "
+                        f"with {PREDICTION_TOLERANCE:g} prediction tolerance"
+                    )
+                # Project only small prediction overshoots onto the existing
+                # inset limits, before applying the speed/acceleration envelope.
+                target = min(upper, max(lower, target))
                 delta = target - self.commanded[j]
                 # A proportional velocity goal approaches each target without
                 # snapping the final step, which would violate acceleration limits.
@@ -748,37 +990,76 @@ class PolicyRunner:
             self.commanded = goals
             return dict(goals)
 
-    def _run(self, camera, duration, generation, cancel):
+    def _run(self, cameras, duration, generation, cancel):
         reason = "Policy run completed; torque disabled"
         try:
-            self.runtime.request({"reset": True})
+            if not isinstance(cameras, dict):  # One camera, given by its index.
+                cameras = {self.model["camera_key"]: cameras}
+            # The check opened these readers, but the service closes cameras that sat
+            # unused (after 30 s), and a run starts up to a minute after its check. Open
+            # them again and wait for a frame before the first step.
+            for index in cameras.values():
+                self.lab.camera.start_reader(index)
+            warm = time.monotonic() + 3
+            for index in cameras.values():
+                while True:
+                    try:
+                        self.lab.camera.read_latest_timed(index, 0.5)
+                        break
+                    except RuntimeError, TimeoutError:
+                        if time.monotonic() >= warm or cancel.is_set():
+                            raise ValueError(
+                                "Policy camera did not provide a fresh frame"
+                            ) from None
+                        time.sleep(0.02)
+            self._reset_policy()
             deadline, due = time.monotonic() + duration, time.monotonic()
-            camera_stamps = deque(maxlen=max(16, 2 * self.model["fps"]))
+            window = max(16, 2 * self.model["fps"])
+            camera_stamps = {index: deque(maxlen=window) for index in cameras.values()}
+            late = deque(maxlen=window)
             while not cancel.is_set() and time.monotonic() < deadline:
                 if generation != self.lab.generation or self.lab.mode != "policy":
                     return
-                if time.monotonic() - due > max(0.15, 2 / self.model["fps"]):
-                    raise ValueError("Policy loop cannot maintain the trained frame rate")
-                capture = self.lab.camera.latest_timed_jpeg(
-                    camera, max_age=max(0.15, 2 / self.model["fps"])
-                )
-                camera_stamps.append(capture["captured_monotonic"])
-                if (
-                    len(camera_stamps) == camera_stamps.maxlen
-                    and len(set(camera_stamps)) < len(camera_stamps) * 0.9
-                ):
-                    raise ValueError("Policy camera fell below the trained frame rate")
+                behind = time.monotonic() - due > max(0.15, 2 / self.model["fps"])
+                late.append(behind)
+                if behind:
+                    # A policy that predicts a chunk of actions is slow on the one step
+                    # where it plans the next chunk. That step is already bounded by the
+                    # prediction time limit below and in apply(); what must stop the run
+                    # is falling behind again and again. Continue from now rather than
+                    # hurrying through the missed steps on stale camera frames.
+                    if sum(late) > max(1, len(late) // 20):
+                        raise ValueError("Policy loop cannot maintain the trained frame rate")
+                    due = time.monotonic()
                 positions = dict(self.lab.positions)
+                step_started = time.monotonic()
+                message, captured = self._observation(
+                    cameras,
+                    [positions.get(j) for j in JOINTS],
+                    self.task,
+                    max(0.15, 2 / self.model["fps"]),
+                )
+                for index, stamp in captured.items():
+                    # As in the check: the camera's own frame count decides where it is
+                    # known; otherwise, is this step's frame younger than one policy step?
+                    recent = camera_stamps[index]
+                    recent.append(step_started - stamp <= 1 / self.model["fps"])
+                    if len(recent) < recent.maxlen:
+                        continue
+                    rate = self._camera_rate(
+                        index, step_started - window / self.model["fps"], step_started
+                    )
+                    if (
+                        rate < self.model["fps"] * 0.9
+                        if rate is not None
+                        else sum(recent) < len(recent) * 0.9
+                    ):
+                        raise ValueError("Policy camera fell below the trained frame rate")
                 if set(positions) != set(JOINTS) or time.monotonic() - self.last_health > 0.15:
                     raise ValueError("Fresh full-arm encoder observations are unavailable")
                 before = time.monotonic()
-                result = self.runtime.request(
-                    {
-                        "state": [positions[j] for j in JOINTS],
-                        "jpeg": base64.b64encode(capture["jpeg"]).decode(),
-                        "task": self.task,
-                    },
-                    timeout=max(0.5, 3 / self.model["fps"]),
+                result = self._predict(
+                    message, prediction_limit(self.model["fps"], self.planning_pause)
                 )
                 action = result.get("action")
                 if (

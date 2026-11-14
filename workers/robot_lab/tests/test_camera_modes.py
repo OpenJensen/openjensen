@@ -106,6 +106,21 @@ class CameraModeTests(unittest.TestCase):
                     pool.configure(payload)
             read.assert_not_called()
 
+    @patch("camera.platform.system", return_value="Linux")
+    @patch("camera.camera_identity", return_value="camera-2")
+    @patch("camera.linux_modes", return_value=[MODE])
+    def test_camera_modes_can_change_while_preview_is_running(self, *_):
+        import threading
+        from unittest.mock import Mock
+
+        pool = CameraPool()
+        pool.readers[2] = (Mock(is_alive=lambda: True), threading.Event())
+        pool.preview_readers.add(2)
+        with patch.object(pool, "read", return_value=object()):
+            pool.configure([{"index": 2, "mode": MODE}])
+        self.assertEqual(pool.configured_modes, {"camera-2": MODE})
+        self.assertFalse(pool.readers or pool.preview_readers)
+
     def test_camera_settings_are_not_changed_during_recording_capture(self):
         pool = CameraPool()
         pool.readers[2] = (object(), object())

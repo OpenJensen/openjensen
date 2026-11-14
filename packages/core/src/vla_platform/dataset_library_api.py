@@ -25,6 +25,13 @@ class UploadCreate(StrictRecord):
     name: str = Field(min_length=1, max_length=100)
 
 
+class Combination(StrictRecord):
+    name: str = Field(min_length=1, max_length=100)
+    dataset_ids: list[Annotated[str, Field(pattern=r"^[a-f0-9]{32}$")]] = Field(
+        min_length=2, max_length=1000
+    )
+
+
 class Conversion(StrictRecord):
     fps: int = Field(default=30, ge=1, le=240, strict=True)
     task: str = Field(default="Recorded robot task", min_length=1, max_length=1000)
@@ -92,6 +99,15 @@ async def discard_upload(
 async def example(project_id: str, request: Request, library: LibraryDep):
     await project(request, project_id)
     return await library.example(project_id)
+
+
+@router.post("/projects/{project_id}/datasets/combine", status_code=201)
+async def combine_datasets(
+    project_id: str, payload: Combination, request: Request, library: LibraryDep
+):
+    """Join datasets that share cameras and frame rate into one new, trainable dataset."""
+    await project(request, project_id)
+    return await library.combine(project_id, payload.dataset_ids, payload.name)
 
 
 @router.get("/datasets/{ident}")

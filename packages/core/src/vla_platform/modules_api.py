@@ -103,9 +103,7 @@ async def uninstall_feature(ident: ModuleId, request: Request):
             and setup
             and (setup.state.status == "running" or setup.lock.locked())
         ):
-            raise HTTPException(
-                409, "Finish or cancel training setup before uninstalling Fine-tuning."
-            )
+            raise HTTPException(409, "Finish or cancel training setup before uninstalling Train.")
         operations = {
             "datasets": ("dataset.inspect", "dataset.inspect.local"),
             "augmentation": ("dataset.augment",),

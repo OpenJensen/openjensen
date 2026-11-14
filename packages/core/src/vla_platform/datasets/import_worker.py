@@ -13,6 +13,11 @@ import uuid
 from pathlib import Path
 
 MAX_ROWS = 100_000
+# Training reads single frames in random order. A decoder can only start at a keyframe,
+# so with the encoder's default of one keyframe per 250 frames each read decodes over a
+# hundred frames first and the GPU waits. A keyframe every second frame, with no
+# backward-predicted frames, is the LeRobot convention and makes every read cheap.
+RANDOM_ACCESS = ("-g", "2", "-keyint_min", "2", "-sc_threshold", "0", "-bf", "0")
 MAX_FILES = 4096
 MAX_BYTES = 2 * 1024**3
 
@@ -563,6 +568,7 @@ def convert(root, output, detected, settings):
                                 "-an",
                                 "-c:v",
                                 "libx264",
+                                *RANDOM_ACCESS,
                                 "-threads",
                                 "1",
                                 "-pix_fmt",
@@ -743,6 +749,271 @@ def convert(root, output, detected, settings):
     }
 
 
+def _dataset(root):
+    """One finalized LeRobot v3 dataset: its metadata, tasks and episode rows."""
+    info = json.loads(safe(root, "meta/info.json").read_bytes())
+    if info.get("codebase_version") != "v3.0":
+        raise ValueError("Only finalized LeRobot v3 datasets can be combined")
+    if info.get("data_path") != "data/chunk-{chunk_index:03d}/file-{file_index:03d}.parquet":
+        raise ValueError("Dataset uses a nonstandard data layout")
+    tasks = {}
+    for row in tabular(safe(root, "meta/tasks.parquet")):
+        name = row.get("task", row.get("__index_level_0__"))
+        if not isinstance(name, str) or not name.strip() or type(row.get("task_index")) is not int:
+            raise ValueError("Dataset has an invalid task table")
+        tasks[row["task_index"]] = name
+    rows = []
+    for path in sorted((root / "meta/episodes").rglob("*.parquet")):
+        rows.extend(tabular(safe(root, path.relative_to(root).as_posix())))
+    rows.sort(key=lambda row: row["episode_index"])
+    if len(rows) != info.get("total_episodes") or not rows:
+        raise ValueError("Dataset episode metadata is incomplete")
+    return info, tasks, rows
+
+
+def _combined_statistics(parts):
+    """Pool per-dataset statistics, weighted by how many frames each one describes."""
+    import numpy as np
+
+    output = {}
+    for key in parts[0]:
+        entries = [part[key] for part in parts if key in part]
+        if len(entries) != len(parts):
+            continue  # Normalization needs every source; the validator names what is missing.
+        counts = np.array([float(entry["count"][0]) for entry in entries])
+        total = counts.sum()
+        means = np.stack([np.asarray(entry["mean"], dtype=float) for entry in entries])
+        weights = counts.reshape((-1,) + (1,) * (means.ndim - 1))
+        mean = (means * weights).sum(0) / total
+        spread = np.stack([np.asarray(entry["std"], dtype=float) ** 2 for entry in entries])
+        variance = ((spread + (means - mean) ** 2) * weights).sum(0) / total
+        output[key] = {
+            "mean": mean.tolist(),
+            "std": np.sqrt(np.maximum(variance, 0)).tolist(),
+            "min": np.stack([np.asarray(e["min"], dtype=float) for e in entries]).min(0).tolist(),
+            "max": np.stack([np.asarray(e["max"], dtype=float) for e in entries]).max(0).tolist(),
+            "count": [int(total)],
+        }
+        for name in ("q01", "q10", "q50", "q90", "q99"):
+            if all(name in entry for entry in entries):
+                # A frame-weighted estimate; exact quantiles would need every frame again.
+                values = np.stack([np.asarray(entry[name], dtype=float) for entry in entries])
+                output[key][name] = ((values * weights).sum(0) / total).tolist()
+    return output
+
+
+def _recorder_statement(roots):
+    """What the Robot Lab recorder said about every source, when all of them agree.
+
+    The recorder states the units of the arm positions. A policy trained on the combined
+    dataset speaks those units, so the statement carries over, but only when every source
+    is a finished Robot Lab recording and they all say the same thing.
+    """
+    shared = None
+    for root in roots:
+        try:
+            recording = json.loads(safe(root, "openjensen.json").read_bytes())
+        except OSError, ValueError:
+            return None
+        if (
+            not isinstance(recording, dict)
+            or recording.get("created_by") != "OpenJensen Robot Lab"
+            or recording.get("finalized") is not True
+            or recording.get("abandoned", False) is not False
+        ):
+            return None
+        statement = {
+            key: recording.get(key) for key in ("created_by", "format_version", "units", "format")
+        }
+        if shared is not None and statement != shared:
+            return None
+        shared = statement
+    return shared
+
+
+def merge(roots, output):
+    """Join datasets that share features and frame rate into one LeRobot v3 dataset.
+
+    Recording one episode per dataset is common (an agent-supervised run writes exactly
+    that), and one episode cannot be trained on. Episodes keep their order: every episode
+    of the first dataset, then the second, and so on. Frames are copied as they are; only
+    the episode, frame and task numbering changes.
+    """
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    if not 2 <= len(roots) <= 1000:
+        raise ValueError("Choose between 2 and 1,000 datasets to combine")
+    if output.exists() and any(output.iterdir()):
+        raise ValueError("The combined dataset folder must be empty")
+    sources = [(root, *_dataset(root)) for root in roots]
+    first = sources[0][1]
+    for index, (_, info, _, _) in enumerate(sources[1:], start=2):
+        if info.get("fps") != first.get("fps"):
+            raise ValueError(
+                f"Dataset {index} was recorded at {info.get('fps')} fps and the first at "
+                f"{first.get('fps')} fps; only datasets with one frame rate can be combined"
+            )
+        if info.get("features") != first.get("features"):
+            ours, theirs = set(first.get("features", {})), set(info.get("features", {}))
+            detail = (
+                "it has different cameras or values: " + ", ".join(sorted(ours ^ theirs))
+                if ours != theirs
+                else "its cameras or values have a different size or type"
+            )
+            raise ValueError(f"Dataset {index} does not match the first: {detail}")
+    videos = [key for key, value in first["features"].items() if value.get("dtype") == "video"]
+    task_ids, episode_rows, statistics = {}, [], []
+    episode_index = frame_index = 0
+    video_files = {key: 0 for key in videos}
+    for root, info, tasks, rows in sources:
+        try:
+            statistics.append(json.loads(safe(root, "meta/stats.json").read_bytes()))
+        except OSError as exc:
+            raise ValueError("A dataset has no normalization statistics") from exc
+        renamed = {key: {} for key in videos}  # (chunk, file) in the source -> new file index
+        for row in rows:
+            length = row["length"]
+            names = row.get("tasks") or []
+            for name in names:
+                task_ids.setdefault(name, len(task_ids))
+            source_file = safe(
+                root,
+                info["data_path"].format(
+                    chunk_index=row["data/chunk_index"], file_index=row["data/file_index"]
+                ),
+            )
+            target = output / (
+                f"data/chunk-{episode_index // 1000:03d}/file-{episode_index % 1000:03d}.parquet"
+            )
+            target.parent.mkdir(parents=True, exist_ok=True)
+            table = pq.ParquetFile(source_file, arrow_extensions_enabled=False)
+            written = 0
+            with pq.ParquetWriter(target, table.schema_arrow) as writer:
+                for batch in table.iter_batches(batch_size=32, use_threads=False):
+                    keep = [
+                        position
+                        for position, value in enumerate(batch.column("episode_index").to_pylist())
+                        if value == row["episode_index"]
+                    ]
+                    if not keep:
+                        continue
+                    batch = batch.take(pa.array(keep, type=pa.int64()))
+                    columns = dict(zip(batch.schema.names, batch.columns, strict=True))
+                    count = batch.num_rows
+                    columns["episode_index"] = pa.array([episode_index] * count, type=pa.int64())
+                    columns["index"] = pa.array(
+                        range(frame_index + written, frame_index + written + count),
+                        type=pa.int64(),
+                    )
+                    columns["task_index"] = pa.array(
+                        [
+                            task_ids[tasks[value]]
+                            for value in batch.column("task_index").to_pylist()
+                        ],
+                        type=pa.int64(),
+                    )
+                    writer.write_batch(
+                        pa.RecordBatch.from_arrays(
+                            [columns[name] for name in batch.schema.names],
+                            schema=table.schema_arrow,
+                        )
+                    )
+                    written += count
+            if written != length:
+                raise ValueError("A dataset's frames do not match its episode metadata")
+            entry = {
+                key: value
+                for key, value in row.items()
+                if key.startswith("stats/") or key.endswith(("/from_timestamp", "/to_timestamp"))
+            }
+            entry.update(
+                {
+                    "episode_index": episode_index,
+                    "tasks": names,
+                    "length": length,
+                    "data/chunk_index": episode_index // 1000,
+                    "data/file_index": episode_index % 1000,
+                    "dataset_from_index": frame_index,
+                    "dataset_to_index": frame_index + length,
+                    "meta/episodes/chunk_index": 0,
+                    "meta/episodes/file_index": 0,
+                }
+            )
+            for key in videos:
+                prefix = "videos/" + key
+                origin = (row[prefix + "/chunk_index"], row[prefix + "/file_index"])
+                if origin not in renamed[key]:
+                    renamed[key][origin] = video_files[key]
+                    video_files[key] += 1
+                    number = renamed[key][origin]
+                    copied = output / (
+                        f"videos/{key}/chunk-{number // 1000:03d}/file-{number % 1000:03d}.mp4"
+                    )
+                    copied.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copyfile(
+                        safe(
+                            root,
+                            info["video_path"].format(
+                                video_key=key, chunk_index=origin[0], file_index=origin[1]
+                            ),
+                        ),
+                        copied,
+                    )
+                number = renamed[key][origin]
+                entry[prefix + "/chunk_index"] = number // 1000
+                entry[prefix + "/file_index"] = number % 1000
+            episode_rows.append(entry)
+            episode_index += 1
+            frame_index += length
+    meta = output / "meta"
+    (meta / "episodes/chunk-000").mkdir(parents=True)
+    pq.write_table(pa.Table.from_pylist(episode_rows), meta / "episodes/chunk-000/file-000.parquet")
+    task_table = pa.Table.from_pydict(
+        {"task_index": list(task_ids.values()), "task": list(task_ids)},
+        schema=pa.schema([("task_index", pa.int64()), ("task", pa.string())]),
+    )
+    pq.write_table(task_table, meta / "tasks.parquet")
+    info = {
+        **first,
+        "total_episodes": episode_index,
+        "total_frames": frame_index,
+        "total_tasks": len(task_ids),
+        "splits": {"train": f"0:{episode_index}"},
+    }
+    (meta / "info.json").write_text(json.dumps(info, allow_nan=False))
+    (meta / "stats.json").write_text(json.dumps(_combined_statistics(statistics), allow_nan=False))
+    statement = _recorder_statement([root for root, *_ in sources])
+    if statement is not None:
+        (output / "openjensen.json").write_text(
+            json.dumps(
+                {
+                    **statement,
+                    "episodes": episode_index,
+                    "frames": frame_index,
+                    "fps": first["fps"],
+                    "task": next(iter(task_ids), ""),
+                    "finalized": True,
+                    "abandoned": False,
+                    "pending_frames": 0,
+                    "camera_features": [
+                        key
+                        for key, value in first["features"].items()
+                        if value.get("dtype") in {"video", "image"}
+                    ],
+                },
+                allow_nan=False,
+            )
+        )
+    return {
+        "episodes": episode_index,
+        "frames": frame_index,
+        "fps": first["fps"],
+        "tasks": list(task_ids),
+        "sources": len(sources),
+    }
+
+
 def preview_lerobot(root, output):
     """Bounded recorded-image sequences; video sources keep their thumbnail path."""
     import io
@@ -873,12 +1144,12 @@ def _preview_lerobot_samples(root, output):
     return {"samples": len(samples)}
 
 
-def demo(root):
+def demo(root, episodes=2):
     from PIL import Image, ImageDraw
 
     root.mkdir(exist_ok=True)
     records = []
-    for episode in range(2):
+    for episode in range(episodes):
         for frame in range(12):
             row = {
                 "episode_index": episode,
@@ -925,9 +1196,17 @@ def main():
         resource.setrlimit(resource.RLIMIT_FSIZE, (MAX_BYTES, MAX_BYTES))
         if sys.platform == "linux":
             resource.setrlimit(resource.RLIMIT_AS, (3 * 1024**3, 3 * 1024**3))
-    request = json.loads(sys.stdin.buffer.read(65536))
-    root = Path(request["root"])
+    request = json.loads(sys.stdin.buffer.read(1024**2))
     op = request["operation"]
+    if op == "merge":
+        print(
+            json.dumps(
+                merge([Path(root) for root in request["roots"]], Path(request["output"])),
+                allow_nan=False,
+            )
+        )
+        return
+    root = Path(request["root"])
     if op == "detect":
         result = detect(root)
     elif op == "demo":

@@ -62,7 +62,7 @@ REGISTRY_ERROR = "The saved module registry needs administrator attention."
 CATALOG = (
     (
         "robot-lab",
-        "Initial setup",
+        "Robot Lab",
         "Robot Lab",
         "Pair the companion on the USB computer.",
         "/guide/#robot-lab",
@@ -97,7 +97,7 @@ CATALOG = (
     ),
     (
         "training",
-        "Fine-tuning",
+        "Train",
         "Train",
         "Configure a training worker before starting a job.",
         "/guide/#training",
@@ -125,7 +125,7 @@ CATALOG = (
     ),
     (
         "simulation",
-        "Run",
+        "Simulate",
         "Test",
         "Configure a simulator worker before starting a session.",
         "/guide/#simulation",

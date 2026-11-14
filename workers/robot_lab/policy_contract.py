@@ -25,6 +25,18 @@ CONFIG_KEYS = {
 
 SMOLVLM_MODEL = "HuggingFaceTB/SmolVLM2-500M-Video-Instruct"
 SMOLVLM_ASSET_PATH = "assets/smolvlm"
+# Current LeRobot saves the task tokenizer in the checkpoint and names it as an artifact
+# of the tokenizer step. Only this folder, holding only these data files, is accepted.
+TOKENIZER_ARTIFACT = "tokenizer"
+TOKENIZER_ARTIFACT_FILES = {
+    "tokenizer.json",
+    "tokenizer_config.json",
+    "special_tokens_map.json",
+    "added_tokens.json",
+    "vocab.json",
+    "merges.txt",
+    "chat_template.jinja",
+}
 SMOLVLA_PIPELINES = {
     "policy_preprocessor.json": (
         "rename_observations_processor",
@@ -80,6 +92,27 @@ def read_json(path, maximum=1024 * 1024):
     return json.loads(path.read_text(), parse_constant=invalid_constant)
 
 
+def validate_tokenizer_artifact(checkpoint):
+    """The checkpoint's own saved tokenizer: known data files, no links, bounded size."""
+    root = Path(checkpoint) / TOKENIZER_ARTIFACT
+    if root.is_symlink() or not root.is_dir():
+        raise ValueError("SmolVLA checkpoint is missing its saved tokenizer")
+    total, names = 0, set()
+    for path in root.iterdir():
+        if path.name not in TOKENIZER_ARTIFACT_FILES or path.is_symlink() or not path.is_file():
+            raise ValueError("Saved tokenizer accepts only known data files without links")
+        total += path.stat().st_size
+        names.add(path.name)
+    if not {"tokenizer.json", "tokenizer_config.json"} <= names or total >= 32 * 1024**2:
+        raise ValueError("Saved tokenizer is incomplete or larger than 32 MiB")
+    for name in ("tokenizer.json", "tokenizer_config.json"):
+        try:
+            _data_only(read_json(root / name, 32 * 1024**2))
+        except (RecursionError, UnicodeError) as error:
+            raise ValueError("Saved tokenizer must be data-only JSON") from error
+    return root
+
+
 def validate_processors(checkpoint, policy_type="act"):
     """Reject dynamic import fallback, external artifacts and escaping tensor state."""
     checkpoint = Path(checkpoint)
@@ -94,9 +127,12 @@ def validate_processors(checkpoint, policy_type="act"):
         if not isinstance(steps, list) or len(steps) != len(expected):
             raise ValueError("ACT requires its standard saved normalization processors")
         for step, registry in zip(steps, expected, strict=True):
+            saved_tokenizer = registry == "tokenizer_processor" and "artifacts" in step
             if (
                 not isinstance(step, dict)
-                or set(step) - {"registry_name", "config", "state_file"}
+                or set(step)
+                - {"registry_name", "config", "state_file"}
+                - ({"artifacts"} if saved_tokenizer else set())
                 or step.get("registry_name") != registry
                 or not isinstance(step.get("config"), dict)
                 or set(step["config"]) - CONFIG_KEYS[registry]
@@ -118,9 +154,20 @@ def validate_processors(checkpoint, policy_type="act"):
                     or config["padding_side"] != "right"
                     or config["padding"] != "max_length"
                     or config["truncation"] is not True
-                    or config["tokenizer_name"] not in {SMOLVLM_MODEL, SMOLVLM_ASSET_PATH}
+                    or config["tokenizer_name"]
+                    not in (
+                        {TOKENIZER_ARTIFACT}
+                        if saved_tokenizer
+                        else {SMOLVLM_MODEL, SMOLVLM_ASSET_PATH}
+                    )
+                    or (
+                        saved_tokenizer
+                        and step["artifacts"] != {"tokenizer_name": TOKENIZER_ARTIFACT}
+                    )
                 ):
                     raise ValueError("SmolVLA requires its standard bounded local task tokenizer")
+                if saved_tokenizer:
+                    validate_tokenizer_artifact(checkpoint)
             state = step.get("state_file")
             if state is not None:
                 if (
@@ -188,23 +235,24 @@ def validate_act_config(checkpoint):
         raise ValueError("ACT feature metadata must contain bounded shape records")
     images = {k: v for k, v in inputs.items() if k.startswith("observation.images.")}
     if (
-        len(images) != 1
+        not 1 <= len(images) <= 3
         or set(inputs) != {"observation.state", *images}
         or inputs["observation.state"].get("shape") != [6]
         or outputs.get("action", {}).get("shape") != [6]
     ):
-        raise ValueError("ACT requires one RGB camera and six state/action values")
-    shape = next(iter(images.values())).get("shape")
-    if (
-        not isinstance(shape, list)
-        or len(shape) != 3
-        or shape[0] != 3
-        or any(type(n) is not int or n < 1 for n in shape)
-        or shape[1] > 1024
-        or shape[2] > 1280
-        or shape[1] * shape[2] > 921600
-    ):
-        raise ValueError("ACT camera dimensions exceed the supported local image budget")
+        raise ValueError("ACT requires one to three RGB cameras and six state/action values")
+    for feature in images.values():
+        shape = feature.get("shape")
+        if (
+            not isinstance(shape, list)
+            or len(shape) != 3
+            or shape[0] != 3
+            or any(type(n) is not int or n < 1 for n in shape)
+            or shape[1] > 1024
+            or shape[2] > 1280
+            or shape[1] * shape[2] > 921600
+        ):
+            raise ValueError("ACT camera dimensions exceed the supported local image budget")
     return config
 
 

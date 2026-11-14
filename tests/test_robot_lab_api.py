@@ -626,6 +626,20 @@ def test_invalid_guided_recording_settings_never_contact_hardware(tmp_path, chan
         ("policy/load", {"policy_id": "../escape"}),
         ("policy/load", {"policy_id": "pen", "python": "/tmp/untrusted"}),
         ("policy/preflight", {"camera_index": True}),
+        ("policy/preflight", {"camera_index": 0, "cameras": {}}),
+        ("policy/preflight", {"camera_index": 0, "allow_planning_pause": "yes"}),
+        ("policy/preflight", {"camera_index": 0, "allow_planning_pause": 1}),
+        ("policy/preflight", {"camera_index": 0, "cameras": {"front": 0}}),
+        ("policy/preflight", {"camera_index": 0, "cameras": {"observation.images.front": 64}}),
+        ("policy/preflight", {"camera_index": 0, "cameras": {"observation.images.front": "0"}}),
+        (
+            "policy/preflight",
+            {"camera_index": 0, "cameras": {f"observation.images.c{n}": n for n in range(4)}},
+        ),
+        (
+            "policy/preview",
+            {"state": [0] * 6, "jpeg": "YQ==", "cameras": {"observation.images.front": 0}},
+        ),
         ("policy/heartbeat", {"expected_generation": True}),
         (
             "policy/start",
@@ -645,7 +659,7 @@ def test_invalid_guided_recording_settings_never_contact_hardware(tmp_path, chan
                 "operator_present": True,
                 "workspace_clear": True,
                 "camera_index": 0,
-                "duration_seconds": 121,
+                "duration_seconds": 601,
                 "expected_generation": 42,
             },
         ),
@@ -681,11 +695,27 @@ def test_policy_catalog_load_and_explicit_start_are_finite_proxy_routes(tmp_path
             "operator_present": True,
             "workspace_clear": True,
             "camera_index": 0,
-            "duration_seconds": 10,
+            "duration_seconds": 600,
             "expected_generation": 42,
         }
         assert client.post("/api/v1/robot-lab/policy/start", json=payload).status_code == 200
         assert json.loads(calls[-1].content) == payload
+        # A policy trained on two views names a camera for each; the choice reaches the arm.
+        views = {"observation.images.front": 0, "observation.images.camera_4": 2}
+        for path, body in (
+            ("policy/preflight", {"camera_index": 0, "cameras": views}),
+            ("policy/start", payload | {"cameras": views}),
+            ("policy/preview", {"state": [0.0] * 6, "camera_index": 0, "cameras": views}),
+        ):
+            assert client.post("/api/v1/robot-lab/" + path, json=body).status_code == 200
+            assert json.loads(calls[-1].content)["cameras"] == views
+        # The operator's choice to allow planning pauses reaches the arm unchanged.
+        for path, body in (
+            ("policy/preflight", {"camera_index": 0, "allow_planning_pause": True}),
+            ("policy/start", payload | {"allow_planning_pause": True}),
+        ):
+            assert client.post("/api/v1/robot-lab/" + path, json=body).status_code == 200
+            assert json.loads(calls[-1].content)["allow_planning_pause"] is True
         assert client.post("/api/v1/robot-lab/policy/arbitrary", json={}).status_code == 404
     asyncio.run(companion.close())
 
@@ -779,4 +809,49 @@ def test_camera_modes_proxy_and_strict_admission(tmp_path):
                 == 422
             )
         assert len(calls) == 2
+    asyncio.run(companion.close())
+
+
+def test_local_calibration_recovery_proxy_and_strict_fields(tmp_path):
+    connection(tmp_path)
+    calls = []
+
+    def handler(request):
+        calls.append((request.method, request.url.path, request.url.query))
+        return httpx.Response(200, json={"ok": True})
+
+    companion = bridge(tmp_path, handler)
+    payload = {
+        "robot_id": "arm",
+        "role": "follower",
+        "port": "fake",
+        "source": "saved",
+        "profile_key": "a" * 64,
+        "same_arm": True,
+        "confirm": "REUSE CALIBRATION",
+    }
+    with browser(tmp_path, companion) as client:
+        assert (
+            client.get(
+                "/api/v1/robot-lab/calibration/profiles?robot_id=arm&role=follower"
+            ).status_code
+            == 200
+        )
+        assert client.post("/api/v1/robot-lab/calibration/reuse", json=payload).status_code == 200
+        for invalid in [
+            {"same_arm": "true"},
+            {"source": "arbitrary"},
+            {"profile_key": "../file"},
+            {"confirm": "yes"},
+            {"arbitrary": True},
+        ]:
+            assert (
+                client.post(
+                    "/api/v1/robot-lab/calibration/reuse", json={**payload, **invalid}
+                ).status_code
+                == 422
+            )
+    assert len(calls) == 2
+    assert calls[0] == ("GET", "/v1/calibration/profiles", b"robot_id=arm&role=follower")
+    assert calls[1][:2] == ("POST", "/v1/calibration/reuse")
     asyncio.run(companion.close())

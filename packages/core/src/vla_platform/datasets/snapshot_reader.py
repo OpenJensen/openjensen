@@ -11,6 +11,8 @@ from pathlib import Path
 
 DATA = "data/chunk-{chunk_index:03d}/file-{file_index:03d}.parquet"
 VIDEO = "videos/{video_key}/chunk-{chunk_index:03d}/file-{file_index:03d}.mp4"
+# Beyond this many frames between keyframes, random frame reads dominate training time.
+SLOW_SEEK_FRAMES = 12
 VIDEO_INPUT = [
     "-f",
     "mov",
@@ -324,7 +326,7 @@ def validate(root, limits):
 
     require(
         pyarrow.__version__ == "25.0.1",
-        "Complete validation requires the pinned PyArrow25.0.1 reader",
+        "Complete validation requires the pinned PyArrow 25.0.1 reader",
     )
     info = read_json(root, "meta/info.json")
     require(
@@ -336,16 +338,23 @@ def validate(root, limits):
         "Local training requires the standard v3 Parquet and optional video layout",
     )
     episodes_count, frames_count = info.get("total_episodes"), info.get("total_frames")
+    require(integer(episodes_count), "Dataset metadata has no whole-number episode count")
     require(
-        integer(episodes_count, 2) and episodes_count <= limits["max_episodes"],
-        "Need2+ finalized episodes within budget",
+        episodes_count >= 2,
+        f"Training needs at least 2 finalized episodes for a held-out split; "
+        f"this dataset has {episodes_count}. Record or import more, then inspect it again.",
+    )
+    require(
+        episodes_count <= limits["max_episodes"],
+        f"Dataset has {episodes_count} episodes; one training copy holds at most "
+        f"{limits['max_episodes']}",
     )
     require(
         integer(frames_count, episodes_count) and frames_count <= limits["max_rows"],
         "Invalid or oversized frame count",
     )
     fps = info.get("fps")
-    require(integer(fps, 1) and fps <= 240, "Supported integer camera/control fps is1..240")
+    require(integer(fps, 1) and fps <= 240, "Supported integer camera/control fps is 1..240")
     features = info.get("features", {})
     require(isinstance(features, dict), "Invalid feature metadata")
     cameras = {
@@ -353,7 +362,7 @@ def validate(root, limits):
     }
     videos = {key: value for key, value in cameras.items() if value["dtype"] == "video"}
     images = {key: value for key, value in cameras.items() if value["dtype"] == "image"}
-    require(1 <= len(cameras) <= 8, "Need1..8 finalized image or video cameras")
+    require(1 <= len(cameras) <= 8, "Need 1..8 finalized image or video cameras")
     require(not videos or info.get("video_path") == VIDEO, "Video camera layout is missing")
     if (root / "openjensen.json").exists():
         recording = read_json(root, "openjensen.json")
@@ -614,6 +623,7 @@ def validate(root, limits):
     )
     actual_media = {path.relative_to(root).as_posix() for path in (root / "videos").rglob("*.mp4")}
     require(actual_media == set(media), "Missing or unreferenced camera media")
+    slowest_seek = 0
     for name, entry in media.items():
         path = root / name
         result = bounded_output(
@@ -656,7 +666,7 @@ def validate(root, limits):
                 "-show_entries",
                 # The common section name also works with FFmpeg 4.4; its
                 # frame-specific alias is unavailable on older installations.
-                "frame=best_effort_timestamp_time:side_data=",
+                "frame=best_effort_timestamp_time,key_frame:side_data=",
                 "-of",
                 "json=compact=1",
                 *VIDEO_INPUT,
@@ -666,6 +676,9 @@ def validate(root, limits):
         )
         decoded_frames = json.loads(timing)["frames"]
         require(len(decoded_frames) == count, "Decoded video timestamps are incomplete")
+        keyframes = [index for index, frame in enumerate(decoded_frames) if frame.get("key_frame")]
+        gaps = [later - earlier for earlier, later in zip(keyframes, [*keyframes[1:], count])]
+        slowest_seek = max(slowest_seek, max(gaps, default=count))
         for index, frame in enumerate(decoded_frames):
             timestamp = float(frame["best_effort_timestamp_time"])
             require(
@@ -747,6 +760,12 @@ def validate(root, limits):
         warnings.append(
             "Imported dataset ancestry is unknown; held-out episodes do not "
             "establish independent generalization."
+        )
+    if slowest_seek > SLOW_SEEK_FRAMES:
+        warnings.append(
+            f"Training will be slow: a camera video has a keyframe only every {slowest_seek} "
+            "frames, so each frame read decodes many frames first. Re-encode the videos with "
+            "a keyframe every 2 frames (ffmpeg -g 2 -bf 0)."
         )
     return {
         "total_episodes": episodes_count,

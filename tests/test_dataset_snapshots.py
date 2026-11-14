@@ -23,9 +23,8 @@ pytestmark = pytest.mark.skipif(os.name == "nt", reason="Secure local snapshot o
 CAMERA = "observation.images.front"
 
 
-@pytest.fixture
-def dataset(tmp_path):
-    root = tmp_path / "source"
+def build_dataset(root, episodes=4, video_options=()):
+    """Write a finalized LeRobot v3 dataset: real Parquet, real MP4, three frames each."""
     root.mkdir()
     script = r"""
 import json, sys
@@ -34,6 +33,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 root = Path(sys.argv[1])
+count = int(sys.argv[2])
 camera = "observation.images.front"
 for name in (
     "meta/episodes/chunk-000",
@@ -62,14 +62,14 @@ features[camera] = {
 info = {
     "codebase_version": "v3.0",
     "robot_type": "synthetic_fixture",
-    "total_episodes": 4,
-    "total_frames": 12,
+    "total_episodes": count,
+    "total_frames": count * 3,
     "total_tasks": 1,
     "fps": 10,
     "chunks_size": 1000,
     "data_files_size_in_mb": 100,
     "video_files_size_in_mb": 200,
-    "splits": {"train": "0:4"},
+    "splits": {"train": "0:" + str(count)},
     "data_path": "data/chunk-{chunk_index:03d}/file-{file_index:03d}.parquet",
     "video_path": "videos/{video_key}/chunk-{chunk_index:03d}/file-{file_index:03d}.mp4",
     "features": features,
@@ -79,7 +79,7 @@ stats = {}
 for key in ("action", "observation.state", camera):
     vector = [0.0, 0.0] if key != camera else [[[0.0]], [[0.0]], [[0.0]]]
     one = [1.0, 1.0] if key != camera else [[[1.0]], [[1.0]], [[1.0]]]
-    stats[key] = {"min": vector, "max": one, "mean": vector, "std": one, "count": [12]}
+    stats[key] = {"min": vector, "max": one, "mean": vector, "std": one, "count": [count * 3]}
 (root / "meta/stats.json").write_text(json.dumps(stats))
 pq.write_table(
     pa.Table.from_pylist([{"task_index": 0, "task": "Synthetic fixture only"}]),
@@ -87,7 +87,7 @@ pq.write_table(
 )
 episodes = []
 rows = []
-for ep in range(4):
+for ep in range(count):
     episodes.append(
         {
             "episode_index": ep,
@@ -124,7 +124,11 @@ schema = pa.schema([
 ])
 pq.write_table(pa.Table.from_pylist(rows, schema=schema), root / "data/chunk-000/file-000.parquet")
 """
-    subprocess.run([str(reader_python()), "-I", "-c", script, str(root)], check=True, timeout=20)
+    subprocess.run(
+        [str(reader_python()), "-I", "-c", script, str(root), str(episodes)],
+        check=True,
+        timeout=20,
+    )
     subprocess.run(
         [
             "ffmpeg",
@@ -136,9 +140,10 @@ pq.write_table(pa.Table.from_pylist(rows, schema=schema), root / "data/chunk-000
             "-i",
             "color=c=blue:s=16x16:r=10",
             "-frames:v",
-            "12",
+            str(episodes * 3),
             "-c:v",
             "libx264",
+            *video_options,
             "-pix_fmt",
             "yuv420p",
             str(root / f"videos/{CAMERA}/chunk-000/file-000.mp4"),
@@ -148,6 +153,11 @@ pq.write_table(pa.Table.from_pylist(rows, schema=schema), root / "data/chunk-000
         capture_output=True,
     )
     return root
+
+
+@pytest.fixture
+def dataset(tmp_path):
+    return build_dataset(tmp_path / "source")
 
 
 def hashes(root):
@@ -567,3 +577,17 @@ def test_rehash_reads_no_more_than_the_declared_file_size(dataset, tmp_path, mon
     with pytest.raises(SnapshotError, match="changed while reading"):
         verify_snapshot(root, value["manifest_sha256"])
     assert sum(reads) <= declared_size + 1
+
+
+def test_videos_that_are_slow_to_read_are_reported_before_training(tmp_path):
+    """One keyframe per episode made every frame read decode a hundred frames first:
+    a cloud GPU then spent hours waiting on the CPU."""
+    sparse = build_dataset(tmp_path / "sparse", episodes=10)
+    value = create_snapshot(tmp_path, sparse, tmp_path / "snapshots")
+    slow = [warning for warning in value["warnings"] if warning.startswith("Training will be slow")]
+    assert len(slow) == 1 and "every 30 frames" in slow[0] and "-g 2" in slow[0]
+    quick = build_dataset(
+        tmp_path / "quick", episodes=10, video_options=("-g", "2", "-keyint_min", "2", "-bf", "0")
+    )
+    value = create_snapshot(tmp_path, quick, tmp_path / "snapshots")
+    assert not any("slow" in warning for warning in value["warnings"])

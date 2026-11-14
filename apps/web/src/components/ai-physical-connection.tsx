@@ -116,7 +116,7 @@ export function useAiPhysicalConnection(enabled: boolean, onSession: (session: A
   const connectionIssue = !profile
     ? 'Choose a saved arm by name, then review its USB connection.'
     : profile.valid === false
-      ? 'This saved calibration is invalid. Review it in Initial setup.'
+      ? 'This saved calibration is invalid. Review it in Robot Lab.'
       : !portReady
         ? profile.setup_port
           ? `The saved connection (${profile.setup_port}) is unavailable. Connect the arm or select its current USB port.`
@@ -124,7 +124,7 @@ export function useAiPhysicalConnection(enabled: boolean, onSession: (session: A
         : !profile.sha256
           ? 'The saved calibration identity is unavailable. Refresh readiness or update the companion.'
           : !profileReady
-            ? 'Motor setup changed on this arm’s saved connection. Review its calibration in Initial setup.'
+            ? 'Motor setup changed on this arm’s saved connection. Review its calibration in Robot Lab.'
             : !cameraReady
               ? 'Start the workspace camera preview and wait for a current image.'
               : !operatorPresent || !workspaceClear
@@ -409,8 +409,8 @@ export function AiPhysicalConnection({ physical }: { physical: ReturnType<typeof
     <section className="agent-control-evidence" aria-label="Physical SO101 preflight">
       <h3>Physical SO101</h3>
       <p>
-        Connect the arm here after completing calibration in Initial setup. Connecting enables torque and holds the
-        measured current pose; it does not start an AI task. Keep the arm supported and Stop within reach.
+        Connect the arm here after completing calibration in Robot Lab. Connecting enables torque and holds the measured
+        current pose; it does not start an AI task. Keep the arm supported and Stop within reach.
       </p>
       {!capable && (
         <p role="status">
@@ -441,7 +441,7 @@ export function AiPhysicalConnection({ physical }: { physical: ReturnType<typeof
                 </option>
               ))}
             </select>
-            <small>{physical.port || 'Choose an arm configured in Initial setup → Devices.'}</small>
+            <small>{physical.port || 'Choose an arm configured in Robot Lab → Devices.'}</small>
           </label>
         </div>
       ) : (

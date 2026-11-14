@@ -62,7 +62,7 @@ test('data tools are first-class pages with clear return paths and no job submis
 
 test('run choices are visible, keyboard accessible and stay within a narrow screen', async ({ page }, testInfo) => {
   const mutations = await workspace(page);
-  await page.getByRole('link', { name: 'Run', exact: true }).click();
+  await page.getByRole('link', { name: 'Simulate', exact: true }).click();
   await openModuleTask(page);
   const choices = page.getByRole('group', { name: 'Run mode', exact: true });
   await expect(choices.getByRole('button')).toHaveCount(3);
@@ -94,15 +94,15 @@ test('workspace pages use a single title without introductory subtitles', async 
     'Real to sim',
     'Augmentation',
     'AI teleoperation',
-    'Fine-tune',
+    'Train',
     'Distill',
     'Quantize',
     'Evaluate',
-    'Run',
+    'Simulate',
     'Decision Lab',
     'Cloud runs',
     'Settings',
-    'Dashboard',
+    'Home',
   ]) {
     await navigation.getByRole('link', { name, exact: true }).click();
     await expect(page.getByRole('heading', { name, level: 1, exact: true })).toBeVisible();
@@ -144,19 +144,19 @@ test('the contextual guide covers every section and keeps API docs separate', as
   await expect(page.getByRole('heading', { name: 'Workspace guide', exact: true })).toBeVisible();
   const sections = page.locator('.guide-sections > section');
   const expectedSections = [
-    'Dashboard',
+    'Home',
     'Jobs',
     'Models',
     'Datasets',
     'Real to sim',
     'Augmentation',
     'AI teleoperation',
-    'Initial setup',
-    'Fine-tune',
+    'Robot Lab',
+    'Train',
     'Distill',
     'Quantize',
     'Evaluate',
-    'Run',
+    'Simulate',
     'Decision Lab',
     'Cloud runs',
     'Settings',
@@ -175,7 +175,7 @@ test('the contextual guide covers every section and keeps API docs separate', as
   ).toBe(true);
   await page
     .getByRole('navigation', { name: 'Guide sections' })
-    .getByRole('link', { name: 'Initial setup', exact: true })
+    .getByRole('link', { name: 'Robot Lab', exact: true })
     .click();
   await expect(page).toHaveURL(/#robot-lab$/);
   await expect(page.locator('#robot-lab')).toContainText('SO-101');
@@ -210,7 +210,7 @@ test('fresh workflows require explicit model and runner choices', async ({ page 
   await expect(page.locator('.workflow-panel')).toHaveCount(0);
   await expect(page.getByRole('region', { name: 'Native ACT quantization', exact: true })).toHaveCount(0);
 
-  await page.getByRole('link', { name: 'Run', exact: true }).click();
+  await page.getByRole('link', { name: 'Simulate', exact: true }).click();
   await openModuleTask(page);
   const runners = page.getByRole('group', { name: 'Run mode', exact: true });
   for (const name of ['3D simulation', 'Replay observations', 'Check inference']) {
@@ -219,8 +219,8 @@ test('fresh workflows require explicit model and runner choices', async ({ page 
   await expect(page.locator('.workflow-panel')).toHaveCount(0);
   await expect(page.getByRole('region', { name: 'Native Isaac simulation', exact: true })).toHaveCount(0);
 
-  await page.getByRole('link', { name: 'Fine-tune', exact: true }).click();
-  await page.getByRole('button', { name: 'Start a new fine-tuning', exact: true }).click();
+  await page.getByRole('link', { name: 'Train', exact: true }).click();
+  await page.getByRole('button', { name: 'New training run', exact: true }).click();
   await page
     .getByRole('navigation', { name: 'Training setup' })
     .getByRole('button', { name: 'Model', exact: true })
@@ -353,11 +353,11 @@ test('compact mobile navigation leaves useful stage content visible and every to
   }
   for (const name of [
     'AI teleoperation',
-    'Fine-tune',
+    'Train',
     'Distill',
     'Quantize',
     'Evaluate',
-    'Run',
+    'Simulate',
     'Decision Lab',
     'Cloud runs',
     'Settings',
@@ -376,18 +376,18 @@ test('workflow pages keep their job history without the duplicate project activi
   page,
 }, testInfo) => {
   const { mutations } = await workflowFixture(page);
-  await page.getByRole('link', { name: 'Fine-tune', exact: true }).click();
+  await page.getByRole('link', { name: 'Train', exact: true }).click();
   await expect(page.getByText('Project activity', { exact: true })).toHaveCount(0);
   await expect(
-    page.getByRole('region', { name: 'Fine-tuning jobs', exact: true }).locator('[data-job-id="training-job"]'),
+    page.getByRole('region', { name: 'Training runs', exact: true }).locator('[data-job-id="training-job"]'),
   ).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('clean-fine-tune.png'), fullPage: true });
   await page.getByRole('link', { name: 'Quantize', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Quantization jobs', exact: true })).toBeVisible();
   await selectProject(page, 'beta');
-  await page.getByRole('link', { name: 'Fine-tune', exact: true }).click();
+  await page.getByRole('link', { name: 'Train', exact: true }).click();
   await expect(
-    page.getByRole('region', { name: 'Fine-tuning jobs', exact: true }).getByText('No fine-tuning jobs yet.'),
+    page.getByRole('region', { name: 'Training runs', exact: true }).getByText('No training runs yet.'),
   ).toBeVisible();
   await expect(page.locator('[data-job-id="training-job"]')).toHaveCount(0);
   expect(mutations).toEqual([]);
@@ -405,7 +405,7 @@ test('the clean dataset page continues with the exact viewed inspection without 
   await expect(page.getByText('Project activity', { exact: true })).toHaveCount(0);
   await expect(page.getByText('Latest inspection', { exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Train on this dataset', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Fine-tune', exact: true, level: 1 })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Train', exact: true, level: 1 })).toBeVisible();
   await expect(
     page.getByRole('group', { name: 'Inspected dataset', exact: true }).locator('input:checked'),
   ).toHaveValue('dataset-first');
@@ -416,10 +416,10 @@ test('missing history stays visible in the run list and cannot enable metadata-o
   const { state, mutations } = await workflowFixture(page);
   state.failed = true;
   await page.reload();
-  await page.getByRole('link', { name: 'Fine-tune', exact: true }).click();
-  const history = page.getByRole('region', { name: 'Fine-tuning jobs', exact: true });
+  await page.getByRole('link', { name: 'Train', exact: true }).click();
+  const history = page.getByRole('region', { name: 'Training runs', exact: true });
   await expect(history.getByRole('alert')).toContainText('Generated unavailable history');
-  await expect(history.getByText('No fine-tuning jobs yet.')).toHaveCount(0);
+  await expect(history.getByText('No training runs yet.')).toHaveCount(0);
   state.failed = false;
   state.jobs = state.jobs.filter((job) => job.id === 'dataset-first');
   state.jobs[0].result.snapshot = null;
@@ -438,10 +438,10 @@ test('loading history does not claim the run list is empty', async ({ page }) =>
     release = resolve;
   });
   await page.reload();
-  await page.getByRole('link', { name: 'Fine-tune', exact: true }).click();
-  const history = page.getByRole('region', { name: 'Fine-tuning jobs', exact: true });
+  await page.getByRole('link', { name: 'Train', exact: true }).click();
+  const history = page.getByRole('region', { name: 'Training runs', exact: true });
   await expect(history.getByRole('status')).toHaveText('Loading jobs…');
-  await expect(history.getByText('No fine-tuning jobs yet.')).toHaveCount(0);
+  await expect(history.getByText('No training runs yet.')).toHaveCount(0);
   release();
   state.gate = null;
   await expect(history.locator('[data-job-id="training-job"]')).toBeVisible();

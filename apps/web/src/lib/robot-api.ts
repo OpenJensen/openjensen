@@ -81,7 +81,12 @@ export type RobotPolicyState = {
   preflight: {
     passed: boolean;
     camera_index: number;
+    cameras?: Record<string, number>;
+    planning_pause?: boolean;
+    planning_pause_needed?: boolean;
+    prediction_limit_ms?: number;
     checked_at: number;
+    valid_for_ms?: number;
     fps: number;
     measured_fps: number;
     mean_latency_ms: number;
@@ -91,7 +96,13 @@ export type RobotPolicyState = {
     message: string;
   } | null;
   device: string | null;
-  limits: { max_speed: number; max_acceleration: number; max_run_seconds: number; operator_heartbeat_seconds: number };
+  limits: {
+    max_speed: number;
+    max_acceleration: number;
+    max_run_seconds: number;
+    operator_heartbeat_seconds: number;
+    planning_pause_seconds?: number;
+  };
 };
 export type RobotPolicyCatalog = {
   policies: {
@@ -104,7 +115,10 @@ export type RobotPolicyCatalog = {
     task_required?: boolean;
     offline_only?: boolean;
     camera_key?: string;
+    camera_keys?: string[];
     image_shape?: number[];
+    /** The project model this policy was installed from; absent on older robot services. */
+    source_manifest_sha256?: string | null;
   }[];
   runtime: { configured: boolean; device: string | null; message: string };
   state: RobotPolicyState;
@@ -143,6 +157,7 @@ export type RobotStatus = {
     joint_sliders?: boolean;
     calibration_persistence?: boolean;
     calibration_transfer?: boolean;
+    calibration_profiles?: boolean;
     device_registry?: boolean;
     device_removal?: boolean;
     partial_control?: boolean;
@@ -397,15 +412,33 @@ export const robotApi = {
     state?: number[];
     jpeg?: string;
     camera_index?: number;
+    cameras?: Record<string, number>;
     task?: string;
   }) => request<RobotStatus>('/policy/preview', input, { timeoutMs: 90_000 }),
-  preflightPolicy: (camera_index: number, task?: string) =>
+  preflightPolicy: (
+    camera_index: number,
+    task?: string,
+    cameras?: Record<string, number>,
+    allowPlanningPause = false,
+  ) =>
     request<RobotStatus>(
       '/policy/preflight',
-      { camera_index, ...(task === undefined ? {} : { task }) },
+      {
+        camera_index,
+        ...(cameras ? { cameras } : {}),
+        ...(allowPlanningPause ? { allow_planning_pause: true } : {}),
+        ...(task === undefined ? {} : { task }),
+      },
       { timeoutMs: 30_000 },
     ),
-  startPolicy: (input: { expected_generation: number; camera_index: number; duration_seconds: number }) =>
+  startPolicy: (input: {
+    expected_generation: number;
+    camera_index: number;
+    cameras?: Record<string, number>;
+    allow_planning_pause?: boolean;
+    duration_seconds: number;
+    task?: string;
+  }) =>
     request<RobotStatus>('/policy/start', {
       ...input,
       confirm: 'RUN POLICY',
@@ -453,6 +486,26 @@ export const robotApi = {
     request<RobotStatus>('/setup/assembled/accept', { joint, motor_id }),
   finishAssembled: () => request<RobotStatus>('/setup/assembled/finish', { confirm: 'SAVE MOTOR IDS' }),
   cancelAssembled: () => request<RobotStatus>('/setup/assembled/cancel', {}),
+  calibrationProfiles: (robot_id: string, role: RobotRole, port: string) =>
+    request<{
+      profiles: {
+        key: string;
+        robot_id: string;
+        role: RobotRole;
+        saved_at: number;
+        source: string;
+        current: boolean;
+      }[];
+      needs_review: boolean;
+    }>(`/calibration/profiles?${new URLSearchParams({ robot_id, role, port })}`),
+  reuseCalibration: (input: {
+    robot_id: string;
+    role: RobotRole;
+    port: string;
+    source: 'saved' | 'motors';
+    profile_key?: string;
+    same_arm: boolean;
+  }) => request<RobotStatus>('/calibration/reuse', { ...input, confirm: 'REUSE CALIBRATION' }),
   exportCalibration: (robot_id: string, role: RobotRole) =>
     request<CalibrationDocument>(`/calibration/export?${new URLSearchParams({ robot_id, role })}`),
   importCalibration: (input: {

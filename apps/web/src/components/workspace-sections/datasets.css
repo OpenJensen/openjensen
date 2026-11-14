@@ -23,3 +23,40 @@
 .training-copy-option > .training-help {
   flex-shrink: 0;
 }
+
+/* One place on a dataset's page to prepare it, see what is missing, or start training. */
+.dataset-readiness {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 24px;
+  margin-bottom: 16px;
+}
+.dataset-readiness.ready {
+  border-color: var(--accent);
+}
+.dataset-readiness-copy {
+  flex: 1 1 320px;
+  min-width: 0;
+}
+.dataset-readiness-copy h3 {
+  margin: 0 0 4px;
+  font-size: 16px;
+}
+.dataset-readiness-copy p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.dataset-readiness-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 16px;
+}
+.dataset-readiness > .error-notice,
+.dataset-readiness > [role='alert'] {
+  flex-basis: 100%;
+}

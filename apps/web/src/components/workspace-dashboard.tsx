@@ -4,7 +4,9 @@ import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/rea
 import { api, type Project } from '@/lib/api';
 import { datasetLibrary, isProjectDataset, type LibraryDataset } from '@/lib/dataset-library';
 import { ownedModels } from '@/lib/model-library';
-import { Icon } from './icon';
+import { robotApi } from '@/lib/robot-api';
+import type { RobotLabTab } from '@/lib/robot-lab-entry';
+import { Icon, type IconName } from './icon';
 import './workspace-dashboard.css';
 
 export function WorkspaceDashboard({
@@ -15,6 +17,8 @@ export function WorkspaceDashboard({
   onDataset,
   onSettings,
   onCloudApis,
+  onRobotLab,
+  onTrain,
   installedModules,
 }: {
   projects: Project[];
@@ -24,6 +28,8 @@ export function WorkspaceDashboard({
   onDataset: (entry: LibraryDataset) => void;
   onSettings: () => void;
   onCloudApis: () => void;
+  onRobotLab: (tab: RobotLabTab) => void;
+  onTrain: () => void;
   installedModules: string[];
 }) {
   const client = useQueryClient();
@@ -31,6 +37,28 @@ export function WorkspaceDashboard({
   const cloudInstalled = installedModules.includes('google-cloud');
   const hfInstalled = installedModules.includes('huggingface');
   const hasResources = trainingInstalled || cloudInstalled || hfInstalled;
+  const robotInstalled = installedModules.includes('robot-lab');
+  // Read once for the summary; Robot Lab itself keeps the live connection.
+  const robot = useQuery({
+    queryKey: ['robot-lab', 'status'],
+    queryFn: robotApi.status,
+    enabled: robotInstalled,
+    retry: false,
+  });
+  const robotOnline = !!robot.data?.ok && robot.data.connected !== false && !robot.isError;
+  const arms = useQuery({
+    queryKey: ['robot-lab', 'devices'],
+    queryFn: robotApi.devices,
+    enabled: robotInstalled && robotOnline,
+    retry: false,
+  });
+  const jobs = useQuery({
+    queryKey: ['jobs', projectId],
+    queryFn: () => api.jobs(projectId),
+    enabled: !!projectId && trainingInstalled,
+    retry: false,
+    refetchInterval: 10000,
+  });
   // The collection link opens this project's library, so its count and recent
   // rows must use the same scope. Never substitute the global collection while
   // project membership is loading or unavailable.
@@ -99,8 +127,103 @@ export function WorkspaceDashboard({
   const candidate = discovery.data?.candidates[0];
   const localReady = discovery.data ? candidate?.status === 'registered' : runtimes.some((runtime) => runtime.training);
   const localName = candidate?.gpu_name ?? runtimes.find((runtime) => runtime.gpu_name)?.gpu_name;
+  const count = (value: number, one: string, many: string) => `${value} ${value === 1 ? one : many}`;
+  const pluggedIn = arms.data?.saved_devices?.filter((device) => device.connected).length ?? arms.data?.ports.length;
+  const runs = (jobs.data ?? []).filter((job) => job.kind === 'policy.finetune');
+  const training = runs.filter((job) => ['queued', 'running'].includes(job.status)).length;
+  const datasetCount = !projectId
+    ? 'Choose a project first'
+    : datasets.isPending
+      ? 'Loading…'
+      : datasets.isError
+        ? 'Datasets unavailable'
+        : count(entries.length, 'dataset', 'datasets');
+  // The whole product in the order people use it; each step says where it stands.
+  const journey: { title: string; detail: string; state: string; icon: IconName; open: () => void }[] = [
+    ...(robotInstalled
+      ? [
+          {
+            title: 'Set up the robot',
+            detail: 'Connect the arm, identify its motors, calibrate.',
+            state: robot.isPending
+              ? 'Checking…'
+              : !robotOnline
+                ? 'Robot service not connected'
+                : pluggedIn === undefined
+                  ? 'Looking for arms…'
+                  : pluggedIn
+                    ? `${count(pluggedIn, 'arm', 'arms')} plugged in`
+                    : 'No arm plugged in',
+            icon: 'robot' as const,
+            open: () => onRobotLab('devices'),
+          },
+          {
+            title: 'Record data',
+            detail: 'Drive the arm and save demonstrations.',
+            state: datasetCount,
+            icon: 'record' as const,
+            open: () => onRobotLab('record'),
+          },
+        ]
+      : [
+          {
+            title: 'Add data',
+            detail: 'Import a dataset from files or Hugging Face.',
+            state: datasetCount,
+            icon: 'database' as const,
+            open: onDatasets,
+          },
+        ]),
+    ...(trainingInstalled
+      ? [
+          {
+            title: 'Train a model',
+            detail: 'Pick a dataset and a model; training runs in the cloud or here.',
+            state: !projectId
+              ? 'Choose a project first'
+              : jobs.isPending
+                ? 'Loading…'
+                : training
+                  ? `${count(training, 'run', 'runs')} in progress`
+                  : count(runs.length, 'training run', 'training runs'),
+            icon: 'sliders' as const,
+            open: onTrain,
+          },
+        ]
+      : []),
+    ...(robotInstalled
+      ? [
+          {
+            title: 'Run it on the arm',
+            detail: 'Put a trained model on the robot and watch it work.',
+            state: modelsPending ? 'Loading…' : count(modelCount, 'trained model', 'trained models'),
+            icon: 'play' as const,
+            open: () => onRobotLab('run-policy'),
+          },
+        ]
+      : []),
+  ];
   return (
     <div className="workspace-dashboard">
+      {journey.length > 1 && (
+        <section className="dashboard-journey" aria-label="From robot to trained policy">
+          <ol>
+            {journey.map((step, index) => (
+              <li key={step.title}>
+                <button onClick={step.open}>
+                  <span className="dashboard-journey-step">
+                    <span className="dashboard-journey-number">{index + 1}</span>
+                    <Icon name={step.icon} size={20} />
+                  </span>
+                  <strong>{step.title}</strong>
+                  <span className="dashboard-journey-detail">{step.detail}</span>
+                  <span className="dashboard-journey-state">{step.state}</span>
+                </button>
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
       <div className="dashboard-collections">
         <button className="dashboard-collection" aria-label="Models" onClick={onModels}>
           <span className="dashboard-collection-icon">
@@ -113,7 +236,9 @@ export function WorkspaceDashboard({
                 ? 'Some models unavailable'
                 : modelsPending
                   ? 'Loading models…'
-                  : `${modelCount} saved models and versions`}
+                  : modelCount === 1
+                    ? '1 saved model'
+                    : `${modelCount} saved models and versions`}
             </p>
           </div>
           <Icon name="arrow" size={20} />
@@ -131,7 +256,7 @@ export function WorkspaceDashboard({
                   ? 'Dataset history unavailable'
                   : datasets.isPending
                     ? 'Loading datasets…'
-                    : `${entries.length} saved datasets`}
+                    : `${entries.length} saved ${entries.length === 1 ? 'dataset' : 'datasets'}`}
             </p>
           </div>
           <Icon name="arrow" size={20} />

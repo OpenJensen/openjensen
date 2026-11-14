@@ -11,7 +11,7 @@ from vla_platform.contracts import IntakeRequest, Job, JobCancellation, now
 from vla_platform.execution import Execution
 from vla_platform.scenes.contracts import SceneJobResult, SceneRequest, SceneRun
 from vla_platform.settings import Settings
-from vla_platform.workspace_jobs import CATALOG, OPERATIONS, core_job
+from vla_platform.workspace_jobs import CATALOG, OPERATIONS, JobNames, core_job
 
 
 @pytest.fixture
@@ -183,6 +183,119 @@ def test_history_includes_existing_core_scene_agent_and_dataset_records(client, 
     assert agent["status"] == "waiting" and agent["can_cancel"]
     assert agent["parent_ids"] == [core["id"]]
     assert rows == sorted(rows, key=lambda row: (row["created_at"], row["id"]), reverse=True)
+
+
+def test_jobs_are_titled_by_dataset_and_model_names_not_by_stored_addresses(client):
+    """Jobs listed "Local dataset" for every saved dataset and the model's code address
+    for every training run, so two datasets or two runs could not be told apart."""
+    from sqlalchemy import insert
+    from vla_platform.lifecycle.contracts import PolicyRequest
+    from vla_platform.lifecycle.model_names import ModelNames
+    from vla_platform.storage import jobs
+
+    ident = project(client)
+    folder = client.app.state.execution.settings.local_root / "pick up duck"
+    folder.mkdir()
+    accepted = accept(client, ident, submission(folder))
+    assert accepted.status_code == 202, accepted.text
+    # The receipt, the list and the single read all name the folder that was read.
+    assert accepted.json()["title"] == "pick up duck"
+    dataset = accepted.json()["source_id"]
+    run = Job(
+        id="training-run",
+        project_id=ident,
+        kind="policy.finetune",
+        status="succeeded",
+        request=PolicyRequest(
+            operation="policy.finetune",
+            runtime_id="fixture",
+            dataset_job_id=dataset,
+            training_method="full",
+            training={"model_id": "code://lerobot/act"},
+        ),
+        created_at=now(),
+        updated_at=now(),
+    )
+
+    async def seed():
+        async with client.app.state.execution.storage.engine.begin() as connection:
+            await connection.execute(
+                insert(jobs).values(
+                    id=run.id, project_id=ident, status=run.status, record=run.model_dump()
+                )
+            )
+
+    client.portal.call(seed)
+    rows = {
+        row["source_id"]: row for row in client.get(f"/api/v1/projects/{ident}/work-jobs").json()
+    }
+    assert rows[dataset]["title"] == "pick up duck"
+    assert rows[run.id]["title"] == "ACT · pick up duck"
+    single = client.get(f"/api/v1/projects/{ident}/work-jobs/core:{run.id}").json()
+    assert single["title"] == "ACT · pick up duck"
+    # A name someone chose for the run replaces the automatic one.
+    ModelNames(client.app.state.execution.settings.data_dir).rename(
+        ident, run.id, "Duck, second try"
+    )
+    renamed = client.get(f"/api/v1/projects/{ident}/work-jobs/core:{run.id}").json()
+    assert renamed["title"] == "Duck, second try"
+
+
+def test_a_saved_dataset_is_titled_by_the_name_it_was_saved_under():
+    library = "a" * 32
+    inspection = Job(
+        id="inspection",
+        project_id="project",
+        request=IntakeRequest(source="local", library_id=library, snapshot_for_training=True),
+        created_at=now(),
+        updated_at=now(),
+    )
+    names = JobNames(datasets={library: "pick-up-duck-home-large"})
+    assert core_job(inspection, names).title == "pick-up-duck-home-large"
+    # Without the library nothing is invented, and nothing is called "Local dataset".
+    assert core_job(inspection).title == "Unnamed dataset"
+    assert core_job(
+        inspection.model_copy(update={"request": IntakeRequest(repo_id="owner/data")})
+    ).title == ("owner/data")
+
+
+def test_a_run_on_several_datasets_names_the_first_and_counts_the_rest():
+    from vla_platform.lifecycle.contracts import PolicyRequest
+
+    requests = {
+        "first": IntakeRequest(source="local", library_id="a" * 32),
+        "second": IntakeRequest(repo_id="owner/extra"),
+    }
+    run = Job(
+        id="run",
+        project_id="project",
+        kind="policy.finetune",
+        request=PolicyRequest(
+            operation="policy.finetune",
+            runtime_id="fixture",
+            dataset_job_id="first",
+            dataset_job_ids=["first", "second"],
+            dataset_camera_mappings={
+                "first": {"observation.images.front": "observation.images.front"},
+                "second": {"observation.images.front": "observation.images.front"},
+            },
+            training_method="full",
+            training={"model_id": "lerobot/smolvla_base"},
+        ),
+        created_at=now(),
+        updated_at=now(),
+    )
+    names = JobNames(datasets={"a" * 32: "duck-home"}, dataset_requests=requests)
+    assert core_job(run, names).title == "SmolVLA · duck-home + 1 more"
+    # A model the catalog does not know keeps its recorded address rather than a guess.
+    unknown = run.model_copy(
+        update={
+            "request": run.request.model_copy(
+                update={"training": {**run.request.training, "model_id": "lab/custom"}}
+            )
+        }
+    )
+    assert core_job(unknown, names).title == "lab/custom · duck-home + 1 more"
 
 
 def test_legacy_job_without_execution_binding_remains_readable():

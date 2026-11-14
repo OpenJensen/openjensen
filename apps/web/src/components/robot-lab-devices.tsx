@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Icon } from './icon';
+import { ChoiceCards } from './ui/choice';
 import { Notice } from './robot-lab-shared';
 import type { RobotLabState } from './robot-lab-state';
 
@@ -255,42 +256,79 @@ function RoleButtons({ lab }: { lab: RobotLabState }) {
   );
 }
 
-export function RobotLabControlDevices({ lab }: { lab: RobotLabState }) {
-  const option = (device: RobotLabState['catalog'][number]) => (
-    <option key={device.id} value={device.id} disabled={!device.connected || !device.role}>
-      {device.name || device.port || device.robot_id}
-      {!device.connected ? ' · Disconnected' : !device.role ? ' · Set up first' : ''}
-    </option>
+/**
+ * The arm, or arms, a session uses. Every saved arm is shown as a card, so the choice
+ * and each arm's state are visible at once; an arm that cannot be used says why.
+ */
+export function RobotLabControlDevices({
+  lab,
+  leader = lab.mode === 'leader',
+  hideLeaders = false,
+}: {
+  lab: RobotLabState;
+  leader?: boolean;
+  /** Leave out arms set up as leaders: a policy drives the follower, and a leader only adds a wrong choice. */
+  hideLeaders?: boolean;
+}) {
+  const locked = lab.active || lab.busy || !!lab.recording?.active;
+  const card = (device: RobotLabState['catalog'][number]) => ({
+    value: device.id,
+    label: device.name || device.port || device.robot_id,
+    detail: !device.connected
+      ? 'Unplugged'
+      : !device.role
+        ? 'Set it up under Devices first'
+        : device.calibration === 'saved'
+          ? 'Connected · calibrated'
+          : 'Connected · needs calibration',
+    disabled: !device.connected || !device.role,
+  });
+  const follower = lab.catalog.find((d) => d.port === lab.port && d.robot_id === lab.robotId)?.id ?? null;
+  // Only arms that are plugged in can be used, so only those are offered; one in use stays listed.
+  const usable = (device: RobotLabState['catalog'][number], chosen: string | null) =>
+    device.connected || (locked && device.id === chosen);
+  const followers = lab.catalog.filter(
+    (d) => usable(d, follower) && (!hideLeaders || d.role !== 'leader' || d.id === follower),
   );
+  const leaderId = lab.catalog.find((d) => d.port === lab.leaderPort && d.robot_id === lab.leaderId)?.id ?? null;
+  const leaders = lab.catalog.filter((d) => d.port !== lab.port && usable(d, leaderId));
   return (
-    <div className="robot-lab-fields" role="group" aria-label="Session devices">
-      <label>
-        Follower device
-        <select
-          aria-label="Follower device"
-          value={lab.catalog.find((d) => d.port === lab.port && d.robot_id === lab.robotId)?.id ?? ''}
-          disabled={lab.active || lab.busy || !!lab.recording?.active}
-          onChange={(e) => lab.selectControlDevice(e.target.value, 'follower')}
-        >
-          <option value="">Choose a device</option>
-          {lab.catalog.map(option)}
-        </select>
-        <small>The arm controlled in this session.</small>
-      </label>
-      {lab.mode === 'leader' && (
-        <label>
-          Leader device
-          <select
-            aria-label="Leader device"
-            value={lab.catalog.find((d) => d.port === lab.leaderPort && d.robot_id === lab.leaderId)?.id ?? ''}
-            disabled={lab.active || lab.busy || !!lab.recording?.active}
-            onChange={(e) => lab.selectControlDevice(e.target.value, 'leader')}
-          >
-            <option value="">Choose a different device</option>
-            {lab.catalog.filter((d) => d.port !== lab.port).map(option)}
-          </select>
-          <small>The arm providing movement targets.</small>
-        </label>
+    <div className="robot-lab-arms" role="group" aria-label="Session devices">
+      <div className="robot-lab-arm-slot">
+        <span className="robot-lab-field-label">{leader ? 'Follower arm · the one that moves' : 'Arm'}</span>
+        {followers.length ? (
+          <ChoiceCards
+            label="Follower device"
+            value={follower}
+            options={followers.map(card)}
+            disabled={locked}
+            onChange={(id) => lab.selectControlDevice(id, 'follower')}
+          />
+        ) : (
+          <p className="robot-lab-subtle" role="status">
+            {lab.online
+              ? 'No arm is plugged in. Connect its USB cable and power; it appears here by itself.'
+              : 'The robot service is not reachable, so no arm can be used.'}
+          </p>
+        )}
+      </div>
+      {leader && (
+        <div className="robot-lab-arm-slot">
+          <span className="robot-lab-field-label">Leader arm · the one you hold</span>
+          {leaders.length ? (
+            <ChoiceCards
+              label="Leader device"
+              value={leaderId}
+              options={leaders.map(card)}
+              disabled={locked}
+              onChange={(id) => lab.selectControlDevice(id, 'leader')}
+            />
+          ) : (
+            <p className="robot-lab-subtle" role="status">
+              Plug in a second arm to lead with.
+            </p>
+          )}
+        </div>
       )}
     </div>
   );

@@ -26,7 +26,7 @@ export function WorkflowTrainingFields({ workflow }: { workflow: WorkflowState }
   return (
     <>
       <label>
-        Fine-tuning method
+        Training method
         <select value={method} onChange={(event) => setMethod(event.target.value)}>
           {options.data?.training_methods.map((item) => (
             <option key={item.id} value={item.id}>

@@ -5,11 +5,12 @@ import { useJobComputeSelection } from '@/lib/job-compute-state';
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, isActive, isDatasetJob, type Job, type PolicyRequest } from '@/lib/api';
-import { datasetLibrary } from '@/lib/dataset-library';
+import { datasetLibrary, isProjectDataset, type LibraryDataset } from '@/lib/dataset-library';
+import { runName, trainingMethodLabels } from '@/lib/run-names';
 import { projectHistoryView } from '@/lib/project-history';
 import { readPublicPreference, writePublicPreference } from '@/lib/public-preferences';
 import { gradientAccumulationAvailable, trainingModels, type TrainingModel } from '@/lib/training-models';
-import { checkpointStep, trainingRunModelLabel } from '@/lib/checkpoints';
+import { checkpointStep } from '@/lib/checkpoints';
 import { type JobHistoryEntry } from '@/components/job-history';
 import { trainingReceipt } from '@/lib/training-submission';
 import { submissionOf, useDurableSubmission } from '@/lib/durable-submission';
@@ -24,7 +25,13 @@ import {
 } from '@/lib/training-temporal';
 import { useTrainingBatch } from '@/lib/training-batch';
 import { combinationCameraMapping, datasetCombinationIssue } from '@/lib/dataset-combination';
-import { defaultRecipe, type Recipe } from '@/lib/training-recipe';
+import {
+  defaultBatchSize,
+  defaultRecipe,
+  evaluationInterval,
+  learningRateFor,
+  type Recipe,
+} from '@/lib/training-recipe';
 import {
   cameras,
   datasetIssue,
@@ -36,7 +43,7 @@ import {
   type InspectedDataset,
 } from './training-shared';
 
-// Fine-tune page state, queries and actions; TrainingPanel and its step and job views render from this.
+// Train page state, queries and actions; TrainingPanel and its step and job views render from this.
 export function useTrainingPanel({
   projectId,
   preferredDatasetId,
@@ -381,9 +388,7 @@ export function useTrainingPanel({
         ? options.data!.default_training_method
         : item.methods[0];
   const batchFor = (item: TrainingModel) =>
-    item.id === model?.id
-      ? recipe.batchSize
-      : (modelBatchSizes[item.id] ?? (item.id === 'smolvla' ? 64 : item.id === 'psi0' ? 2 : 4));
+    item.id === model?.id ? recipe.batchSize : (modelBatchSizes[item.id] ?? defaultBatchSize(item.id));
   const timingFamily = temporalFamily(model?.id);
   const timing = timingFamily ? (temporalDrafts[timingFamily] ?? defaultTemporal(timingFamily)) : null;
   const timingIssue = !resumeId && timing ? temporalIssue(timing) : null;
@@ -608,11 +613,11 @@ export function useTrainingPanel({
           steps: recipe.trainingSteps,
           warmup_steps: Math.min(50, recipe.trainingSteps - 1),
           batch_size: recipe.batchSize,
-          learning_rate: recipe.learningRate,
+          learning_rate: learningRateFor(model.id, recipe),
           gradient_accumulation_steps: recipe.gradientAccumulation,
           seed: recipe.seed,
           validation_fraction: recipe.validationFraction,
-          eval_every: recipe.evalEvery,
+          eval_every: evaluationInterval(recipe),
           save_every: checkpointInterval,
           ...temporalRecipe(timingFamily, timing),
         };
@@ -646,6 +651,7 @@ export function useTrainingPanel({
             model_revision: item.model_revision,
             ...(item.checkpoint_subdirectory ? { checkpoint_subdirectory: item.checkpoint_subdirectory } : {}),
             batch_size: batchFor(item),
+            learning_rate: learningRateFor(item.id, recipe),
             ...temporalRecipe(
               temporalFamily(item.id),
               temporalFamily(item.id)
@@ -686,10 +692,10 @@ export function useTrainingPanel({
         ? 'Preparing GPU…'
         : 'Training…'
       : resumeId
-        ? 'Resume fine-tuning'
+        ? 'Resume training'
         : selectedModels.length > 1
           ? `Start ${selectedModels.length} training jobs`
-          : 'Start fine-tuning';
+          : 'Start training';
   const summaryModel = resumeId
     ? String(model?.label ?? originalTraining?.model_id ?? 'Original model')
     : (model?.label ?? 'Choose a model');
@@ -716,6 +722,35 @@ export function useTrainingPanel({
     setView('new');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
+  /**
+   * A run that ended without a model (no GPU of that type was free, say) is set up again
+   * with its dataset, model and method; only where it runs is left to choose.
+   */
+  function trainAgain(runId: string) {
+    const run = trainingRuns.find((job) => job.id === runId);
+    const request = run?.request && 'training_method' in run.request ? run.request : undefined;
+    if (!request) return;
+    selectionGeneration.current += 1;
+    const datasets = [
+      ...new Set([request.dataset_job_id, ...(request.dataset_job_ids ?? [])].filter((id): id is string => !!id)),
+    ];
+    if (datasets.length) {
+      setDatasetId(datasets[0]);
+      setExtraDatasetIds(datasets.slice(1));
+    }
+    // A request names the model by its repository; the form lists models by catalogue id.
+    const model = models.find((item) => item.model_id === request.training?.model_id);
+    if (model) {
+      setModelId(model.id);
+      setModelIds([model.id]);
+    }
+    setMethod(request.training_method);
+    setResumeId('');
+    setStep(2);
+    mutation.reset();
+    setView('new');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
   useEffect(() => {
     if (startNew) {
       setStep(0);
@@ -735,9 +770,14 @@ export function useTrainingPanel({
     if (preferredRunId) chooseRun(preferredRunId);
   }, [preferredRunId]);
 
+  const nameContext = {
+    jobs: jobs.data ?? [],
+    artifacts: artifacts.data ?? [],
+    library: (library.data ?? []).filter((entry): entry is LibraryDataset => isProjectDataset(entry, projectId)),
+    catalog: models,
+  };
   const historyEntries: JobHistoryEntry[] = trainingRuns.map((job) => {
     const request = 'training_method' in job.request ? job.request : undefined;
-    const recordedModel = trainingRunModelLabel(job, models, artifacts.data ?? [], trainingRuns);
     const dataset = allInspections.find((item) => item.id === request?.dataset_job_id);
     const targetSteps = positiveInteger(request?.training?.steps) ? request.training.steps : null;
     const savedSteps = (artifacts.data ?? [])
@@ -763,8 +803,13 @@ export function useTrainingPanel({
             : undefined;
     return {
       id: job.id,
-      title: [recordedModel ?? 'Fine-tuning', request?.training_method.toUpperCase()].filter(Boolean).join(' · '),
-      subtitle: dataset?.result.repo_id ?? (dataset ? 'Local dataset' : 'Dataset not recorded'),
+      title: runName(job, nameContext),
+      subtitle: [
+        request ? (trainingMethodLabels[request.training_method] ?? request.training_method) : null,
+        dataset ? null : 'Dataset not recorded',
+      ]
+        .filter(Boolean)
+        .join(' · '),
       status: job.status,
       createdAt: job.created_at,
       progress,
@@ -828,6 +873,7 @@ export function useTrainingPanel({
     resumeId,
     resumeOptions,
     resumeRun,
+    trainAgain,
     reviewHistory,
     runStarting,
     runtime,

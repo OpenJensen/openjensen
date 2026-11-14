@@ -23,12 +23,22 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
 
+from agent_collection import AgentCollection
 from agent_control import AgentExecutor
 from agent_control import strict_json as agent_json
 from assembled_session import AssembledSession, CalibrationRevisions, empty_assembled_state
 from calibration_draft import CalibrationDraft, file_hash
+from calibration_profiles import CalibrationProfiles
 from camera import MAX_CAMERA_INDEX, CameraPool
-from dataset import DatasetWriter, atomic_json, dataset_file, list_datasets, manifest, safe_slug
+from dataset import (
+    CaptureCadenceError,
+    DatasetWriter,
+    atomic_json,
+    dataset_file,
+    list_datasets,
+    manifest,
+    safe_slug,
+)
 from device_registry import DeviceRegistry
 from diagnostics import Diagnostics
 from dispatch import MainThreadDispatcher
@@ -44,6 +54,7 @@ from hardware import (
     normalized,
     probe_bus,
 )
+from image_writer import ImageQueueFull
 from lerobot_control import (
     PROFILE,
     LeRobotPositionControl,
@@ -53,7 +64,7 @@ from lerobot_control import (
 from motion import MiddleMotion, RestMotion, control_limits, middle_targets, step_target
 from policy import PolicyRunner
 from policy_install import install_archive
-from recording import MAX_RECORDING_FPS, CaptureRate, Collection
+from recording import MAX_RECORDING_FPS, CaptureProbe, CaptureRate, Collection
 from rest_position import RestPositions
 from verification import (
     MappingChecks,
@@ -215,6 +226,7 @@ class RobotLab:
         self.observe_timeout = observe_timeout
         self.device_registry = DeviceRegistry(self.data_dir)
         self.calibration_revisions = CalibrationRevisions(self.data_dir)
+        self.calibration_profiles = CalibrationProfiles(self.data_dir, valid_calibration)
         self.assembled_session = None
         self.assembled_state = empty_assembled_state()
         saved = latest_saved_mapping(self.data_dir)
@@ -285,6 +297,7 @@ class RobotLab:
         self.recording_rate_status = "ready"
         self.recording_rate_message = ""
         self.recording_rate = None
+        self.recording_probe = None
         self.collection = None
         self.recording_io = False
         self.recording_thread = None
@@ -296,6 +309,7 @@ class RobotLab:
         self.threads = []
         self.agent = AgentExecutor(self)
         self.policy = PolicyRunner(self)
+        self.agent_collection = AgentCollection(self)
         self.last_raw = {}
         self.last_fault = None
         self.motor_alarms = {}
@@ -438,9 +452,160 @@ class RobotLab:
         calibration = valid_calibration(json.loads(path.read_text()))
         if port and not self.calibration_revisions.fresh(port, robot_id, role, path):
             raise RequestError(
-                "Motor IDs changed on this port; save a new calibration before control"
+                "Motor setup changed on this port. Review a saved calibration or use the "
+                "calibration on the motors before control"
             )
         return calibration
+
+    def calibration_library(self, robot_id, role, port=None):
+        path = self.calibration_path(robot_id, role)
+        effective_role = "leader" if path.parent.name == "so_leader" else "follower"
+        entries = self.calibration_profiles.entries(self.calibration_root, effective_role)
+        current = self.profile_info(robot_id, role, port)
+        calibration = self.load_calibration(robot_id, role) if current["valid"] else None
+        return {
+            "profiles": [
+                {key: value for key, value in entry.items() if key != "calibration"}
+                | {
+                    "current": entry["robot_id"] == path.stem
+                    and entry["calibration"] == calibration
+                }
+                for entry in entries
+            ],
+            "needs_review": not current["valid"] or not current["setup_fresh"],
+        }
+
+    def _archive_calibration(self, robot_id, role, path, source):
+        effective_role = "leader" if path.parent.name == "so_leader" else "follower"
+        if path.is_file() and not path.is_symlink():
+            try:
+                calibration = valid_calibration(self.calibration_profiles.read(path))
+            except ValueError, TypeError, KeyError:
+                return  # Invalid older files are still retained by the file backup.
+            self.calibration_profiles.save(path.stem, effective_role, calibration, source)
+
+    def calibration_reuse(self, payload):
+        require(payload, "confirm", "REUSE CALIBRATION")
+        if set(payload) - {
+            "confirm",
+            "robot_id",
+            "role",
+            "port",
+            "source",
+            "profile_key",
+            "same_arm",
+        }:
+            raise RequestError("Invalid calibration recovery request")
+        if payload.get("same_arm") is not True:
+            raise RequestError("Confirm the same physical arm and unchanged joint-to-motor IDs")
+        source = payload.get("source")
+        if source not in {"saved", "motors"}:
+            raise RequestError("Choose a saved profile or calibration on the motors")
+        robot_id, role = payload.get("robot_id"), payload.get("role")
+        path = self.calibration_path(robot_id, role)
+        effective_role = "leader" if path.parent.name == "so_leader" else "follower"
+        with self.lock:
+            self._idle()
+            generation = self.generation
+            if self.calibration_state.get("recoverable"):
+                raise RequestError(
+                    "Finish or cancel the captured calibration before reusing a profile"
+                )
+            port = self._port(payload.get("port"))
+            if path.is_symlink() or (path.exists() and not path.is_file()):
+                raise RequestError("Calibration destination must be a regular file")
+            selected = None
+            if source == "saved":
+                selected = next(
+                    (
+                        entry
+                        for entry in self.calibration_profiles.entries(
+                            self.calibration_root, effective_role
+                        )
+                        if entry["key"] == payload.get("profile_key")
+                    ),
+                    None,
+                )
+                if selected is None:
+                    raise RequestError("Saved profile changed or is unavailable; refresh the list")
+            elif payload.get("profile_key") is not None:
+                raise RequestError("Do not choose a file when reading calibration from motors")
+            bus = self.bus_factory(port)
+            try:
+                with bus.lock:
+                    bus.check_six()
+                    if any(bus.read("Torque_Enable", IDS[joint]) != 0 for joint in JOINTS):
+                        raise RequestError(
+                            "Stop the arm before reusing calibration; torque must be off"
+                        )
+                    actual = valid_calibration(bus.read_calibration())
+                    if actual != bus.read_calibration():
+                        raise RequestError("Motor calibration changed while reading; retry")
+                    if all(
+                        entry["homing_offset"] == 0
+                        and entry["range_min"] == 0
+                        and entry["range_max"] == 4095
+                        for entry in actual.values()
+                    ):
+                        raise RequestError(
+                            "Motors have default full-range settings. "
+                            "Complete manual calibration first"
+                        )
+                    calibration = selected["calibration"] if selected else actual
+                    different = [
+                        joint.replace("_", " ")
+                        for joint in JOINTS
+                        if calibration[joint] != actual[joint]
+                    ]
+                    if different:
+                        raise RequestError(
+                            "Saved profile differs from the motors: "
+                            + ", ".join(different)
+                            + ". Choose a matching profile, use the calibration on the motors "
+                            "if this arm is already calibrated, or calibrate manually. "
+                            "No settings were changed."
+                        )
+            finally:
+                # Recovery never writes motor settings, goals, or torque.
+                bus.close()
+            with self.stop_lock:
+                if generation != self.generation or self.stopping:
+                    raise RequestError("Calibration recovery cancelled by Stop")
+                self._archive_calibration(robot_id, role, path, "previous profile")
+                self.calibration_profiles.save(path.stem, effective_role, calibration, source)
+                backup = None
+                if path.exists():
+                    backup = path.with_name(path.stem + f".backup-{time.time_ns()}.json")
+                    shutil.copy2(path, backup)
+                    backup.chmod(0o600)
+                try:
+                    atomic_json(path, calibration)
+                    path.chmod(0o600)
+                    self.calibration_revisions.acknowledge(port, robot_id, role, path)
+                except Exception:
+                    if backup is not None:
+                        shutil.copy2(backup, path)
+                    else:
+                        path.unlink(missing_ok=True)
+                    raise
+                if self.error and self.error.startswith(
+                    (
+                        "Motor setup changed on this port",
+                        "Motor IDs changed on this port",
+                        "Motor calibration differs from the saved profile",
+                        "Leader calibration differs from its saved profile",
+                        "No saved calibration for ",
+                    )
+                ):
+                    self.error = None
+                self.diagnostics.emit(
+                    "calibration_reused",
+                    robot_id=robot_id,
+                    role=role,
+                    source=source,
+                    previous_profile_backed_up=backup is not None,
+                )
+            return self.status()
 
     def calibration_export(self, robot_id, role):
         with self.lock:
@@ -520,6 +685,7 @@ class RobotLab:
             with self.stop_lock:
                 if generation != self.generation or self.stopping:
                     raise RequestError("Calibration import cancelled by Stop")
+                self._archive_calibration(robot_id, role, path, "previous profile")
                 backup = None
                 if path.exists():
                     backup = path.with_name(path.stem + f".backup-{time.time_ns()}.json")
@@ -528,6 +694,7 @@ class RobotLab:
                 try:
                     atomic_json(path, calibration)
                     path.chmod(0o600)
+                    self._archive_calibration(robot_id, role, path, "imported")
                     if verified:
                         self.calibration_revisions.acknowledge(port, robot_id, role, path)
                 except Exception:
@@ -630,12 +797,16 @@ class RobotLab:
                 calibrations.append(self.profile_info(path.stem, role))
         for device in self.device_registry.read():
             for role in ("leader", "follower"):
-                if not any(
-                    p["robot_id"] == device["robot_id"] and p["role"] == role for p in calibrations
-                ):
-                    info = self.profile_info(device["robot_id"], role)
-                    if info["valid"]:
-                        calibrations.append(info)
+                # A saved file may refer to a former USB port. Report freshness
+                # for this device's current port, including already-known profiles.
+                info = self.profile_info(device["robot_id"], role, device.get("port") or None)
+                calibrations = [
+                    p
+                    for p in calibrations
+                    if (p["robot_id"], p["role"]) != (device["robot_id"], role)
+                ]
+                if info["valid"]:
+                    calibrations.append(info)
         writer = self.writer
         with self.lifecycle_lock:
             assembled = json.loads(json.dumps(self.assembled_state))
@@ -676,6 +847,7 @@ class RobotLab:
                 "calibration": hardware,
                 "calibration_persistence": hardware,
                 "calibration_transfer": True,
+                "calibration_profiles": True,
                 "device_registry": True,
                 "device_removal": True,
                 "control": hardware,
@@ -793,7 +965,9 @@ class RobotLab:
                 except ValueError, OSError:
                     device["motor_ids"] = False
                 profile = self.profile_info(
-                    device["robot_id"], device["profile_role"] or "follower"
+                    device["robot_id"],
+                    device["profile_role"] or "follower",
+                    device["port"] or None,
                 )
                 device["calibration"] = (
                     "saved"
@@ -1396,10 +1570,14 @@ class RobotLab:
                         raise HardwareError(
                             "Calibration read-back did not match; cancel and inspect wiring"
                         )
+                    self._archive_calibration(self.robot_id, self.role, path, "previous profile")
                     if path.exists():
                         backup = path.with_name(path.stem + f".backup-{time.time_ns()}.json")
                         backup.write_bytes(path.read_bytes())
+                        backup.chmod(0o600)
                     atomic_json(path, calibration)
+                    path.chmod(0o600)
+                    self._archive_calibration(self.robot_id, self.role, path, "manual calibration")
                     self.calibration_revisions.acknowledge(
                         self.port, self.robot_id, self.role, path
                     )
@@ -1757,6 +1935,7 @@ class RobotLab:
                 self.error = reason
             if self.writer:
                 self.writer.episode_active = False
+            self._cancel_capture_check()
             if self.collection:
                 self.collection.pause(time.monotonic(), "Control stopped. Collection paused")
         # Generation is revoked before waiting on policy state or serial I/O.
@@ -2006,6 +2185,8 @@ class RobotLab:
                     raise RequestError("abandon_empty must be true or false")
                 if abandon_empty:
                     require(payload, "confirm", "ABANDON EMPTY RECORDING")
+            if action == "finish":
+                self._cancel_capture_check()
             self.recording_io = True
             writer.episode_active = False
         # Encoding and disk waits must never hold the motor loop's global lock.
@@ -2134,6 +2315,144 @@ class RobotLab:
         )
         self.recording_thread.start()
 
+    def _cancel_capture_check(self):
+        """Revoke a check immediately; wait for its files only on a cleanup thread."""
+        self.recording_rate = None
+        probe, self.recording_probe = self.recording_probe, None
+        if self.recording_rate_status == "measuring":
+            self.recording_rate_status = "error"
+            self.recording_rate_message = (
+                "Control stopped during the recording check. Create a new dataset to retry."
+            )
+        if probe is not None:
+            probe.writer.episode_active = False
+
+            def cleanup():
+                # Let an already-submitted frame finish, without holding up Stop.
+                with self.lock:
+                    pass
+                try:
+                    probe.close()
+                except Exception as error:
+                    self.diagnostics.emit("recording_check_cleanup_error", reason=str(error))
+
+            thread = threading.Thread(target=cleanup, name="robot-lab-check-cleanup", daemon=True)
+            self.threads.append(thread)
+            thread.start()
+
+    def _prepare_capture_probe(self, fps=None, *, verified=False, error=None):
+        """Create/retire temporary writers and publish timing off the motor thread."""
+        owner, generation = self.writer, self.generation
+        previous, self.recording_probe = self.recording_probe, None
+        attempt = previous.attempt + 1 if previous else 1
+        self.recording_io = True
+        self.recording_rate_message = (
+            "Finishing the sustained recording check…"
+            if verified
+            else f"Testing {fps} FPS with cameras, robot samples and image saving together…"
+        )
+
+        def prepare():
+            probe = None
+            try:
+                if previous is not None:
+                    previous.close()
+                if error is not None:
+                    raise error
+                with self.lock, self.lifecycle_lock:
+                    if generation != self.generation or owner is not self.writer:
+                        return
+                if verified:
+                    owner.fps = fps
+                    owner.write_metadata()
+                else:
+                    probe = CaptureProbe(owner, fps, attempt)
+                with self.lock, self.lifecycle_lock:
+                    if generation != self.generation or owner is not self.writer:
+                        return
+                    if verified:
+                        self.recording_rate_status = "ready"
+                        self.recording_rate_message = (
+                            f"Automatic: {fps} FPS verified by a sustained recording check "
+                            "with all selected cameras"
+                        )
+                    else:
+                        self.recording_probe, probe = probe, None
+            except Exception as caught:
+                with self.lock, self.lifecycle_lock:
+                    if generation == self.generation and owner is self.writer:
+                        self.recording_error = "Frame-rate preparation failed: " + str(caught)
+                        self.recording_rate_status = "error"
+                        self.recording_rate_message = str(caught)
+                        if self.collection:
+                            self.collection.pause(time.monotonic())
+            finally:
+                try:
+                    if probe is not None:
+                        probe.close()
+                finally:
+                    with self.lock:
+                        self.recording_io = False
+                    if self.finished.is_set():
+                        owner.close()
+
+        self.recording_thread = threading.Thread(
+            target=prepare, name="robot-lab-recording-check", daemon=True
+        )
+        self.recording_thread.start()
+
+    def _capture_recording_frame(self, writer, cadence, generation):
+        """Same capture, conversion, copying, files and pacing for trials and episodes."""
+        if time.monotonic() < cadence.next_record:
+            return False
+        image_times, images = {}, {}
+        indices = self.camera_indices or ([] if self.camera_index is None else [self.camera_index])
+        for ordinal, index in enumerate(indices):
+            if hasattr(self.camera, "read_latest_timed"):
+                frame, image_time = self.camera.read_latest_timed(index)
+                previous = (
+                    cadence.last_recorded_image.get(index)
+                    if isinstance(cadence.last_recorded_image, dict)
+                    else cadence.last_recorded_image
+                )
+                if previous is not None and image_time <= previous:
+                    return False
+                image_times[index] = image_time
+            else:
+                frame = getattr(self.camera, "read_latest", self.camera.read)(index)
+            key = (
+                "observation.images.front" if ordinal == 0 else f"observation.images.camera_{index}"
+            )
+            # AsyncImageWriter takes its own owned RGB copy before returning.
+            # Keeping this as a view avoids a second full-resolution copy per camera.
+            images[key] = frame[:, :, ::-1]
+        if len(image_times) > 1 and max(image_times.values()) - min(image_times.values()) > max(
+            0.2, 1 / writer.fps
+        ):
+            raise RequestError("Camera frames are too far apart; check camera timing and USB load")
+        image = next(iter(images.values())) if len(images) == 1 else (images or None)
+        with self.lock:
+            if generation != self.generation or not writer.episode_active:
+                return False
+            if writer is not self.writer and not (
+                self.recording_probe is cadence and cadence.writer is writer
+            ):
+                return False
+            captured_at = time.monotonic()
+            writer.add_frame(dict(self.positions), dict(self.action), image, captured_at)
+            if indices:
+                cadence.last_recorded_image = (
+                    image_times if len(indices) > 1 else image_times.get(indices[0])
+                )
+            if cadence.next_record == 0.0:
+                cadence.next_record = captured_at
+            cadence.next_record += 1.0 / writer.fps
+            if captured_at - cadence.next_record >= 1.0 / writer.fps:
+                cadence.next_record = captured_at + 1.0 / writer.fps
+            if isinstance(cadence, CaptureProbe):
+                cadence.captured(captured_at)
+        return True
+
     def _recording_prepare_tick(self, now):
         """Runs only after a successful motor tick; observes without writing goals."""
         writer = self.writer
@@ -2156,39 +2475,7 @@ class RobotLab:
                 if writer.frames or writer.episodes or writer.episode_active:
                     raise RequestError("Cannot change a dataset frame rate after capture begins")
                 self.recording_rate = None
-                self.recording_io = True
-
-                def publish_rate():
-                    try:
-                        writer.fps = fps
-                        writer.write_metadata()
-                        with self.lock, self.lifecycle_lock:
-                            if writer is self.writer:
-                                self.recording_rate_status = "ready"
-                                self.recording_rate_message = (
-                                    f"Automatic: {fps} FPS from camera, robot and storage "
-                                    f"measurements (up to {MAX_RECORDING_FPS} FPS)"
-                                )
-                    except Exception as error:
-                        with self.lock, self.lifecycle_lock:
-                            if writer is self.writer:
-                                self.recording_error = "Frame-rate preparation failed: " + str(
-                                    error
-                                )
-                                self.recording_rate_status = "error"
-                                self.recording_rate_message = str(error)
-                                if self.collection:
-                                    self.collection.pause(time.monotonic())
-                    finally:
-                        with self.lock:
-                            self.recording_io = False
-                        if self.finished.is_set():
-                            writer.close()
-
-                self.recording_thread = threading.Thread(
-                    target=publish_rate, name="robot-lab-recording-rate", daemon=True
-                )
-                self.recording_thread.start()
+                self._prepare_capture_probe(fps)
                 return
             elif now - self.recording_rate.started > 15:
                 raise RequestError(
@@ -2237,7 +2524,20 @@ class RobotLab:
                 self.positions = {
                     j: normalized(j, value, self.calibration) for j, value in raw.items()
                 }
+                measured_ns = time.monotonic_ns()
+                active_command = self.agent.active_id
                 completed = self.agent.tick(raw)
+                self.agent_collection.sample(
+                    {
+                        "sample_id": str(measured_ns),
+                        "command_id": active_command,
+                        "state_read_monotonic_ns": measured_ns,
+                        "write_returned_monotonic_ns": time.monotonic_ns(),
+                        "measured": dict(self.positions),
+                        "sent": dict(self.action),
+                        "sent_raw": dict(self.commanded_raw),
+                    }
+                )
             if completed is not None:
                 # Disk acknowledgement cannot delay the independent Stop path's
                 # serial torque-off command.
@@ -2376,67 +2676,35 @@ class RobotLab:
                     self.recording_rate_message = str(error)
                 self.recording_rate = None
             return
-        writer = self.writer
-        if writer and writer.episode_active and time.monotonic() >= self.next_record:
+        probe = self.recording_probe
+        if probe is not None and not self.recording_io:
             try:
-                image = None
-                image_times = {}
-                indices = self.camera_indices or (
-                    [] if self.camera_index is None else [self.camera_index]
-                )
-                images = {}
-                for ordinal, index in enumerate(indices):
-                    read_image = getattr(self.camera, "read_latest", self.camera.read)
-                    if hasattr(self.camera, "read_latest_timed"):
-                        frame, image_time = self.camera.read_latest_timed(index)
-                        previous = (
-                            self.last_recorded_image.get(index)
-                            if isinstance(self.last_recorded_image, dict)
-                            else self.last_recorded_image
-                        )
-                        if previous is not None and image_time <= previous:
-                            return
-                        image_times[index] = image_time
-                    else:
-                        frame = read_image(index)
-                    key = (
-                        "observation.images.front"
-                        if ordinal == 0
-                        else f"observation.images.camera_{index}"
-                    )
-                    images[key] = frame[:, :, ::-1].copy()
-                if len(image_times) > 1 and max(image_times.values()) - min(
-                    image_times.values()
-                ) > max(0.2, 1 / writer.fps):
-                    raise RequestError(
-                        "Camera frames are too far apart; check USB bandwidth and retry "
-                        "with Automatic frame rate"
-                    )
-                if len(images) == 1:
-                    image = next(iter(images.values()))
-                elif images:
-                    image = images
-                with self.lock:
-                    if (
-                        generation == self.generation
-                        and writer is self.writer
-                        and writer.episode_active
-                    ):
-                        captured_at = time.monotonic()
-                        writer.add_frame(
-                            dict(self.positions), dict(self.action), image, captured_at
-                        )
-                        if indices:
-                            self.last_recorded_image = (
-                                image_times if len(indices) > 1 else image_times.get(indices[0])
-                            )
-                        self.next_record += 1.0 / writer.fps
-                        # Never burst backlogged samples after a scheduling delay.
-                        if captured_at - self.next_record >= 1.0 / writer.fps:
-                            self.next_record = captured_at + 1.0 / writer.fps
+                self._capture_recording_frame(probe.writer, probe, generation)
+                if probe.complete(time.monotonic()):
+                    with self.lock, self.lifecycle_lock:
+                        if generation == self.generation and probe is self.recording_probe:
+                            if (probe.measured_fps or 0) >= probe.writer.fps * 0.97:
+                                self._prepare_capture_probe(probe.writer.fps, verified=True)
+                            else:
+                                self._prepare_capture_probe(probe.lower_rate())
             except Exception as error:
-                # A recorder failure pauses collection, without conflating it
-                # with motor feedback or bypassing the independent Stop/watchdog.
+                with self.lock, self.lifecycle_lock:
+                    if generation != self.generation or probe is not self.recording_probe:
+                        return
+                    if isinstance(error, (CaptureCadenceError, ImageQueueFull)):
+                        try:
+                            self._prepare_capture_probe(probe.lower_rate())
+                        except ValueError as unstable:
+                            self._prepare_capture_probe(error=unstable)
+                    else:
+                        self._prepare_capture_probe(error=error)
+            return
+        writer = self.writer
+        if writer and writer.episode_active:
+            try:
+                self._capture_recording_frame(writer, self, generation)
+            except Exception as error:
+                # Preserve the partial episode and keep Stop/watchdog independent.
                 with self.lifecycle_lock:
                     if generation != self.generation or writer is not self.writer:
                         return
@@ -2523,6 +2791,8 @@ class RobotLab:
         self.finished.set()
         self.stop("Companion shutting down")
         self.policy.close()
+        if self.agent_collection.thread:
+            self.agent_collection.finish({"run_id": self.agent_collection.state.get("run_id")})
         self.camera.close()
         if self.recording_thread:
             self.recording_thread.join(timeout=5)
@@ -2582,10 +2852,25 @@ class Handler(BaseHTTPRequestHandler):
             path, query, lab = unquote(parsed.path), parse_qs(parsed.query), self.server.lab
             if path.startswith("/v1/agent/executions/"):
                 return self._send(200, lab.agent.receipt(path.rsplit("/", 1)[-1]))
+            if path == "/v1/collection/status":
+                return self._send(200, lab.agent_collection.status())
             if path == "/v1/diagnostics":
                 return self._send(200, lab.diagnostics.snapshot(full=True))
             if path == "/v1/status":
                 return self._send(200, lab.status())
+            if path == "/v1/calibration/profiles":
+                if (
+                    not {"robot_id", "role"} <= set(query)
+                    or set(query) - {"robot_id", "role", "port"}
+                    or any(len(v) != 1 for v in query.values())
+                ):
+                    raise RequestError("Choose one arm and role")
+                return self._send(
+                    200,
+                    lab.calibration_library(
+                        query["robot_id"][0], query["role"][0], query.get("port", [None])[0]
+                    ),
+                )
             if path == "/v1/calibration/export":
                 if set(query) != {"robot_id", "role"} or any(len(v) != 1 for v in query.values()):
                     raise RequestError("Choose one calibration profile and arm role")
@@ -2621,6 +2906,10 @@ class Handler(BaseHTTPRequestHandler):
                 image = (
                     lab.camera.cached_jpeg(index)
                     if lab.mode == "policy"
+                    or (
+                        lab.agent_collection.state.get("status") == "recording"
+                        and index in lab.agent_collection.indices
+                    )
                     or (
                         lab.writer
                         and not lab.writer.finalized
@@ -2687,6 +2976,8 @@ class Handler(BaseHTTPRequestHandler):
                 )
             length = int(self.headers.get("Content-Length", "0"))
             maximum = 4 * 1024**2 if urlsplit(self.path).path == "/v1/policy/preview" else 16_384
+            if urlsplit(self.path).path == "/v1/collection/observation":
+                maximum = 6 * 1024**2
             if not 0 <= length <= maximum:
                 raise RequestError("Request body too large")
             raw = self.rfile.read(length) or b"{}"
@@ -2706,6 +2997,14 @@ class Handler(BaseHTTPRequestHandler):
                 "release",
             }:
                 result = lab.agent.command(path.rsplit("/", 1)[-1], payload)
+            elif path in {
+                "/v1/collection/start",
+                "/v1/collection/finish",
+                "/v1/collection/event",
+                "/v1/collection/stop",
+                "/v1/collection/observation",
+            }:
+                result = getattr(lab.agent_collection, path.rsplit("/", 1)[-1])(payload)
             elif path == "/v1/policy/load":
                 result = lab.policy.load(payload)
             elif path == "/v1/policy/preview":
@@ -2743,6 +3042,8 @@ class Handler(BaseHTTPRequestHandler):
                 result = lab.configure_device(payload)
             elif path in ("/v1/devices/remove", "/v1/devices/restore"):
                 result = lab.change_device_visibility(payload, restore=path.endswith("/restore"))
+            elif path == "/v1/calibration/reuse":
+                result = lab.calibration_reuse(payload)
             elif path == "/v1/calibration/import":
                 result = lab.calibration_import(payload)
             elif path == "/v1/calibration/start":

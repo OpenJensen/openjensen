@@ -15,6 +15,7 @@ import {
   type RobotRole,
   type RobotStatus,
 } from '@/lib/robot-api';
+import { robotLabTabs, takeRobotLabTab } from '@/lib/robot-lab-entry';
 import { So101JointGuide } from './so101-joint-guide';
 import { setupOrder, statusKey, readable, isStatus } from './robot-lab-shared';
 
@@ -55,7 +56,7 @@ function confirmsCalibration(value: RobotStatus | undefined, expected: Calibrati
 // Robot Lab session state and actions. RobotLab renders each setup step from this
 // in its own component (robot-lab-connect.tsx, robot-lab-motor-ids.tsx, ...).
 export function useRobotLab() {
-  const { projectId, navigateStage } = useWorkspace();
+  const { projectId, navigateStage, openDataset } = useWorkspace();
   const client = useQueryClient();
   const [step, setStep] = useState(0);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
@@ -93,6 +94,10 @@ export function useRobotLab() {
   const [cameraIndex, setCameraIndex] = useState(0);
   const [additionalCameraIndices, setAdditionalCameraIndices] = useState<number[]>([]);
   const [preview, setPreview] = useState(false);
+  const [cameraWorkspace, setCameraWorkspace] = useState(false);
+  // The views a chosen policy was trained on, each with the camera feeding it; the
+  // preview beside Run policy shows exactly these, named as the policy names them.
+  const [policyViews, setPolicyViews] = useState<{ view: string; index: number }[]>([]);
   const [previewStamp, setPreviewStamp] = useState(0);
   const [cameraError, setCameraError] = useState(false);
   const [datasetId, setDatasetId] = useState('');
@@ -104,7 +109,7 @@ export function useRobotLab() {
   const [awaitingCalibration, setAwaitingCalibration] = useState<CalibrationConfirmation | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [ownsSession, setOwnsSession] = useState(false);
-  const [imported, setImported] = useState<{ dataset: string; projectId: string } | null>(null);
+  const [imported, setImported] = useState<{ dataset: string; projectId: string; id?: string } | null>(null);
   const ownedRef = useRef(false);
   const localCalibrationRef = useRef(false);
   const lastConnectedState = useRef<RobotStatus | undefined>(undefined);
@@ -349,10 +354,39 @@ export function useRobotLab() {
       ? { ...motorDefinition, label: 'Trigger' }
       : motorDefinition;
   const availableCameras = devices.data?.cameras ?? [];
+  // Two cameras of one model report the same name; number them so they can be told apart.
+  const cameraName = (index: number) => {
+    const camera = availableCameras.find((item) => item.index === index);
+    if (!camera) return `Camera ${index}`;
+    const twins = availableCameras.filter((item) => item.name === camera.name);
+    return twins.length > 1 ? `${camera.name} ${twins.indexOf(camera) + 1}` : camera.name || `Camera ${index}`;
+  };
   const selectedCameraIndices = Array.from(new Set([cameraIndex, ...additionalCameraIndices])).filter((index) =>
     availableCameras.some((camera) => camera.index === index),
   );
   const busy = !!pending;
+  const recordingCameraIndices = recording?.active
+    ? (recording.camera_indices ?? (recordCamera ? selectedCameraIndices : []))
+    : recordCamera
+      ? selectedCameraIndices
+      : [];
+  function toggleRecordingCamera(index: number, checked: boolean) {
+    if (!online || busy || recording?.active || !availableCameras.some((camera) => camera.index === index)) return;
+    const next = checked
+      ? state?.capabilities?.multi_camera_recording
+        ? Array.from(new Set([...recordingCameraIndices, index]))
+        : [index]
+      : recordingCameraIndices.filter((camera) => camera !== index);
+    if (next.length > 4) return;
+    setRecordCamera(next.length > 0);
+    if (next.length) {
+      setCameraIndex(next[0]);
+      setAdditionalCameraIndices(next.slice(1));
+    }
+    setCameraError(false);
+    setPreviewStamp(Date.now());
+  }
+
   const canAct = online && !busy && !reconnecting && !awaitingCalibration;
   const portConnected =
     online &&
@@ -391,7 +425,19 @@ export function useRobotLab() {
     } catch {
       /* Preferences are optional. */
     }
+    // Home and saved links open a task tab directly.
+    const openRequested = () => {
+      const tab = takeRobotLabTab();
+      // A link never pulls the page away from an arm that is in use.
+      const mode = lastConnectedState.current?.session?.mode;
+      if (!tab || robotLabTabs[tab] < 3 || (mode && mode !== 'idle')) return;
+      setRole('follower');
+      setStep(robotLabTabs[tab]);
+    };
+    openRequested();
+    window.addEventListener('hashchange', openRequested);
     return () => {
+      window.removeEventListener('hashchange', openRequested);
       mounted.current = false;
       if (ownedRef.current && !localCalibrationRef.current)
         void robotApi
@@ -418,6 +464,19 @@ export function useRobotLab() {
       else setFollowerDevice(selectedDevice.port);
     }
   }, [selectedDevice?.port, selectedDevice?.connected, step, active, busy, port, role]);
+  // On the task tabs an arm that is plugged in later is chosen without a click, as long
+  // as it is the only follower: with two, the choice stays the operator's.
+  const followerUsable = catalog.some((d) => d.port === followerDevice && d.robot_id === followerId && d.connected);
+  const soleFollower = catalog.filter((d) => d.connected && d.role === 'follower');
+  const soleFollowerId = soleFollower.length === 1 ? soleFollower[0].id : null;
+  useEffect(() => {
+    if (step < 3 || !soleFollowerId || followerUsable) return;
+    const device = catalog.find((d) => d.id === soleFollowerId);
+    if (!device || state?.session?.mode !== 'idle' || state.recording?.active) return;
+    setFollowerDevice(device.port);
+    setFollowerId(device.robot_id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reacts to the arm appearing, not to every catalog read
+  }, [step, soleFollowerId, followerUsable, state?.session?.mode, state?.recording?.active]);
   useEffect(() => {
     setIsolated(false);
     setAssembledReady(false);
@@ -517,8 +576,7 @@ export function useRobotLab() {
     if (!preview || !online) return;
     setCameraError(false);
     setPreviewStamp(Date.now());
-    const timer = setInterval(() => setPreviewStamp(Date.now()), 700);
-    return () => clearInterval(timer);
+    // Each camera requests its next frame only after the previous one loads.
   }, [preview, online, cameraIndex]);
   useEffect(() => {
     if (!ownsSession) return;
@@ -634,6 +692,8 @@ export function useRobotLab() {
       done?.(result);
       setNotice(announce && !(isStatus(result) && result.session?.error) ? label : null);
       void client.invalidateQueries({ queryKey: ['robot-lab', 'datasets'] });
+      void client.invalidateQueries({ queryKey: ['robot-lab', 'devices'] });
+      void client.invalidateQueries({ queryKey: ['robot-lab', 'calibration-profiles'] });
       void client.invalidateQueries({ queryKey: statusKey });
     } catch (failure) {
       if (mounted.current && token === epoch.current) {
@@ -907,7 +967,7 @@ export function useRobotLab() {
       : selectedProfile?.valid === false
         ? 'Invalid profile'
         : selectedProfile && !selectedCalibrated
-          ? 'Recalibration needed'
+          ? 'Review needed'
           : profileCheck?.state === 'unavailable' && profileCheck.error
             ? 'Check failed'
             : profileCheck?.state === 'mismatch'
@@ -955,8 +1015,10 @@ export function useRobotLab() {
       setMotionReady(false);
     }
     if (index >= 3 && step < 3 && !active) {
+      // With no port chosen yet, an empty port must not match a saved profile whose arm
+      // is unplugged (its port is empty too): take the connected follower instead.
       const follower =
-        catalog.find((d) => d.port === followerDevice && d.role === 'follower') ??
+        (followerDevice ? catalog.find((d) => d.port === followerDevice && d.role === 'follower') : undefined) ??
         catalog.find((d) => d.role === 'follower' && d.connected);
       const leader = catalog.find((d) => d.role === 'leader' && d.connected && d.id !== follower?.id);
       if (follower) {
@@ -1158,6 +1220,10 @@ export function useRobotLab() {
     assembledReady,
     assigned,
     availableCameras,
+    cameraName,
+    policyViews,
+    setPolicyViews,
+    epoch,
     busy,
     calibrated,
     calibration,
@@ -1167,8 +1233,12 @@ export function useRobotLab() {
     calibrationSummary,
     cameraError,
     cameraIndex,
+    cameraWorkspace,
+    setCameraWorkspace,
     additionalCameraIndices,
     selectedCameraIndices,
+    recordingCameraIndices,
+    toggleRecordingCamera,
     setAdditionalCameraIndices,
     canAct,
     canUseArm,
@@ -1214,6 +1284,7 @@ export function useRobotLab() {
     motionReady,
     motorIndex,
     navigateStage,
+    openDataset,
     notice,
     online,
     openStep,

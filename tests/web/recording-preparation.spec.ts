@@ -749,7 +749,7 @@ test('generic Dataset recovers a recording key and Recording recovers a generic 
   await page.getByRole('button', { name: '← Back to datasets', exact: true }).click();
   s.nextId = 'generic-intake';
   await page.getByLabel('Dataset repository', { exact: true }).fill('owned/recorded');
-  await page.getByRole('button', { name: 'Inspect dataset', exact: true }).click();
+  await page.getByRole('button', { name: 'Import dataset', exact: true }).click();
   await expect.poll(() => s.posts.length).toBe(2);
   await expect(page.getByRole('button', { name: 'Check saved request', exact: true })).toBeEnabled();
   await page.getByRole('link', { name: 'AI teleoperation', exact: true }).click();
@@ -798,7 +798,7 @@ for (const kind of ['generic', 'recording'])
     await review.click();
     await expect(allow).toBeEnabled();
     await allow.click();
-    await expect(page.getByRole('button', { name: 'Inspect dataset', exact: true })).toBeEnabled();
+    await expect(page.getByRole('button', { name: 'Import dataset', exact: true })).toBeEnabled();
     await page.getByRole('link', { name: 'AI teleoperation', exact: true }).click();
     await selectSimulation(page);
     await expect(panel(page).getByRole('checkbox', { checked: true })).toHaveCount(2);

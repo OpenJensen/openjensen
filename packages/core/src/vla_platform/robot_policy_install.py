@@ -18,6 +18,10 @@ from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, field_
 from vla_platform.robot_lab_bridge import MAX_JSON, RobotLabError, strict_json
 
 MAX_ARCHIVE = 2 * 1024**3
+# Fetching a checkpoint from cloud storage depends on the connection: 2 GiB needs forty-five
+# minutes at 0.8 MB/s. Handing it to the robot service happens on this network and is quick.
+DOWNLOAD_SECONDS = 3600
+INSTALL_SECONDS = 300
 HEADROOM = 10 * 1024**3
 JOINTS = ["shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll", "gripper"]
 UNITS = ["degrees"] * 5 + ["percent"]
@@ -110,7 +114,100 @@ def _archive_metadata(path, expected_sha):
     return manifest["metadata"], recipe
 
 
-def _descriptor(artifact, metadata, recipe, payload):
+def _shared_control(record, artifact, project_id):
+    """The recording evidence that travelled with a model added from a link, if sound."""
+    saved, control = record.get("artifact"), record.get("recorded_control")
+    if (
+        not isinstance(saved, dict)
+        or saved.get("project_id") != project_id
+        or saved.get("id") != artifact.id
+        or saved.get("manifest_sha256") != artifact.manifest_sha256
+        or not isinstance(control, dict)
+        or control.get("units") != "degrees; gripper percent"
+        or type(control.get("dataset_fps")) is not int
+        or any(
+            not isinstance(control.get(key), list)
+            or [str(name).removesuffix(".pos") for name in control[key]] != JOINTS
+            for key in ("state_names", "action_names")
+        )
+    ):
+        return None
+    return {key: control[key] for key in ("units", "state_names", "action_names", "dataset_fps")}
+
+
+async def recorded_control(app, project_id, artifact):
+    """Units, joint order and rate of the Robot Lab recording a policy was trained on.
+
+    A policy speaks the units of its training data. When that data is the verified,
+    immutable training copy of a Robot Lab recording, the recorder's own metadata is
+    evidence of those units, not a claim made at installation time. Anything else
+    (another source, several datasets, a copy that no longer verifies) yields nothing,
+    and the existing rules apply unchanged.
+
+    A model added from a Hugging Face link was trained elsewhere, so its recording is
+    not here. The machine that published it read the same evidence and sent it with the
+    model; that statement is used, and it is checked as strictly as the recording.
+    """
+    from vla_platform.datasets.snapshots import resolve_snapshot
+    from vla_platform.huggingface_sharing import fetched_record
+
+    try:
+        execution = app.state.execution
+        shared = fetched_record(execution.settings.data_dir, artifact.job_id)
+        if shared is not None:
+            return _shared_control(shared, artifact, project_id)
+        job = await execution.get(artifact.job_id)
+        request = getattr(job, "request", None)
+        if (
+            job is None
+            or job.project_id != project_id
+            or getattr(request, "dataset_job_ids", None)
+            or not getattr(request, "dataset_job_id", None)
+        ):
+            return None
+        dataset = await execution.get(request.dataset_job_id)
+        snapshot = getattr(getattr(dataset, "result", None), "snapshot", None)
+        if dataset is None or dataset.project_id != project_id or snapshot is None:
+            return None
+        root = await asyncio.to_thread(
+            resolve_snapshot,
+            execution.settings.data_dir / "dataset-snapshots",
+            snapshot.model_dump(),
+        )
+
+        def read(name):
+            path = root / name
+            if path.is_symlink() or not path.is_file() or path.stat().st_size > 8 * 1024**2:
+                raise ValueError("Recording metadata is unavailable")
+            return _json(path.read_bytes())
+
+        recording = await asyncio.to_thread(read, "openjensen.json")
+        info = await asyncio.to_thread(read, "meta/info.json")
+        features = info.get("features", {})
+        names = [features.get(key, {}).get("names") for key in ("observation.state", "action")]
+        if (
+            recording.get("created_by") != "OpenJensen Robot Lab"
+            or recording.get("finalized") is not True
+            or recording.get("units") != "degrees; gripper percent"
+            or type(info.get("fps")) is not int
+            or any(
+                not isinstance(value, list)
+                or [str(name).removesuffix(".pos") for name in value] != JOINTS
+                for value in names
+            )
+        ):
+            return None
+        return {
+            "units": recording["units"],
+            "state_names": names[0],
+            "action_names": names[1],
+            "dataset_fps": info["fps"],
+        }
+    except OSError, ValueError, KeyError, TypeError, AttributeError:
+        return None
+
+
+def _descriptor(artifact, metadata, recipe, payload, recorded=None):
     if (
         artifact.format not in {"training_checkpoint", "native_checkpoint"}
         or metadata.get("architecture") not in {"act", "smolvla"}
@@ -125,12 +222,19 @@ def _descriptor(artifact, metadata, recipe, payload):
         for key in ("control_contract", "temporal_contract", "dataset"):
             if isinstance(source.get(key), dict):
                 records.append(source[key])
+    if recorded is not None:
+        # Evidence from the verified training recording, checked like any saved record:
+        # a mismatch with the artifact's own records is still refused below.
+        records.append(recorded)
     offline = payload.offline_only
     rates, units_known, joints_known = set(), False, False
     for record in records:
         for key in ("fps", "action_fps", "dataset_fps"):
             if key in record:
                 value = record[key]
+                if type(value) is float and value.is_integer():
+                    # A dataset saved on this computer records 23 frames per second as 23.0.
+                    value = int(value)
                 if type(value) is not int or not 1 <= value <= (240 if offline else 40):
                     raise ValueError("Saved policy FPS is unsupported by this arm")
                 rates.add(value)
@@ -250,7 +354,7 @@ async def install_artifact(app, project_id, artifact_id, payload: PolicyInstallR
         ):
             raise ValueError("Choose a reload-verified native ACT or SmolVLA checkpoint")
         config = bridge.config()
-        async with bridge.import_lock, asyncio.timeout(300):
+        async with bridge.import_lock:
             spool_root = bridge.data_dir / "policy-install"
             spool_root.mkdir(mode=0o700, parents=True, exist_ok=True)
             if (
@@ -260,60 +364,23 @@ async def install_artifact(app, project_id, artifact_id, payload: PolicyInstallR
                 raise ValueError("Policy installation needs its archive space plus 10 GiB free")
             with tempfile.TemporaryDirectory(prefix="artifact-", dir=spool_root) as temporary:
                 path = Path(temporary) / "policy.tar"
-                source = await lifecycle.download(project_id, artifact_id)
-                size = await _spool(source, path)
-                metadata, recipe = await asyncio.to_thread(
-                    _archive_metadata, path, artifact.manifest_sha256
-                )
                 try:
-                    descriptor = _descriptor(artifact, metadata, recipe, payload)
-                except ValueError as error:
-                    raise RobotLabError(str(error), 422) from None
-                encoded = base64.b64encode(
-                    json.dumps(descriptor, separators=(",", ":"), allow_nan=False).encode()
-                ).decode()
-                async with bridge.client.stream(
-                    "POST",
-                    bridge.url(config, "policy/install"),
-                    headers=bridge.headers(config)
-                    | {
-                        "Content-Type": "application/x-tar",
-                        "Content-Length": str(size),
-                        "X-OpenJensen-Policy": encoded,
-                    },
-                    content=_chunks(path),
-                    timeout=httpx.Timeout(120, connect=3),
-                    follow_redirects=False,
-                ) as response:
-                    raw = await bridge.read(response, MAX_JSON)
-                    try:
-                        result = bridge.sanitize(strict_json(raw), config)
-                    except ValueError, UnicodeError, RecursionError:
-                        raise RobotLabError(
-                            "Policy companion returned an invalid installation result"
-                        ) from None
-                    if not response.is_success:
-                        message = (
-                            result.get("error", result.get("detail"))
-                            if isinstance(result, dict)
-                            else None
-                        )
-                        status = (
-                            response.status_code
-                            if response.status_code in {400, 409, 413, 422, 503}
-                            else 502
-                        )
-                        raise RobotLabError(
-                            str(message)[:1000]
-                            if isinstance(message, str)
-                            else "Policy installation failed",
-                            status,
-                        )
-                    if not isinstance(result, dict):
-                        raise RobotLabError(
-                            "Policy companion returned an invalid installation result"
-                        )
-                    return result
+                    async with asyncio.timeout(DOWNLOAD_SECONDS) as limit:
+                        source = await lifecycle.download(project_id, artifact_id)
+                        size = await _spool(source, path)
+                except TimeoutError:
+                    if not limit.expired():
+                        raise
+                    raise RobotLabError(
+                        "The model could not be fetched from storage within "
+                        f"{DOWNLOAD_SECONDS // 60} minutes. Check the connection and install "
+                        "it again; the previous policies are retained",
+                        503,
+                    ) from None
+                return await asyncio.wait_for(
+                    _install_spooled(app, project_id, artifact, payload, path, size, config),
+                    INSTALL_SECONDS,
+                )
     except RobotLabError:
         raise
     except TimeoutError, httpx.HTTPError, OSError, RuntimeError:
@@ -324,3 +391,51 @@ async def install_artifact(app, project_id, artifact_id, payload: PolicyInstallR
         raise RobotLabError(
             "Selected policy archive or compatibility settings are invalid", 422
         ) from None
+
+
+async def _install_spooled(app, project_id, artifact, payload, path, size, config):
+    """Verify the fetched archive and hand it to the robot service."""
+    bridge = app.state.robot_lab
+    metadata, recipe = await asyncio.to_thread(_archive_metadata, path, artifact.manifest_sha256)
+    recorded = await recorded_control(app, project_id, artifact)
+    try:
+        descriptor = _descriptor(artifact, metadata, recipe, payload, recorded)
+    except ValueError as error:
+        raise RobotLabError(str(error), 422) from None
+    encoded = base64.b64encode(
+        json.dumps(descriptor, separators=(",", ":"), allow_nan=False).encode()
+    ).decode()
+    async with bridge.client.stream(
+        "POST",
+        bridge.url(config, "policy/install"),
+        headers=bridge.headers(config)
+        | {
+            "Content-Type": "application/x-tar",
+            "Content-Length": str(size),
+            "X-OpenJensen-Policy": encoded,
+        },
+        content=_chunks(path),
+        timeout=httpx.Timeout(120, connect=3),
+        follow_redirects=False,
+    ) as response:
+        raw = await bridge.read(response, MAX_JSON)
+        try:
+            result = bridge.sanitize(strict_json(raw), config)
+        except ValueError, UnicodeError, RecursionError:
+            raise RobotLabError(
+                "Policy companion returned an invalid installation result"
+            ) from None
+        if not response.is_success:
+            message = (
+                result.get("error", result.get("detail")) if isinstance(result, dict) else None
+            )
+            status = (
+                response.status_code if response.status_code in {400, 409, 413, 422, 503} else 502
+            )
+            raise RobotLabError(
+                str(message)[:1000] if isinstance(message, str) else "Policy installation failed",
+                status,
+            )
+        if not isinstance(result, dict):
+            raise RobotLabError("Policy companion returned an invalid installation result")
+        return result

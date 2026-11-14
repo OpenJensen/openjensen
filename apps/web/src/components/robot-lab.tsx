@@ -1,5 +1,6 @@
 'use client';
 
+import { RobotLabCollection } from './robot-lab-collection';
 import { HardwareNotice } from './robot-lab-shared';
 import { useRobotLab } from './robot-lab-state';
 import { RobotLabDevices, RobotLabDeviceDetail } from './robot-lab-devices';
@@ -11,10 +12,14 @@ import { RobotLabPolicy } from './robot-lab-policy';
 import { RobotLabRecord } from './robot-lab-record';
 import { RobotLabCamera } from './robot-lab-camera';
 import { RobotLabDiagnostics } from './robot-lab-diagnostics';
+import { RobotLabCalibrationReadiness, isCalibrationSetupError } from './robot-lab-calibration-readiness';
+import { CameraRecordingStatus, useCameraWorkspace } from './robot-lab-camera-workspace';
 import './robot-lab.css';
 
 export function RobotLab() {
   const lab = useRobotLab();
+  const cameraWorkspace = lab.cameraWorkspace && stepForCamera(lab.step);
+  const root = useCameraWorkspace(cameraWorkspace, () => lab.setCameraWorkspace(false));
   const {
     active,
     busy,
@@ -35,8 +40,17 @@ export function RobotLab() {
     step,
     stop,
   } = lab;
+  const hasCalibrationStatus = online && !!state?.capabilities?.calibration_profiles && step >= 3 && !active;
+  const showError = (message?: string | null) =>
+    !!message && !(hasCalibrationStatus && isCalibrationSetupError(message));
   return (
-    <div className="robot-lab">
+    <div
+      ref={root}
+      className={cameraWorkspace ? 'robot-lab robot-lab-camera-workspace' : 'robot-lab'}
+      role={cameraWorkspace ? 'dialog' : undefined}
+      aria-modal={cameraWorkspace || undefined}
+      aria-label={cameraWorkspace ? 'Large camera view' : undefined}
+    >
       <div className="robot-lab-statusbar">
         <div className="robot-lab-connection">
           <span className={`robot-lab-dot${online ? ' online' : ''}`} />
@@ -59,7 +73,17 @@ export function RobotLab() {
             </small>
           </div>
         </div>
+        {cameraWorkspace && <CameraRecordingStatus lab={lab} />}
         <div className="robot-lab-status-actions">
+          {cameraWorkspace && (
+            <button
+              className="secondary-button"
+              data-camera-workspace-exit
+              onClick={() => lab.setCameraWorkspace(false)}
+            >
+              Exit large view
+            </button>
+          )}
           <button
             className="text-button"
             onClick={() => void refresh()}
@@ -86,6 +110,7 @@ export function RobotLab() {
           { title: 'Teleoperation', step: 3 },
           { title: 'Record', step: 4 },
           { title: 'Run policy', step: 5 },
+          { title: 'AI collection', step: 6 },
         ].map((item) => (
           <button
             key={item.title}
@@ -101,6 +126,7 @@ export function RobotLab() {
             }
             onClick={() => {
               if (item.step === 0) lab.setSelectedDeviceId(null);
+              if (!stepForCamera(item.step)) lab.setCameraWorkspace(false);
               lab.openStep(item.step);
             }}
           >
@@ -108,31 +134,40 @@ export function RobotLab() {
           </button>
         ))}
       </nav>
-      {step !== 2 && error && <HardwareNotice label="Latest operation error" message={error} />}
-      {step !== 2 && session?.error && session.error !== error && !previousSessionError && (
-        <HardwareNotice label="Hardware session error" message={session.error} />
-      )}
-      {previousSessionError && (
-        <HardwareNotice
-          label="Previous session error"
-          context="Previous hardware session stopped"
-          message={previousSessionError}
-        />
-      )}
-      {(reconnecting || (!online && localCalibrationRef.current)) && (
-        <p className="robot-lab-event robot-lab-warning" role="status">
-          {localCalibrationRef.current
-            ? 'Reconnecting… Calibration continues on the robot computer. Captured values are retained.'
-            : 'Reconnecting… Motion controls are paused; the motor watchdog remains active.'}
-        </p>
-      )}
-      {notice && (
-        <p className="robot-lab-event" role="status">
-          {notice}
-        </p>
-      )}
-      {recording?.error && <HardwareNotice message={recording.error} />}
-      <RobotLabDiagnostics diagnostics={state?.diagnostics} />
+      <div className="robot-lab-notices">
+        {step !== 2 && showError(error) && error && <HardwareNotice label="Latest operation error" message={error} />}
+        {step !== 2 &&
+          showError(session?.error) &&
+          session?.error &&
+          session.error !== error &&
+          !previousSessionError && <HardwareNotice label="Hardware session error" message={session.error} />}
+        {showError(previousSessionError) && previousSessionError && (
+          <HardwareNotice
+            label="Previous session error"
+            context="The last session stopped by itself"
+            message={previousSessionError}
+            actions={
+              <button className="text-button" disabled={!state?.ok || busy} onClick={stop}>
+                Dismiss
+              </button>
+            }
+          />
+        )}
+        {hasCalibrationStatus && <RobotLabCalibrationReadiness lab={lab} />}
+        {(reconnecting || (!online && localCalibrationRef.current)) && (
+          <p className="robot-lab-event robot-lab-warning" role="status">
+            {localCalibrationRef.current
+              ? 'Reconnecting… Calibration continues on the robot computer. Captured values are retained.'
+              : 'Reconnecting… Motion controls are paused; the motor watchdog remains active.'}
+          </p>
+        )}
+        {notice && (
+          <p className="robot-lab-event" role="status">
+            {notice}
+          </p>
+        )}
+        {recording?.error && <HardwareNotice message={recording.error} />}
+      </div>
       {step < 3 && !lab.selectedDeviceId ? (
         <RobotLabDevices lab={lab} />
       ) : (
@@ -140,7 +175,15 @@ export function RobotLab() {
           <section
             className="robot-lab-main"
             aria-label={
-              step < 3 ? 'Device configuration' : step === 3 ? 'Teleoperation' : step === 4 ? 'Record' : 'Run policy'
+              step < 3
+                ? 'Device configuration'
+                : step === 3
+                  ? 'Teleoperation'
+                  : step === 4
+                    ? 'Record'
+                    : step === 5
+                      ? 'Run policy'
+                      : 'AI collection'
             }
           >
             {step < 3 && (
@@ -153,6 +196,7 @@ export function RobotLab() {
             {step === 3 && <RobotLabTeleoperate lab={lab} />}
             {step === 4 && <RobotLabRecord lab={lab} />}
             {step === 5 && <RobotLabPolicy lab={lab} />}
+            {step === 6 && <RobotLabCollection lab={lab} />}
             {busy && (
               <p className="robot-lab-subtle" role="status" style={{ marginTop: 16 }}>
                 {pending === 'Arm stopped.'
@@ -164,6 +208,11 @@ export function RobotLab() {
           <RobotLabCamera lab={lab} />
         </div>
       )}
+      <RobotLabDiagnostics diagnostics={state?.diagnostics} />
     </div>
   );
+}
+
+function stepForCamera(step: number) {
+  return step === 3 || step === 4;
 }

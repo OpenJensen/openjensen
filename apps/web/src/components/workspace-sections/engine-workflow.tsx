@@ -2,6 +2,17 @@
 
 import { WorkflowPanel } from '@/components/workflow-panel';
 import { useWorkspace } from '@/components/workspace-context';
+import type { StageId } from '@/lib/workspace-routes';
+
+// The workflow panel's logic is keyed by these fixed words. They are not what the sidebar
+// calls a page, so renaming a page cannot change which form or job list is shown.
+const workflowKeys: Partial<Record<StageId, string>> = {
+  settings: 'settings',
+  training: 'Fine-tune',
+  quantization: 'Quantize',
+  evaluation: 'Evaluate',
+  simulation: 'Run',
+};
 
 export default function EngineWorkflowSection() {
   const {
@@ -28,7 +39,7 @@ export default function EngineWorkflowSection() {
       tab={settingsTab}
       onTabChange={setSettingsTab}
       onOpenQuantize={() => navigateStage('quantization')}
-      stage={activeStage === 'settings' ? 'settings' : stage.name}
+      stage={workflowKeys[activeStage] ?? stage.name}
       preferredJobId={
         activeStage === 'quantization' && openQuantizationRun?.projectId === workflowProjectId
           ? openQuantizationRun.id

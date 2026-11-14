@@ -493,3 +493,41 @@
     font-size: 16px;
   }
 }
+
+/* Many one-episode recordings, one button to make them a dataset. */
+.dataset-combine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 24px;
+  margin-bottom: 16px;
+}
+.dataset-combine-copy {
+  flex: 1 1 320px;
+  min-width: 0;
+}
+.dataset-combine-copy h3 {
+  margin: 0 0 4px;
+  font-size: 16px;
+}
+.dataset-combine-copy p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.dataset-combine-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+.dataset-combine-actions input {
+  width: 220px;
+  max-width: 100%;
+}
+.dataset-combine > .error-notice {
+  flex-basis: 100%;
+  margin: 0;
+}

@@ -13,6 +13,18 @@
   color: var(--accent);
   border-color: currentColor;
 }
+.application-version.development {
+  border-style: dashed;
+  font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+}
+.application-development-note {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
 .application-update-dialog {
   width: min(520px, calc(100vw - 32px));
   max-height: calc(100vh - 32px);
@@ -65,4 +77,13 @@
   justify-content: flex-end;
   gap: 8px;
   margin-top: 24px;
+}
+
+/* A long development label is cut short on a phone instead of pushing the header off the screen. */
+@media (max-width: 760px) {
+  .application-version.development {
+    max-width: 96px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 }

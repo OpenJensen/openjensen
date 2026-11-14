@@ -3,10 +3,13 @@ import { expect, type Page, type Route } from '@playwright/test';
 /** Open a category's new task through its visible primary action. */
 export async function openModuleTask(page: Page) {
   const start = page.getByRole('button', {
-    name: /^(New augmentation|New scene|New scoring|New teleoperation|New run)$/,
+    name: /^(New augmentation|New scene|New scoring|New teleoperation|New simulation)$/,
   });
   const back = page.getByRole('button', { name: 'Back to jobs', exact: true });
   await expect.poll(async () => (await start.isVisible()) || (await back.isVisible())).toBe(true);
+  // The page being left can still show its own Back button for a moment: give the
+  // destination's list a chance to appear before concluding a task is already open.
+  if (!(await start.isVisible())) await start.waitFor({ state: 'visible', timeout: 400 }).catch(() => undefined);
   if (await start.isVisible()) await start.click();
 }
 
@@ -16,11 +19,11 @@ export const jobOperationFixtures = [
   ['dataset.convert', 'Convert dataset', 'datasets'],
   ['dataset.augment', 'Augment dataset', 'augmentation'],
   ['scene.generate', 'Real to sim', 'real-to-sim'],
-  ['policy.finetune', 'Fine-tune', 'training'],
+  ['policy.finetune', 'Train', 'training'],
   ['policy.distill', 'Distill', 'distillation'],
   ['policy.quantize', 'Quantize', 'quantization'],
   ['policy.evaluate', 'Evaluate', 'evaluation'],
-  ['policy.run', 'Run policy', 'simulation'],
+  ['policy.run', 'Run in simulation', 'simulation'],
   ['policy.import', 'Import model', 'models'],
   ['policy.export', 'Export model', 'models'],
   ['policy.workflow', 'Policy workflow', 'evaluation'],

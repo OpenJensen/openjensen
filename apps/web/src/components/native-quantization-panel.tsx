@@ -1,5 +1,6 @@
 'use client';
 
+import { JobStatus } from '@/components/ui/job-status';
 import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, artifactDownloadUrl, isActive, type Job } from '@/lib/api';
@@ -313,7 +314,7 @@ export function NativeQuantizationPanel({
         >
           <div className="native-result-header">
             <h3>INT{nativeQuantizationOf(selected)?.bits} candidate</h3>
-            <span className={`status status-${selected.status}`}>{selected.status}</span>
+            <JobStatus status={selected.status} />
           </div>
           <p className="native-result-summary">
             {isActive(selected) ? (selected.stage ?? selected.status) : 'Recorded job'} · {selected.id}
@@ -418,7 +419,7 @@ export function NativeQuantizationPanel({
                     {onPrepareSimulation && handoff && (
                       <p className="field-help" role="status">
                         {simulation.isError
-                          ? 'Simulation profile availability is unknown. Open Run to refresh its configuration.'
+                          ? 'Simulation profile availability is unknown. Open Simulate to refresh its configuration.'
                           : simulation.isPending
                             ? 'Checking configured simulation profiles…'
                             : compatible.length

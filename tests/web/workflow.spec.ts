@@ -89,7 +89,7 @@ test('browser intake reads local metadata and preserves its limits after reload'
   const created = page.waitForResponse(
     (response) => response.url().endsWith('/intakes') && response.request().method() === 'POST',
   );
-  await page.getByRole('button', { name: 'Inspect dataset', exact: true }).click();
+  await page.getByRole('button', { name: 'Import dataset', exact: true }).click();
   const response = await created;
   expect(response.status()).toBe(202);
   const history = await request.get(`/api/v1/projects/${project.id}/jobs`);
@@ -98,14 +98,14 @@ test('browser intake reads local metadata and preserves its limits after reload'
   expect(receipts).toHaveLength(1);
   const submitted = receipts[0];
   const job = await waitForJob(request, submitted.id, 'succeeded');
-  await expect(page.getByRole('heading', { name: 'Local dataset', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'lerobot_v3_preview', exact: true })).toBeVisible();
   expect(job.result.inspection_scope).toBe('metadata_only');
   expect(job.result.robot_type).toBe('synthetic_fixture');
   expect(await cli('jobs', 'show', submitted.id)).toEqual(job);
   await page.reload();
   await expect(page.getByLabel('Current project')).toHaveAttribute('data-project-id', project.id);
   await page.getByRole('button', { name: 'Open dataset lerobot_v3_preview', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Local dataset', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'lerobot_v3_preview', exact: true })).toBeVisible();
   await page.getByText('Advanced', { exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Inspection notes', exact: true })).toBeVisible();
   await expect(
@@ -213,7 +213,7 @@ test('cancelling a started worker remains cancelled after browser reload and in 
   expect(await cli('jobs', 'show', submitted.id)).toEqual(cancelled);
   await page.reload();
   await page.getByRole('link', { name: 'Quantize', exact: true }).click();
-  await expect(page.locator(`.job-history-entry[data-job-id="${submitted.id}"]`)).toContainText('cancelled');
+  await expect(page.locator(`.job-history-entry[data-job-id="${submitted.id}"]`)).toContainText('Cancelled');
   await page.locator(`.job-history-entry[data-job-id="${submitted.id}"]`).click();
   await expect(page.getByRole('button', { name: 'Cancel run', exact: true })).toHaveCount(0);
   await expect(page.getByRole('link', { name: /^Download / })).toHaveCount(0);

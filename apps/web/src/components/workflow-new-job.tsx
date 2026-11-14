@@ -146,7 +146,7 @@ export function WorkflowNewJob({
                 : stage === 'Evaluate'
                   ? 'Start evaluation'
                   : stage === 'Fine-tune'
-                    ? 'Start fine-tuning'
+                    ? 'Start training'
                     : 'Reload and run'}
           </button>
         </fieldset>

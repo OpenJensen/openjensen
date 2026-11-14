@@ -115,7 +115,7 @@ def one_click(tmp_path, monkeypatch):
         )
         return 0
 
-    async def recover(_directory):
+    async def recover(_directory, keep=None):
         return []
 
     async def forbidden_process(*args, **kwargs):

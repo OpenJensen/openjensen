@@ -72,9 +72,9 @@ export function cameras(profile?: DatasetProfile) {
 }
 export function datasetIssue(profile: DatasetProfile) {
   if (profile.source === 'local' && !profile.snapshot)
-    return 'Prepare an immutable training copy when importing this local dataset.';
+    return 'Prepare this dataset for training first: open it in Datasets and choose Prepare for training.';
   if (profile.source === 'huggingface' && !/^[0-9a-f]{40}$/i.test(profile.revision))
-    return 'Inspect an immutable dataset revision before training.';
+    return 'Import a pinned revision of this dataset before training.';
   if (profile.total_episodes < 2) return 'At least two episodes are needed for training and validation.';
   if (!cameras(profile).length) return 'No image or video camera was found.';
   for (const key of ['observation.state' in profile.features ? 'observation.state' : 'states', 'action']) {
@@ -114,8 +114,12 @@ export function modelDatasetIssue(
   cameraKeys: string[],
 ) {
   if (!model || !profile) return null;
+  if (profile.source === 'local' && profile.training_blocker)
+    return `This dataset is not ready for training. ${profile.training_blocker}`;
   if (profile.source === 'local' && model.backend !== 'lerobot')
-    return 'Local snapshots currently support native LeRobot models, including ACT.';
+    return model.id === 'smolvla'
+      ? 'SmolVLA LoRA and QLoRA train from a Hugging Face dataset, not from one saved on this computer. Publish this dataset to Hugging Face and train on the published copy, or choose full fine-tuning or ACT.'
+      : `${model.label} trains from a Hugging Face dataset, not from one saved on this computer. Publish this dataset to Hugging Face and train on the published copy, or choose ACT.`;
   if (model.id === 'psi0' && profile.format !== 'lerobot_v2')
     return 'Psi-Zero currently needs a LeRobot v2 dataset. Choose a v2 inspection or another model.';
   if (model.backend === 'lerobot' && profile.format !== 'lerobot_v3')

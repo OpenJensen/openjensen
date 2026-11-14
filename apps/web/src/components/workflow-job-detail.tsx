@@ -1,5 +1,6 @@
 'use client';
 
+import { JobStatus } from '@/components/ui/job-status';
 import { QuantizationComparison } from '@/components/quantization-comparison';
 import { isActive } from '@/lib/api';
 import { conciseRunError, runSummary } from '@/lib/run-summary';
@@ -69,7 +70,7 @@ export function WorkflowJobDetail({
             {precisionFor(selected) !== '—' ? ` · ${precisionFor(selected)}` : ''}
           </h2>
         </div>
-        <span className={`status status-${selected.status}`}>{selected.status}</span>
+        <JobStatus status={selected.status} />
       </header>
       <section
         className={`workflow-current-stage workflow-current-stage-${selected.status}`}

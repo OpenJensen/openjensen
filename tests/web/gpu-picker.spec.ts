@@ -95,7 +95,7 @@ async function openGpuPicker(page: Page, local = false) {
     }
   });
   await page.goto('/training/');
-  await page.getByRole('button', { name: 'Start a new fine-tuning', exact: true }).click();
+  await page.getByRole('button', { name: 'New training run', exact: true }).click();
   await page
     .getByRole('navigation', { name: 'Training setup' })
     .getByRole('button', { name: 'Model', exact: true })
@@ -399,7 +399,7 @@ async function trainingAdmission(page: Page, { format = 'lerobot_v3', dimensions
     await route.fulfill({ json: replies[path] });
   });
   await page.goto('/training/');
-  await page.getByRole('button', { name: 'Start a new fine-tuning', exact: true }).click();
+  await page.getByRole('button', { name: 'New training run', exact: true }).click();
   await expect(page.getByRole('checkbox', { name: 'fixture/admission', exact: true })).toBeVisible();
   const setup = page.getByRole('navigation', { name: 'Training setup' });
   async function chooseModel(label: string) {
@@ -407,7 +407,7 @@ async function trainingAdmission(page: Page, { format = 'lerobot_v3', dimensions
     await chooseOnlyModel(page, label);
     await setup.getByRole('button', { name: 'Compute', exact: true }).click();
   }
-  return { state, setup, chooseModel, start: page.getByRole('button', { name: 'Start fine-tuning', exact: true }) };
+  return { state, setup, chooseModel, start: page.getByRole('button', { name: 'Start training', exact: true }) };
 }
 
 test('native training explains the v3 requirement before submission while SmolVLA keeps its v2 path', async ({
@@ -464,7 +464,13 @@ test('training cannot submit using cached project data after a failed project re
   await expect(fixture.start).toBeEnabled();
   await fixture.start.click();
   await expect.poll(() => fixture.state.submitted.length).toBe(1);
-  expect(fixture.state.submitted[0].training).toMatchObject({ model_id: 'code://lerobot/act', batch_size: 4 });
+  // ACT's own recommended settings, not the shared form defaults (which are SmolVLA's):
+  // a learning rate of 0.0001 is ten times what ACT is meant to train at.
+  expect(fixture.state.submitted[0].training).toMatchObject({
+    model_id: 'code://lerobot/act',
+    batch_size: 8,
+    learning_rate: 0.00001,
+  });
 });
 
 test('GR00T rejects vectors exceeding its architecture bound before any submission', async ({ page }) => {

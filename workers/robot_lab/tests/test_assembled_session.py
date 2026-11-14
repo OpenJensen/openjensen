@@ -310,7 +310,7 @@ class ServerSetupTests(unittest.TestCase):
         self.start()
         self.lab.stop()
         self.assertEqual(path.read_bytes(), before)
-        with self.assertRaisesRegex(RequestError, "Motor IDs changed"):
+        with self.assertRaisesRegex(RequestError, "Motor setup changed"):
             self.lab.control_start(
                 {
                     "port": "/dev/fake",

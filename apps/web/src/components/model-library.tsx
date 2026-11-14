@@ -1,7 +1,12 @@
 'use client';
 
+import { Segmented } from './ui/choice';
+import { jobStatusLabel } from '@/lib/job-status';
 import { useEffect, useState } from 'react';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import { datasetLibrary, isProjectDataset, type LibraryDataset } from '@/lib/dataset-library';
+import { datasetName, type NamedDataset } from '@/lib/dataset-names';
+import { useProjectDatasets } from '@/lib/use-project-datasets';
 import { api, artifactDownloadUrl, isDatasetJob, type Job, type PolicyArtifact, type Project } from '@/lib/api';
 import {
   episodePartitions,
@@ -19,6 +24,7 @@ import {
   type ModelAction,
 } from '@/lib/model-library';
 import { isCloudArtifact } from '@/lib/checkpoints';
+import { AddFromHuggingFace, PublishToHuggingFace } from './huggingface-share';
 import './model-library.css';
 
 const actionNames: Record<ModelAction, string> = {
@@ -154,6 +160,7 @@ export function ModelWorkflowPicker({
     refetchInterval: 5000,
   });
   const models = ownedModels(artifacts.data ?? [], projectId);
+  const library = useProjectDatasets(projectId);
   return (
     <section
       className="model-workflow-picker"
@@ -218,7 +225,7 @@ export function ModelWorkflowPicker({
               >
                 <span>
                   <strong>{group.name}</strong>
-                  <span>{modelDataset(latest, models, jobs.data ?? [])}</span>
+                  <span>{modelDataset(latest, models, jobs.data ?? [], library)}</span>
                   <small>
                     Latest checkpoint · {modelFormat(latest)} · Run {latest.job_id.slice(0, 8)}
                   </small>
@@ -265,7 +272,7 @@ export function ModelWorkflowPicker({
                         <span>
                           <strong>{artifact.label}</strong>
                           <small>{modelFormat(artifact)}</small>
-                          <small>{modelDataset(artifact, models, jobs.data ?? [])}</small>
+                          <small>{modelDataset(artifact, models, jobs.data ?? [], library)}</small>
                         </span>
                         <span className="model-choice-status">
                           {issue ?? (artifact.id === selectedId ? 'Selected' : 'Select version')}
@@ -283,7 +290,7 @@ export function ModelWorkflowPicker({
   );
 }
 
-function ModelStep({ step, jobs }: { step: LineageStep; jobs: Job[] }) {
+function ModelStep({ step, jobs, library }: { step: LineageStep; jobs: Job[]; library: NamedDataset[] }) {
   const job = step.job;
   const telemetry = useQuery({
     queryKey: ['training-telemetry', job?.id],
@@ -316,18 +323,21 @@ function ModelStep({ step, jobs }: { step: LineageStep; jobs: Job[] }) {
   const gpu = environment.gpu_name ?? environment.gpu ?? environment.device_name;
   const baseModel = record(reproducibility.model ?? step.artifact?.metadata?.base_model);
   const affected = job?.kind === 'policy.finetune' || job?.kind === 'policy.distill';
+  // A model added from a link was made on another machine: no job here produced it.
+  const added = !job && !!step.artifact?.id.endsWith(':huggingface');
   return (
     <li>
       <div className="model-lineage-heading">
         <span className="model-lineage-dot" />
         <div>
           <strong>
-            {operationNames[job?.kind ?? ''] ?? 'Saved model'}
+            {added ? 'Added from Hugging Face' : (operationNames[job?.kind ?? ''] ?? 'Saved model')}
             {step.artifact ? ` · ${step.artifact.label}` : ''}
           </strong>
           <span>
-            {date(job?.created_at)}
-            {job ? ` · ${job.status}` : ' · Producing job unavailable'}
+            {added
+              ? 'Made on another machine. Its own records are under Model configuration.'
+              : `${date(job?.created_at)}${job ? ` · ${jobStatusLabel(job.status)}` : ' · Producing job unavailable'}`}
           </span>
         </div>
       </div>
@@ -345,7 +355,11 @@ function ModelStep({ step, jobs }: { step: LineageStep; jobs: Job[] }) {
             <>
               <div>
                 <dt>Dataset</dt>
-                <dd>{textValue(dataset.repo_id) ?? (dataset.source === 'local' ? 'Local dataset' : 'Not recorded')}</dd>
+                <dd>
+                  {datasetJob && isDatasetJob(datasetJob)
+                    ? datasetName(datasetJob, library)
+                    : (textValue(dataset.repo_id) ?? 'Not recorded')}
+                </dd>
               </div>
               <div>
                 <dt>Dataset revision</dt>
@@ -492,15 +506,27 @@ export function ModelLibrary({
       refetchInterval: 5000,
     })),
   });
+  const libraryQueries = useQueries({
+    queries: visibleProjects.map((project) => ({
+      queryKey: ['datasets', project.id],
+      queryFn: ({ signal }: { signal: AbortSignal }) => datasetLibrary.list(project.id, signal),
+      retry: false,
+      staleTime: 10_000,
+    })),
+  });
   const rows = visibleProjects
     .flatMap((project, index) => {
       const artifacts = ownedModels(artifactQueries[index].data ?? [], project.id),
-        jobs = (jobQueries[index].data ?? []).filter((job) => job.project_id === project.id);
+        jobs = (jobQueries[index].data ?? []).filter((job) => job.project_id === project.id),
+        library = (libraryQueries[index].data ?? []).filter((entry): entry is LibraryDataset =>
+          isProjectDataset(entry, project.id),
+        );
       return artifacts.map((artifact) => ({
         project,
         artifact,
         artifacts,
         jobs,
+        library,
         fresh:
           artifactQueries[index].isSuccess &&
           !artifactQueries[index].isError &&
@@ -525,7 +551,7 @@ export function ModelLibrary({
       row.artifact.id,
       row.project.name,
       modelFamily(row.artifact, row.jobs, row.artifacts),
-      modelDataset(row.artifact, row.artifacts, row.jobs),
+      modelDataset(row.artifact, row.artifacts, row.jobs, row.library),
     ]
       .join(' ')
       .toLowerCase()
@@ -565,6 +591,7 @@ export function ModelLibrary({
           </a>
         </header>
         <ModelRunIdentity artifact={artifact} />
+        <PublishToHuggingFace key={artifact.id} projectId={project.id} kind="model" id={artifact.id} />
         {!chosen.fresh && (
           <p className="warning-box" role="alert">
             This model’s records could not be refreshed. Refresh before continuing with it.
@@ -626,7 +653,7 @@ export function ModelLibrary({
           </div>
           <ol>
             {lineage.map((step) => (
-              <ModelStep key={step.id} step={step} jobs={jobs} />
+              <ModelStep key={step.id} step={step} jobs={jobs} library={chosen.library} />
             ))}
           </ol>
         </section>
@@ -638,7 +665,7 @@ export function ModelLibrary({
                 <li key={job.id}>
                   <strong>{operationNames[job.kind] ?? job.kind}</strong>
                   <span>
-                    {date(job.created_at)} · {job.status} · Run {job.id}
+                    {date(job.created_at)} · {jobStatusLabel(job.status)} · Run {job.id}
                   </span>
                   {job.error && <p>{job.error}</p>}
                 </li>
@@ -667,6 +694,13 @@ export function ModelLibrary({
           </button>
         </div>
       </div>
+      {!!currentProjectId && (
+        <AddFromHuggingFace
+          projectId={currentProjectId}
+          kind="model"
+          onOpen={(id) => setSelected({ project: currentProjectId, artifact: id })}
+        />
+      )}
       <div className="model-library-toolbar">
         <label>
           Find a model
@@ -677,13 +711,15 @@ export function ModelLibrary({
             placeholder="Name, dataset, model ID…"
           />
         </label>
-        <label>
-          Show
-          <select value={scope} onChange={(event) => setScope(event.target.value)}>
-            <option value="all">All projects</option>
-            <option value="current">Current project</option>
-          </select>
-        </label>
+        <Segmented
+          label="Show"
+          value={scope}
+          onChange={setScope}
+          options={[
+            { value: 'current', label: 'This project' },
+            { value: 'all', label: 'All projects' },
+          ]}
+        />
         <button type="button" className="secondary-button" onClick={refresh}>
           Refresh models
         </button>
@@ -734,7 +770,7 @@ export function ModelLibrary({
                     >
                       <strong>{artifact.label}</strong>
                       <span>{modelFormat(artifact)}</span>
-                      <span>{modelDataset(artifact, row.artifacts, row.jobs)}</span>
+                      <span>{modelDataset(artifact, row.artifacts, row.jobs, row.library)}</span>
                       <span className="model-card-footer">
                         {size(artifact.file_bytes)} ·{' '}
                         {modelLineage(artifact, row.artifacts, row.jobs).length > 1 ? 'Derived model' : 'Saved version'}

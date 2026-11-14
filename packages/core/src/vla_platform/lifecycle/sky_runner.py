@@ -19,7 +19,7 @@ import tarfile
 import tempfile
 import time
 from collections.abc import Awaitable, Callable
-from contextlib import contextmanager
+from contextlib import asynccontextmanager, contextmanager, suppress
 from contextvars import ContextVar
 from itertools import islice
 from pathlib import Path, PurePosixPath
@@ -34,13 +34,29 @@ MAX_ARTIFACT_FILES = 10000
 MAX_PART_BYTES = 32 * 1024**2
 MAX_LOG_BYTES = 5 * 1024**2
 CHECKPOINT_POLL_SECONDS = 15
+# ``sky logs --status`` exits with this code only while the job has not finished. Every
+# other code (succeeded, failed, cancelled, not found, or the request itself failing)
+# is handled by the caller exactly as before.
+JOB_NOT_FINISHED = 101
+# The codes that say the cluster knows the job: succeeded, failed, or still going.
+JOB_KNOWN = frozenset({0, 100, JOB_NOT_FINISHED})
+LOG_RECONNECT_LIMIT = 20
+LOG_RECONNECT_PAUSE_SECONDS = 30
 STATE_NAME = "sky-state.json"
 RECOVERY_BUDGET_SECONDS = 10
 RECOVERY_RECORD_LIMIT = 256
+# Asking a cluster for a job's status goes through the API server and the machine. A
+# healthy answer can take several seconds, so this is longer than the teardown budget.
+REATTACH_PROBE_SECONDS = 30
+# Enough of the log to explain a job that ended while nobody was following it.
+REATTACH_TAIL_LINES = "200"
 Event = Callable[[str], Awaitable[None]]
 CLUSTER_PATTERN = r"fb-[a-f0-9]{12}-[a-f0-9]{8}"
 _RUN_SECRETS: ContextVar[tuple[str, ...]] = ContextVar("firebird_run_secrets", default=())
 _RUN_LOGGER: ContextVar[Event | None] = ContextVar("job_provider_log", default=None)
+_APPLICATION_STOPPING: ContextVar[Callable[[], bool] | None] = ContextVar(
+    "job_application_stopping", default=None
+)
 
 
 @contextmanager
@@ -51,6 +67,21 @@ def log_to(callback):
         yield
     finally:
         _RUN_LOGGER.reset(token)
+
+
+@contextmanager
+def detach_when(stopping: Callable[[], bool]):
+    """Let a training machine outlive this process when ``stopping()`` is true.
+
+    A run cancelled by its user or its deadline is torn down. A run cancelled because
+    the application is stopping keeps training: its saved dispatch is enough for the
+    next start to follow it again, or to tear it down if it cannot be found.
+    """
+    token = _APPLICATION_STOPPING.set(stopping)
+    try:
+        yield
+    finally:
+        _APPLICATION_STOPPING.reset(token)
 
 
 def validate_endpoint(value: object) -> str:
@@ -847,7 +878,41 @@ async def sync_checkpoints(sky: str, stage_dir: Path, state: dict, on_event: Eve
         _write_json(ack_path, acknowledged)
 
 
-async def follow_training(sky: str, stage_dir: Path, state: dict, timeout: int, on_event: Event):
+async def follow_training(
+    sky: str, stage_dir: Path, state: dict, timeout: int, on_event: Event, lines: str = "2000"
+):
+    """Follow the job's log until the job itself ends, not until the log stream does.
+
+    ``sky logs --follow`` returns when its connection to the cloud machine drops, which
+    can happen while training is running normally. Taking that for the end of the job
+    stopped a healthy machine in the middle of a run. After the stream ends, ask for the
+    job's status and follow again only when the answer is that it has not finished. Many
+    quick drops in a row, or the job's own time limit, give up; the caller then reports
+    what it finds.
+    """
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout
+    drops = 0
+    while True:
+        started = loop.time()
+        await _follow_log(sky, stage_dir, state, max(1, int(deadline - started)), on_event, lines)
+        status, _ = await _command(
+            [sky, "logs", state["cluster"], "1", "--status", *_args(state)], stage_dir, timeout=60
+        )
+        if status != JOB_NOT_FINISHED:
+            return
+        # A stream that lasted was a working connection: count only quick repeated drops.
+        drops = 1 if loop.time() - started > 120 else drops + 1
+        if drops > LOG_RECONNECT_LIMIT or loop.time() >= deadline:
+            return
+        await on_event("Reconnecting to the cloud machine's log; the job is still running")
+        await asyncio.sleep(min(LOG_RECONNECT_PAUSE_SECONDS, 2 * drops))
+        lines = "20"  # Earlier lines were already read; do not replay their progress.
+
+
+async def _follow_log(
+    sky: str, stage_dir: Path, state: dict, timeout: int, on_event: Event, lines: str
+):
     wake = asyncio.Event()
 
     async def progress(message):
@@ -858,7 +923,7 @@ async def follow_training(sky: str, stage_dir: Path, state: dict, timeout: int, 
 
     tail = asyncio.create_task(
         _command(
-            [sky, "logs", state["cluster"], "1", "--follow", "--tail", "2000", *_args(state)],
+            [sky, "logs", state["cluster"], "1", "--follow", "--tail", lines, *_args(state)],
             stage_dir,
             timeout=timeout,
             on_event=progress,
@@ -1153,10 +1218,44 @@ async def run(
     hf_token: str | None = None,
     on_log: Event | None = None,
 ) -> int:
+    with _bound(hf_token, on_log):
+        return await _run(payload, stage_dir, target, on_event, hf_token=hf_token)
+
+
+async def reattach(
+    payload: dict,
+    stage_dir: Path,
+    on_event: Event,
+    *,
+    hf_token: str | None = None,
+    on_log: Event | None = None,
+) -> int:
+    """Finish a run that an earlier application process left training.
+
+    Nothing is launched. The saved dispatch names the cluster; from there this follows
+    the log, saves checkpoints, brings the result home and tears the machine down,
+    exactly as the process that started the run would have.
+    """
+    with _bound(hf_token, on_log):
+        state = _saved_dispatch(stage_dir / STATE_NAME)
+        if state["phase"] != "training" or state["job_id"] != payload.get("job_id"):
+            raise ValueError("This job has no cloud run that can be followed again")
+        # The workspace may have moved since the run was launched.
+        state["config_path"] = str((stage_dir / "sky-config.yaml").resolve())
+        timeout = payload["parameters"].get("timeout_seconds", 7200)
+        async with _owned(stage_dir, state, on_event):
+            await on_event("Following the cloud run again after an application restart")
+            return await _finish(
+                executable(), stage_dir, state, timeout, on_event, lines=REATTACH_TAIL_LINES
+            )
+
+
+@contextmanager
+def _bound(hf_token: str | None, on_log: Event | None):
     context = _RUN_SECRETS.set((hf_token,) if hf_token else ())
     log_context = _RUN_LOGGER.set(on_log if on_log is not None else _RUN_LOGGER.get())
     try:
-        return await _run(payload, stage_dir, target, on_event, hf_token=hf_token)
+        yield
     finally:
         _RUN_SECRETS.reset(context)
         _RUN_LOGGER.reset(log_context)
@@ -1251,7 +1350,7 @@ async def _run(
     task_path, state = await asyncio.to_thread(prepare, payload, stage_dir, target)
     state_path = stage_dir / STATE_NAME
     timeout = payload["parameters"].get("timeout_seconds", 7200)
-    try:
+    async with _owned(stage_dir, state, on_event):
         state["phase"] = "launching"
         _write_json(state_path, state)
         await on_event(
@@ -1322,42 +1421,161 @@ async def _run(
             if payload["operation"] == "policy.run"
             else "Training on Google Cloud"
         )
-        await follow_training(sky, stage_dir, state, timeout, on_event)
-        status, _ = await _command(
-            [sky, "logs", state["cluster"], "1", "--status", *_args(state)], stage_dir, timeout=60
-        )
-        state["phase"] = "collecting"
+        return await _finish(sky, stage_dir, state, timeout, on_event)
+
+
+async def _finish(
+    sky: str, stage_dir: Path, state: dict, timeout: int, on_event: Event, *, lines: str = "2000"
+) -> int:
+    """Follow a training run to its end and bring its result home."""
+    state_path = stage_dir / STATE_NAME
+    await follow_training(sky, stage_dir, state, timeout, on_event, lines)
+    status, _ = await _command(
+        [sky, "logs", state["cluster"], "1", "--status", *_args(state)], stage_dir, timeout=60
+    )
+    state["phase"] = "collecting"
+    _write_json(state_path, state)
+    await on_event("Saving cloud artifacts and retrieving result metadata")
+    await sync_checkpoints(sky, stage_dir, state, on_event, final=True)
+    if state["target"].get("storage_uri"):
+        state["final_metadata_synced"] = True
         _write_json(state_path, state)
-        await on_event("Saving cloud artifacts and retrieving result metadata")
-        await sync_checkpoints(sky, stage_dir, state, on_event, final=True)
-        if state["target"].get("storage_uri"):
-            state["final_metadata_synced"] = True
-            _write_json(state_path, state)
-        if not state["target"].get("storage_uri"):
-            await asyncio.to_thread(collect, stage_dir, state["cluster"])
-        if status and not (stage_dir / "result.json").is_file():
-            raise RuntimeError(failed_worker_diagnostic(stage_dir, target))
-        return status
+    if not state["target"].get("storage_uri"):
+        await asyncio.to_thread(collect, stage_dir, state["cluster"])
+    if status and not (stage_dir / "result.json").is_file():
+        raise RuntimeError(failed_worker_diagnostic(stage_dir, state["target"]))
+    return status
+
+
+@asynccontextmanager
+async def _owned(stage_dir: Path, state: dict, on_event: Event):
+    """Tear the run's machine down on the way out, however the run ends.
+
+    The one exception is an application that stops while the machine is training
+    (see ``detach_when``): the machine is left running and the dispatch stays in its
+    training phase, which is what the next start looks for.
+    """
+    detached = False
+    try:
+        yield
+    except asyncio.CancelledError:
+        stopping = _APPLICATION_STOPPING.get()
+        detached = state.get("phase") == "training" and stopping is not None and stopping()
+        if detached:
+            # A failed note must not turn this cancellation into a failed job.
+            with suppress(Exception):
+                await on_event(
+                    "The application is stopping; the cloud machine keeps training "
+                    "and is followed again on the next start"
+                )
+        raise
     finally:
-        # Shield cleanup from the job timeout/cancel while awaiting it. State is
-        # durable so process death is reconciled by recover() on next startup.
-        task = asyncio.create_task(cleanup(stage_dir, state, on_event=on_event))
+        if not detached:
+            await _teardown(stage_dir, state, on_event)
+
+
+async def _teardown(stage_dir: Path, state: dict, on_event: Event | None = None):
+    # Shield cleanup from the job timeout/cancel while awaiting it. State is
+    # durable so process death is reconciled by recover() on next startup.
+    task = asyncio.create_task(cleanup(stage_dir, state, on_event=on_event))
+    try:
+        cleaned = await asyncio.shield(task)
+    except asyncio.CancelledError:
+        await task
+        raise
+    if not cleaned:
+        raise RuntimeError(state["cleanup_error"])
+
+
+def _saved_dispatch(state_path: Path) -> dict:
+    """Read a dispatch record, refusing one that does not provably belong to its job."""
+    if state_path.is_symlink() or not state_path.is_file() or state_path.stat().st_size > 65536:
+        raise ValueError("Unsafe saved dispatch file")
+    state = json.loads(state_path.read_text())
+    if not isinstance(state, dict) or state.get("job_id") != state_path.parent.parent.name:
+        raise ValueError("Saved dispatch does not belong to this job")
+    if type(state.get("version")) is not int or state["version"] != 1:
+        raise ValueError("Unsupported saved dispatch version")
+    cluster = state.get("cluster")
+    prefix = "fb-" + hashlib.sha256(state["job_id"].encode()).hexdigest()[:12] + "-"
+    if (
+        not isinstance(cluster, str)
+        or not re.fullmatch(CLUSTER_PATTERN, cluster)
+        or not cluster.startswith(prefix)
+        or not isinstance(state.get("target"), dict)
+        or not isinstance(state.get("phase"), str)
+    ):
+        raise ValueError("Invalid saved dispatch identity or shape")
+    return state
+
+
+async def attachable(
+    data_dir: Path, stages: dict[str, str], *, probe: bool = True
+) -> dict[str, str]:
+    """Which of these jobs have a machine worth keeping: ``{job id: stage}``.
+
+    ``stages`` names, per job, the stage whose dispatch could be followed again. A job
+    qualifies when that dispatch was left in its training phase and, with ``probe``, its
+    cluster still answers for the job as running or finished. A cluster that cannot be
+    asked in time, or does not know the job, does not qualify: the caller tears it down.
+    """
+    training = {}
+    for job_id, stage in stages.items():
+        stage_dir = data_dir / "jobs" / job_id / stage
         try:
-            cleaned = await asyncio.shield(task)
-        except asyncio.CancelledError:
-            await task
-            raise
-        if not cleaned:
-            raise RuntimeError(state["cleanup_error"])
+            state = _saved_dispatch(stage_dir / STATE_NAME)
+        except ValueError, OSError:
+            continue
+        if state["phase"] == "training":
+            state["config_path"] = str((stage_dir / "sky-config.yaml").resolve())
+            training[job_id] = (stage_dir, state)
+    if not probe or not training:
+        return {job_id: stages[job_id] for job_id in training}
+
+    async def known(stage_dir, state):
+        try:
+            code, _ = await _command(
+                [executable(), "logs", state["cluster"], "1", "--status", *_args(state)],
+                stage_dir,
+                timeout=REATTACH_PROBE_SECONDS,
+            )
+        except OSError, TimeoutError, ValueError:
+            return False
+        return code in JOB_KNOWN
+
+    # Ask together: the wait is one probe long however many machines there are.
+    answers = await asyncio.gather(*(known(*item) for item in training.values()))
+    return {job_id: stages[job_id] for job_id, found in zip(training, answers) if found}
 
 
-async def recover(data_dir: Path) -> list[dict]:
+async def release(stage_dir: Path) -> str | None:
+    """Tear down a run that nothing follows any more; say what still needs attention.
+
+    Does nothing once the runner has finished with the dispatch, so the owner of a
+    re-attached run can call it last, whichever way that run ended.
+    """
+    try:
+        state = _saved_dispatch(stage_dir / STATE_NAME)
+    except ValueError, OSError:
+        return "Saved SkyPilot cleanup requires attention; check this job's sky-state.json."
+    if state["phase"] in {"cleaned_up", "cleanup_failed"}:
+        return None
+    try:
+        await _teardown(stage_dir, state)
+    except RuntimeError as error:
+        return str(error)
+    return None
+
+
+async def recover(data_dir: Path, *, keep: dict[str, str] | None = None) -> list[dict]:
     """Bound startup teardown; preserve unfinished ownership for explicit cleanup.
 
     Provider outages must not prevent access to local projects. A timeout never
     means the cluster was deleted: retain its dispatch and a visible diagnostic.
+    ``keep`` maps a job to the stage whose machine stays up (see ``attachable``).
     """
     failures = []
+    keep = keep or {}
     deadline = time.monotonic() + RECOVERY_BUDGET_SECONDS
     paths = list(islice((data_dir / "jobs").glob(f"*/*/{STATE_NAME}"), RECOVERY_RECORD_LIMIT + 1))
     if len(paths) > RECOVERY_RECORD_LIMIT:
@@ -1372,27 +1590,9 @@ async def recover(data_dir: Path) -> list[dict]:
         )
     for state_path in paths[:RECOVERY_RECORD_LIMIT]:
         try:
-            if (
-                state_path.is_symlink()
-                or not state_path.is_file()
-                or state_path.stat().st_size > 65536
-            ):
-                raise ValueError("Unsafe saved dispatch file")
-            state = json.loads(state_path.read_text())
-            if not isinstance(state, dict) or state.get("job_id") != state_path.parent.parent.name:
-                raise ValueError("Saved dispatch does not belong to this job")
-            if type(state.get("version")) is not int or state["version"] != 1:
-                raise ValueError("Unsupported saved dispatch version")
-            cluster = state.get("cluster")
-            prefix = "fb-" + hashlib.sha256(state["job_id"].encode()).hexdigest()[:12] + "-"
-            if (
-                not isinstance(cluster, str)
-                or not re.fullmatch(CLUSTER_PATTERN, cluster)
-                or not cluster.startswith(prefix)
-                or not isinstance(state.get("target"), dict)
-                or not isinstance(state.get("phase"), str)
-            ):
-                raise ValueError("Invalid saved dispatch identity or shape")
+            state = _saved_dispatch(state_path)
+            if keep.get(state["job_id"]) == state_path.parent.name:
+                continue
             if state.get("phase") == "cleaned_up":
                 if (
                     state.get("target", {}).get("storage_uri")

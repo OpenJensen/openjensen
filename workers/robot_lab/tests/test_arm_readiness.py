@@ -102,7 +102,7 @@ class ReadinessTests(unittest.TestCase):
         profiles = {p["robot_id"]: p for p in self.lab.status()["calibrations"]}
         self.assertFalse(profiles["test-arm"]["setup_fresh"])
         self.assertTrue(profiles["test-leader"]["setup_fresh"])
-        with self.assertRaisesRegex(ValueError, "Motor IDs changed"):
+        with self.assertRaisesRegex(ValueError, "Motor setup changed"):
             self.lab.load_calibration("test-arm", "follower", "/dev/fake")
 
     def test_existing_acknowledgements_resolve_name_without_recalibration(self):

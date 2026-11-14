@@ -15,7 +15,7 @@ from filelock import FileLock, Timeout
 from starlette.background import BackgroundTask
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from vla_platform import __version__
+from vla_platform import __version__, build
 from vla_platform.agent_control.service import AgentControl
 from vla_platform.agent_control_api import register_errors as register_agent_errors
 from vla_platform.agent_control_api import router as agent_control_router
@@ -30,6 +30,8 @@ from vla_platform.capabilities import registry
 from vla_platform.cloud_api import router as cloud_connections_router
 from vla_platform.cloud_connections import CloudConnections
 from vla_platform.cloud_runs import CloudRunsFeed, read_cloud_runs
+from vla_platform.collection_api import CollectionRuns
+from vla_platform.collection_api import router as collection_router
 from vla_platform.compute_api import router as compute_settings_router
 from vla_platform.compute_targets_api import router as compute_targets_router
 from vla_platform.contracts import (
@@ -49,6 +51,8 @@ from vla_platform.decision_api import router as decision_router
 from vla_platform.execution import Execution
 from vla_platform.huggingface_api import router as huggingface_router
 from vla_platform.huggingface_connection import HuggingFaceConnection
+from vla_platform.huggingface_sharing import HuggingFaceSharing
+from vla_platform.huggingface_sharing_api import router as huggingface_sharing_router
 from vla_platform.job_observability_api import router as job_observability_router
 from vla_platform.lifecycle import telemetry
 from vla_platform.lifecycle.contracts import (
@@ -163,6 +167,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             app.state.robot_lab = RobotLabBridge(settings.data_dir)
             app.state.cloud_connections = CloudConnections(settings.data_dir)
             app.state.huggingface_connection = HuggingFaceConnection(settings.data_dir)
+            app.state.huggingface_sharing = HuggingFaceSharing(app, settings.data_dir)
             app.state.agent_control = AgentControl(
                 storage,
                 settings,
@@ -171,6 +176,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 source_commit=app.state.application_updates.installed.commit,
             )
             await app.state.agent_control.reconcile()
+            app.state.collection_runs = CollectionRuns(app, settings.data_dir)
             try:
                 await asyncio.to_thread(
                     lambda: initialize_modules(
@@ -199,6 +205,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     if hasattr(app.state, "scenes"):
                         await app.state.scenes.close()
                     try:
+                        if hasattr(app.state, "collection_runs"):
+                            await app.state.collection_runs.close()
+                        if hasattr(app.state, "huggingface_sharing"):
+                            await app.state.huggingface_sharing.close()
                         if hasattr(app.state, "agent_control"):
                             await app.state.agent_control.close()
                         if hasattr(app.state, "module_installations"):
@@ -248,10 +258,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return JSONResponse({"detail": str(exc)}, status_code=503)
 
     app.include_router(agent_control_router)
+    app.include_router(collection_router)
     app.include_router(api_connections_router)
     app.include_router(cloud_connections_router)
     app.include_router(compute_settings_router)
     app.include_router(huggingface_router)
+    app.include_router(huggingface_sharing_router)
     app.include_router(teaching_router)
     app.include_router(teaching_sessions_router)
     app.include_router(decision_router)
@@ -350,7 +362,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/api/v1/health")
     async def health() -> dict[str, str]:
-        return {"status": "ok", "version": __version__}
+        # ``build`` names the exact code; ``version`` alone is shared by unmerged branches.
+        return {"status": "ok", "version": __version__, "build": build.current().label}
 
     @app.get("/api/v1/cloud-runs", response_model=CloudRunsFeed)
     async def cloud_runs(response: Response) -> CloudRunsFeed:

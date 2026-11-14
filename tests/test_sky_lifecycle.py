@@ -113,11 +113,16 @@ def cloud(tmp_path, monkeypatch):
     runner = types.ModuleType("vla_platform.lifecycle.sky_runner")
     runner.run = unconfigured_runner
     runner.log_to = lambda callback: nullcontext()
+    runner.detach_when = lambda stopping: nullcontext()
 
-    async def recovered(_data_dir):
+    async def recovered(_data_dir, keep=None):
         return []
 
+    async def none_attachable(_data_dir, stages, probe=True):
+        return {}
+
     runner.recover = recovered
+    runner.attachable = none_attachable
     monkeypatch.setitem(sys.modules, runner.__name__, runner)
     monkeypatch.setattr("vla_platform.lifecycle.sky_runner", runner, raising=False)
     monkeypatch.setattr(
@@ -206,7 +211,7 @@ def test_pending_recovery_fences_new_cloud_acceptance_while_local_workspace_is_u
 ):
     state, runner, workspace = cloud
 
-    async def unconfirmed(_directory):
+    async def unconfirmed(_directory, keep=None):
         return [
             {
                 "job_id": "earlier-dispatch",
@@ -713,7 +718,7 @@ def test_recovery_exposes_failed_cloud_cleanup_without_restarting_training(cloud
             job = await execution.submit(PROJECT, request())
             await execution.tasks[job.id]
 
-            async def recover(_data_dir):
+            async def recover(_data_dir, keep=None):
                 return [
                     {
                         "job_id": job.id,

@@ -207,3 +207,68 @@
     flex-wrap: wrap;
   }
 }
+
+/* The journey: the product's steps in order, each a door into its page. */
+.dashboard-journey ol {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.dashboard-journey li {
+  display: grid;
+}
+.dashboard-journey button {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.dashboard-journey button:hover {
+  border-color: var(--accent);
+  background: var(--subtle);
+}
+.dashboard-journey-step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+  color: var(--accent);
+}
+.dashboard-journey-number {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--selected);
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+.dashboard-journey strong {
+  font-size: 15px;
+  font-weight: 600;
+}
+.dashboard-journey-detail {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.dashboard-journey-state {
+  margin-top: 8px;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}

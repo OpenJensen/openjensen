@@ -381,9 +381,9 @@ test('shared workspace shell preserves training, defaults, and separate diagnost
   // This view-only check requires an empty workspace even when real journey tests run.
   await page.route('**/api/v1/projects', (route) => route.fulfill({ json: [] }));
   await page.goto('/datasets/');
-  await page.getByRole('link', { name: 'Fine-tune', exact: true }).click();
-  await expect(page.getByRole('region', { name: 'Fine-tuning jobs', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Start a new fine-tuning', exact: true })).toBeDisabled();
+  await page.getByRole('link', { name: 'Train', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Training runs', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'New training run', exact: true })).toBeDisabled();
   await expect(page.getByRole('navigation', { name: 'Training setup' })).toHaveCount(0);
   await page.getByRole('link', { name: 'Settings', exact: true }).click();
   await page.getByRole('button', { name: 'Workflow settings', exact: true }).click();
@@ -1026,8 +1026,8 @@ async function mockTrainingWorkspace(
     });
   });
   await page.goto('/datasets/');
-  await page.getByRole('link', { name: 'Fine-tune', exact: true }).click();
-  await page.getByRole('button', { name: 'Start a new fine-tuning', exact: true }).click();
+  await page.getByRole('link', { name: 'Train', exact: true }).click();
+  await page.getByRole('button', { name: 'New training run', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Dataset', level: 2, exact: true })).toBeVisible();
   await expect(page.getByRole('checkbox', { name: 'fixture/pick-and-place', exact: true })).toBeVisible();
   await expect.poll(() => previews.length).toBeGreaterThanOrEqual(2);
@@ -1052,7 +1052,7 @@ test('training choices submit both selected cameras, pinned model, method and GP
   await expect(datasetChoices.getByRole('checkbox', { name: 'fixture/unpinned', exact: true })).toBeDisabled();
   await expect(datasetChoices.getByRole('checkbox', { name: 'fixture/failed', exact: true })).toHaveCount(0);
   await datasetChoices.getByRole('button', { name: 'Cancel', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Start fine-tuning', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Start training', exact: true })).toHaveCount(0);
   await expect(page.getByRole('checkbox', { name: 'observation.images.front', exact: true })).toBeChecked();
   await expect(page.getByRole('checkbox', { name: 'observation.images.wrist', exact: true })).toBeChecked();
   await chooseOnlyDataset(page, 'fixture/stack-blocks');
@@ -1087,10 +1087,10 @@ test('training choices submit both selected cameras, pinned model, method and GP
   await page.getByRole('spinbutton', { name: 'Steps', exact: true }).fill('123');
   await page.getByRole('spinbutton', { name: 'Batch size', exact: true }).fill('2');
   await page.getByRole('spinbutton', { name: 'Checkpoints', exact: true }).fill('0');
-  await expect(page.getByRole('button', { name: 'Start fine-tuning', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Start training', exact: true })).toBeDisabled();
   await page.getByRole('spinbutton', { name: 'Checkpoints', exact: true }).fill('5');
   await expectNoPageOverflow(page);
-  await page.getByRole('button', { name: 'Start fine-tuning', exact: true }).click();
+  await page.getByRole('button', { name: 'Start training', exact: true }).click();
   await expect.poll(() => submitted.length).toBe(1);
   expect(submitted[0]).toMatchObject({
     operation: 'policy.finetune',
@@ -1124,7 +1124,7 @@ test('Psi-Zero explains incompatible v3 data before any training can be submitte
     .getByRole('navigation', { name: 'Training setup' })
     .getByRole('button', { name: 'Compute', exact: true })
     .click();
-  await expect(page.getByRole('button', { name: 'Start fine-tuning', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Start training', exact: true })).toBeDisabled();
   expect(submitted).toEqual([]);
   expect(unexpectedRequests).toEqual([]);
 });
@@ -1142,7 +1142,7 @@ test('Psi-Zero requires one camera and submits its frozen-backbone action-expert
   await page.getByRole('checkbox', { name: 'observation.images.wrist', exact: true }).uncheck();
   await setup.getByRole('button', { name: 'Compute', exact: true }).click();
   await expectGpuChoices(page, ['A100', 'A100-80GB']);
-  await page.getByRole('button', { name: 'Start fine-tuning', exact: true }).click();
+  await page.getByRole('button', { name: 'Start training', exact: true }).click();
   await expect.poll(() => submitted.length).toBe(1);
   expect(submitted[0]).toMatchObject({
     runtime_id: 'skypilot-gcp-A100',
@@ -1166,13 +1166,13 @@ test('training requires at least one camera even when navigating directly to com
   await expect(page.getByText('Select at least one camera.', { exact: true })).toBeVisible();
   const steps = page.getByRole('navigation', { name: 'Training setup' });
   await steps.getByRole('button', { name: 'Compute', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Start fine-tuning', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Start training', exact: true })).toBeDisabled();
   await expect(page.getByText('Select at least one camera.', { exact: true })).toBeVisible();
   await steps.getByRole('button', { name: 'Dataset', exact: true }).click();
   await page.getByRole('checkbox', { name: 'observation.images.front', exact: true }).check();
   await expect(page.getByRole('button', { name: 'Next', exact: true })).toBeEnabled();
   await steps.getByRole('button', { name: 'Compute', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Start fine-tuning', exact: true })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Start training', exact: true })).toBeEnabled();
   expect(submitted).toEqual([]);
   expect(unexpectedRequests).toEqual([]);
 });
@@ -1218,8 +1218,8 @@ test('model picker offers SmolVLA on demand and marks unimplemented adapters Com
   await expect(models.getByText('Setup required', { exact: true })).toHaveCount(1);
   await page.getByRole('button', { name: 'Next', exact: true }).click();
   await chooseGpu(page, 'L4');
-  await expect(page.getByRole('button', { name: 'Start fine-tuning', exact: true })).toBeEnabled();
-  await page.getByRole('button', { name: 'Start fine-tuning', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Start training', exact: true })).toBeEnabled();
+  await page.getByRole('button', { name: 'Start training', exact: true }).click();
   await expect.poll(() => submitted.length).toBe(1);
   expect(submitted[0]).toMatchObject({
     operation: 'policy.finetune',
@@ -1242,11 +1242,11 @@ test('training honors the configured model recipe and its eligible runtime IDs',
   await page.getByRole('button', { name: 'Next', exact: true }).click();
   const gpu = page.getByRole('combobox', { name: 'GPU', exact: true });
   await chooseGpu(page, 'L4');
-  await expect(page.getByRole('button', { name: 'Start fine-tuning', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Start training', exact: true })).toBeDisabled();
   await expect(gpu).toHaveAttribute('value', 'L4');
   await chooseGpu(page, 'A100');
   await expect(gpu).toHaveAttribute('value', 'A100');
-  await page.getByRole('button', { name: 'Start fine-tuning', exact: true }).click();
+  await page.getByRole('button', { name: 'Start training', exact: true }).click();
   await expect.poll(() => submitted.length).toBe(1);
   expect(submitted[0]).toMatchObject({
     operation: 'policy.finetune',
@@ -1272,7 +1272,7 @@ test('training cannot start when no CUDA training runtime is configured', async 
   await expectGpuChoices(page, ['L4', 'T4', 'A100', 'A100-80GB']);
   await chooseGpu(page, 'T4');
   await expect(page.getByRole('combobox', { name: 'GPU', exact: true })).toHaveAttribute('value', 'T4');
-  await expect(page.getByRole('button', { name: 'Start fine-tuning', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Start training', exact: true })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Connect account', exact: true })).toBeVisible();
   await expectNoPageOverflow(page);
   expect(submitted).toEqual([]);
@@ -1324,7 +1324,7 @@ test('resuming an interrupted run keeps its original dataset, method and trainin
   await page.getByRole('button', { name: 'Back to jobs', exact: true }).click();
   await page.locator('[data-job-id="interrupted-training"]').click();
   await page
-    .getByRole('region', { name: 'Fine-tuning job', exact: true })
+    .getByRole('region', { name: 'Training run', exact: true })
     .getByRole('button', { name: 'Resume from checkpoint', exact: true })
     .click();
   await steps.getByRole('button', { name: 'Dataset', exact: true }).click();
@@ -1342,7 +1342,7 @@ test('resuming an interrupted run keeps its original dataset, method and trainin
   await expect(page.getByRole('radio', { name: 'LoRA', exact: true })).not.toBeChecked();
   await steps.getByRole('button', { name: 'Compute', exact: true }).click();
   await chooseGpu(page, 'L4');
-  await page.getByRole('button', { name: 'Resume fine-tuning', exact: true }).click();
+  await page.getByRole('button', { name: 'Resume training', exact: true }).click();
   await expect.poll(() => submitted.length).toBe(1);
   expect(submitted[0]).toMatchObject({
     operation: 'policy.finetune',
@@ -1388,7 +1388,7 @@ for (const gpu of ['L4', 'T4', 'A100']) {
       await testInfo.attach('training-compute-dropdown', { path: screenshot, contentType: 'image/png' });
       await page.keyboard.press('Escape');
     }
-    await form.getByRole('button', { name: 'Start fine-tuning', exact: true }).click();
+    await form.getByRole('button', { name: 'Start training', exact: true }).click();
     await expect.poll(() => submitted.length).toBe(1);
     expect(submitted[0]).toMatchObject({
       operation: 'policy.finetune',
@@ -1415,11 +1415,11 @@ test('a saved account starts training in one click while setup happens in the qu
   await chooseGpu(page, 'L4');
   await expect(form.getByRole('button', { name: /Prepare|Check SkyPilot|Connect account/ })).toHaveCount(0);
   await expect(form.getByText(/SkyPilot|setup commands|gcloud auth/i)).toHaveCount(0);
-  await expect(form.getByRole('button', { name: 'Start fine-tuning', exact: true })).toBeEnabled();
-  await form.getByRole('button', { name: 'Start fine-tuning', exact: true }).click();
+  await expect(form.getByRole('button', { name: 'Start training', exact: true })).toBeEnabled();
+  await form.getByRole('button', { name: 'Start training', exact: true }).click();
   await expect.poll(() => submitted.length).toBe(1);
   expect(submitted[0].runtime_id).toBe('skypilot-gcp-L4');
-  await expect(page.getByRole('region', { name: 'Fine-tuning job', exact: true })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Training run', exact: true })).toBeVisible();
   await expect(form).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'Preparing your GPU', exact: true })).toBeVisible();
   // Submission leaves the form, so a second Enter cannot submit a duplicate.
@@ -1429,22 +1429,22 @@ test('a saved account starts training in one click while setup happens in the qu
   run.status = 'running';
   run.stage = 'operation';
   await expect(
-    page.getByRole('region', { name: 'Fine-tuning job', exact: true }).getByText('running', { exact: true }),
+    page.getByRole('region', { name: 'Training run', exact: true }).getByText('Running', { exact: true }),
   ).toBeVisible();
   expect(submitted).toHaveLength(1);
   run.status = 'succeeded';
   run.stage = null;
   run.result = { artifacts: [], reports: [], decision: 'completed' };
   await expect(
-    page.getByRole('region', { name: 'Fine-tuning job', exact: true }).getByText('succeeded', { exact: true }),
+    page.getByRole('region', { name: 'Training run', exact: true }).getByText('Completed', { exact: true }),
   ).toBeVisible();
   await page.getByRole('button', { name: 'Back to jobs', exact: true }).click();
-  await page.getByRole('button', { name: 'Start a new fine-tuning', exact: true }).click();
+  await page.getByRole('button', { name: 'New training run', exact: true }).click();
   await page
     .getByRole('navigation', { name: 'Training setup' })
     .getByRole('button', { name: 'Compute', exact: true })
     .click();
-  await expect(form.getByRole('button', { name: 'Start fine-tuning', exact: true })).toBeEnabled();
+  await expect(form.getByRole('button', { name: 'Start training', exact: true })).toBeEnabled();
   await expect(picker).toBeEnabled();
   expect(submitted).toHaveLength(1);
   expect(unexpectedRequests).toEqual([]);
@@ -1463,17 +1463,17 @@ test('an unavailable selected GPU remains selected and never falls back to a rea
     .getByRole('button', { name: 'Compute', exact: true })
     .click();
   const gpu = page.getByRole('combobox', { name: 'GPU', exact: true });
-  await expect(page.getByRole('button', { name: 'Start fine-tuning', exact: true })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Start training', exact: true })).toBeEnabled();
   await chooseGpu(page, 'T4');
   await expect(gpu).toHaveAttribute('value', 'T4');
-  await expect(page.getByRole('button', { name: 'Start fine-tuning', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Start training', exact: true })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Connect account', exact: true })).toHaveCount(0);
   await expect(page.locator('.training-workspace').getByText('Mock GPU setup required', { exact: true })).toHaveCount(
     0,
   );
   await chooseGpu(page, 'L4');
   await expect(gpu).toHaveAttribute('value', 'L4');
-  await expect(page.getByRole('button', { name: 'Start fine-tuning', exact: true })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Start training', exact: true })).toBeEnabled();
   expect(submitted).toEqual([]);
   expect(unexpectedRequests).toEqual([]);
 });
@@ -1506,7 +1506,7 @@ test('an explicitly enabled local GPU can be selected without adding provider co
   await expectGpuChoices(page, ['L4', 'T4', 'A100', 'A100-80GB', 'RTX 4060 workstation', 'RTX 4090 workstation']);
   await chooseGpu(page, 'gpu-4090', 'RTX 4090 workstation');
   await expect(gpu).toHaveAttribute('value', 'gpu-4090');
-  await page.getByRole('button', { name: 'Start fine-tuning', exact: true }).click();
+  await page.getByRole('button', { name: 'Start training', exact: true }).click();
   await expect.poll(() => submitted.length).toBe(1);
   expect(submitted[0].runtime_id).toBe('gpu-4090');
   expect(unexpectedRequests).toEqual([]);
@@ -1569,7 +1569,7 @@ test('dataset intake waits for a confirmed project and preserves its draft durin
   await page.goto('/datasets/');
   const repository = page.getByLabel('Dataset repository', { exact: true });
   const revision = page.getByLabel('Revision', { exact: true });
-  const inspect = page.getByRole('button', { name: 'Inspect dataset', exact: true });
+  const inspect = page.getByRole('button', { name: 'Import dataset', exact: true });
   await expect(repository).toBeDisabled();
   await page.locator('.intake-advanced > summary').click();
   await expect(revision).toBeDisabled();
@@ -1734,11 +1734,11 @@ test('blank dataset revision uses latest and reused inspections keep one history
   await page.locator('.intake-advanced > summary').click();
   await expect(page.getByLabel('Revision', { exact: true })).toHaveValue('');
   await expect(page.getByLabel('Revision', { exact: true })).not.toHaveAttribute('required', '');
-  await page.getByRole('button', { name: 'Inspect dataset', exact: true }).click();
+  await page.getByRole('button', { name: 'Import dataset', exact: true }).click();
   await expect(page.getByRole('heading', { name: repoId, exact: true })).toBeVisible();
   await expect.poll(() => previews).toEqual(['index', 'episode']);
   await page.getByRole('button', { name: '← Back to datasets', exact: true }).click();
-  await page.getByRole('button', { name: 'Inspect dataset', exact: true }).click();
+  await page.getByRole('button', { name: 'Import dataset', exact: true }).click();
   await expect(page.getByRole('heading', { name: repoId, exact: true })).toBeVisible();
   await expect(page.getByRole('navigation', { name: 'Dataset views' })).toHaveCount(0);
   await expect(page.getByLabel('History', { exact: true })).toHaveCount(0);
@@ -1768,8 +1768,8 @@ test('visiting compute settings preserves the draft through the jobs-first entry
   await expect(page).toHaveURL(/\/settings\/$/);
   await expect(page.getByRole('heading', { name: 'Compute targets', exact: true })).toBeVisible();
   await expect(page.getByRole('navigation', { name: 'Training setup', exact: true })).toBeHidden();
-  await page.getByRole('link', { name: 'Fine-tune', exact: true }).click();
-  await page.getByRole('button', { name: 'Start a new fine-tuning', exact: true }).click();
+  await page.getByRole('link', { name: 'Train', exact: true }).click();
+  await page.getByRole('button', { name: 'New training run', exact: true }).click();
   await page
     .getByRole('navigation', { name: 'Training setup' })
     .getByRole('button', { name: 'Compute', exact: true })
@@ -1782,9 +1782,9 @@ test('visiting compute settings preserves the draft through the jobs-first entry
     .click();
   await expect(page.getByRole('spinbutton', { name: 'Steps', exact: true })).toHaveValue('123');
   await expect(page.getByRole('spinbutton', { name: 'Batch size', exact: true })).toHaveValue('2');
-  await expect(page.getByRole('button', { name: 'Start fine-tuning', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Start training', exact: true })).toBeDisabled();
   await chooseGpu(page, 'L4');
-  await page.getByRole('button', { name: 'Start fine-tuning', exact: true }).click();
+  await page.getByRole('button', { name: 'Start training', exact: true }).click();
   await expect.poll(() => submitted.length).toBe(1);
   expect(submitted[0]).toMatchObject({
     runtime_id: 'skypilot-gcp-L4',
@@ -1858,7 +1858,7 @@ for (const fixture of [
         page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? '{}'), `jensen.workflow.${trainingProject}`),
       )
       .toMatchObject({ ...fixture.expected, trainingDefaultsVersion: 3 });
-    await page.getByRole('button', { name: 'Start fine-tuning', exact: true }).click();
+    await page.getByRole('button', { name: 'Start training', exact: true }).click();
     await expect.poll(() => submitted.length).toBe(1);
     expect(submitted[0].training.save_every).toBe(fixture.interval);
     expect(unexpectedRequests).toEqual([]);
@@ -1890,7 +1890,7 @@ test('checkpoint count follows run length and replaces a clearly identified save
   await page.getByRole('button', { name: 'Help for Checkpoints', exact: true }).focus();
   await expect(page.getByRole('tooltip')).toContainText('Every 4,000 steps, including the final checkpoint');
   await expect(page.getByText(/Saved preference:/)).toHaveCount(0);
-  await page.getByRole('button', { name: 'Start fine-tuning', exact: true }).click();
+  await page.getByRole('button', { name: 'Start training', exact: true }).click();
   await expect.poll(() => submitted.length).toBe(1);
   expect(submitted[0].training.save_every).toBe(4000);
   await expect
@@ -1913,10 +1913,10 @@ test('training summarizes the latest checkpoint and keeps full activity behind d
     .getByRole('navigation', { name: 'Training setup' })
     .getByRole('button', { name: 'Compute', exact: true })
     .click();
-  await page.getByRole('button', { name: 'Start fine-tuning', exact: true }).click();
+  await page.getByRole('button', { name: 'Start training', exact: true }).click();
   await expect.poll(() => submitted.length).toBe(1);
-  const runs = page.getByRole('region', { name: 'Fine-tuning job', exact: true });
-  await expect(runs.locator('.training-current-action')).toHaveText('Training complete');
+  const runs = page.getByRole('region', { name: 'Training run', exact: true });
+  await expect(runs.getByRole('heading', { name: 'Training complete', exact: true })).toBeVisible();
   await expect(runs.getByText('Latest checkpoint: step 10', { exact: true })).toBeVisible();
   await expect(runs.getByLabel('Persisted training activity')).toHaveCount(0);
   await runs.locator('.training-details > summary').click();

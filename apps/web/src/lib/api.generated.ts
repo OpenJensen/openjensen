@@ -951,6 +951,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/huggingface-sharing/account": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Account
+         * @description Whose account a publish goes to: the token in Settings, else this computer's login.
+         */
+        get: operations["account_api_v1_huggingface_sharing_account_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/job-diagnostics-settings": {
         parameters: {
             query?: never;
@@ -1454,6 +1474,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects/{project_id}/datasets/combine": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Combine Datasets
+         * @description Join datasets that share cameras and frame rate into one new, trainable dataset.
+         */
+        post: operations["combine_datasets_api_v1_projects__project_id__datasets_combine_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects/{project_id}/datasets/example": {
         parameters: {
             query?: never;
@@ -1465,6 +1505,66 @@ export interface paths {
         put?: never;
         /** Example */
         post: operations["example_api_v1_projects__project_id__datasets_example_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/huggingface-sharing/destination": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Destination
+         * @description Where a dataset or model would be published, before anything is sent.
+         */
+        get: operations["destination_api_v1_projects__project_id__huggingface_sharing_destination_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/huggingface-sharing/fetch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Fetch
+         * @description Start adding a dataset or model from a Hugging Face link or ``owner/name``.
+         */
+        post: operations["fetch_api_v1_projects__project_id__huggingface_sharing_fetch_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/huggingface-sharing/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Publish
+         * @description Start publishing a saved dataset or a model. The repository is private by default.
+         */
+        post: operations["publish_api_v1_projects__project_id__huggingface_sharing_publish_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1587,6 +1687,75 @@ export interface paths {
         get: operations["recording_options_api_v1_projects__project_id__recordings_options_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/robot-lab/collection-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Runs */
+        get: operations["runs_api_v1_projects__project_id__robot_lab_collection_runs_get"];
+        put?: never;
+        /** Start */
+        post: operations["start_api_v1_projects__project_id__robot_lab_collection_runs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/robot-lab/collection-runs/{ident}/image/{role}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Image */
+        get: operations["image_api_v1_projects__project_id__robot_lab_collection_runs__ident__image__role__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/robot-lab/collection-runs/{ident}/trace": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Trace */
+        get: operations["trace_api_v1_projects__project_id__robot_lab_collection_runs__ident__trace_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/robot-lab/collection-runs/{ident}/{action}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Action */
+        post: operations["action_api_v1_projects__project_id__robot_lab_collection_runs__ident___action__post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2122,6 +2291,40 @@ export interface paths {
         put?: never;
         /** Robot Lab Post Calibration Import */
         post: operations["robot_lab_post_calibration_import"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/robot-lab/calibration/profiles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Robot Lab Get Calibration Profiles */
+        get: operations["robot_lab_get_calibration_profiles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/robot-lab/calibration/reuse": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Robot Lab Post Calibration Reuse */
+        post: operations["robot_lab_post_calibration_reuse"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3337,10 +3540,24 @@ export interface components {
         };
         /** ApplicationVersion */
         ApplicationVersion: {
+            /** Branch */
+            branch?: string | null;
             /** Commit */
             commit: string | null;
+            /**
+             * Dirty
+             * @default false
+             */
+            dirty: boolean;
             /** Host */
             host: string;
+            /** Label */
+            label: string;
+            /**
+             * Released
+             * @default false
+             */
+            released: boolean;
             /** Version */
             version: string;
         };
@@ -3906,6 +4123,80 @@ export interface components {
              */
             stale_after_seconds: number;
         };
+        /** CollectionInput */
+        CollectionInput: {
+            /**
+             * Camera Indices
+             * @default [
+             *       0,
+             *       1
+             *     ]
+             */
+            camera_indices: number[];
+            /**
+             * Confirm
+             * @default
+             */
+            confirm: string;
+            /**
+             * Expected Generation
+             * @default 0
+             */
+            expected_generation: number;
+            /**
+             * Fps
+             * @default 10
+             */
+            fps: number;
+            /**
+             * Max Seconds
+             * @default 120
+             */
+            max_seconds: number;
+            /**
+             * Max Steps
+             * @default 16
+             */
+            max_steps: number;
+            /**
+             * Max Tokens
+             * @default 16000
+             */
+            max_tokens: number;
+            /**
+             * Mode
+             * @default mock
+             * @enum {string}
+             */
+            mode: "mock" | "physical";
+            /**
+             * Model
+             * @default gpt-6-astra
+             */
+            model: string;
+            /**
+             * Operator Present
+             * @default false
+             */
+            operator_present: boolean;
+            /**
+             * Task
+             * @default Place one object into the tray
+             */
+            task: string;
+            /**
+             * Workspace Clear
+             * @default false
+             */
+            workspace_clear: boolean;
+        };
+        /** Combination */
+        Combination: {
+            /** Dataset Ids */
+            dataset_ids: string[];
+            /** Name */
+            name: string;
+        };
         /** CompanionUpdateStatus */
         CompanionUpdateStatus: {
             /**
@@ -4083,6 +4374,8 @@ export interface components {
             total_episodes: number;
             /** Total Frames */
             total_frames: number;
+            /** Training Blocker */
+            training_blocker?: string | null;
             /** Warnings */
             warnings: string[];
         };
@@ -4183,6 +4476,31 @@ export interface components {
              * @default 5afb8eeff127621fea2d66fc63f56798ada12eda
              */
             revision: string;
+        };
+        /** Destination */
+        Destination: {
+            account: components["schemas"]["SharingAccount"];
+            /** Active Job */
+            active_job?: string | null;
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "dataset" | "model";
+            /** Name */
+            name: string;
+            /**
+             * Private
+             * @default true
+             */
+            private: boolean;
+            published?: components["schemas"]["Published"] | null;
+            /** Repo Id */
+            repo_id?: string | null;
+            /** Url */
+            url?: string | null;
         };
         /** DistillationSplits */
         DistillationSplits: {
@@ -4356,6 +4674,16 @@ export interface components {
             simulated_seconds?: number | null;
             /** Speed Limit Clipped */
             speed_limit_clipped: boolean[];
+        };
+        /** FetchRequest */
+        FetchRequest: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "dataset" | "model";
+            /** Link */
+            link: string;
         };
         /** FrameIdentity */
         FrameIdentity: {
@@ -5659,6 +5987,36 @@ export interface components {
             /** Unavailable Reason */
             unavailable_reason?: string | null;
         };
+        /** PublishRequest */
+        PublishRequest: {
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "dataset" | "model";
+            /**
+             * Private
+             * @default true
+             */
+            private: boolean;
+            /** Repo Id */
+            repo_id?: string | null;
+        };
+        /** Published */
+        Published: {
+            /** Private */
+            private: boolean;
+            /** Published At */
+            published_at: string;
+            /** Repo Id */
+            repo_id: string;
+            /** Revision */
+            revision: string;
+            /** Url */
+            url: string;
+        };
         /** Receipt */
         Receipt: {
             /** Admission Observation Id */
@@ -6358,6 +6716,17 @@ export interface components {
             session_id: string | null;
             /** Stop Requested */
             stop_requested: boolean;
+        };
+        /** SharingAccount */
+        SharingAccount: {
+            /** Connected */
+            connected: boolean;
+            /** Message */
+            message?: string | null;
+            /** Source */
+            source?: ("settings" | "machine") | null;
+            /** Username */
+            username?: string | null;
         };
         /**
          * SimulationRequest
@@ -8822,6 +9191,26 @@ export interface operations {
             };
         };
     };
+    account_api_v1_huggingface_sharing_account_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SharingAccount"];
+                };
+            };
+        };
+    };
     settings_api_v1_job_diagnostics_settings_get: {
         parameters: {
             query?: never;
@@ -9826,6 +10215,41 @@ export interface operations {
             };
         };
     };
+    combine_datasets_api_v1_projects__project_id__datasets_combine_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Combination"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     example_api_v1_projects__project_id__datasets_example_post: {
         parameters: {
             query?: never;
@@ -9844,6 +10268,110 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    destination_api_v1_projects__project_id__huggingface_sharing_destination_get: {
+        parameters: {
+            query: {
+                kind: "dataset" | "model";
+                id: string;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Destination"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    fetch_api_v1_projects__project_id__huggingface_sharing_fetch_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FetchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkJob"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    publish_api_v1_projects__project_id__huggingface_sharing_publish_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublishRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkJob"];
                 };
             };
             /** @description Validation Error */
@@ -10110,6 +10638,170 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RecordingOptions"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    runs_api_v1_projects__project_id__robot_lab_collection_runs_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_api_v1_projects__project_id__robot_lab_collection_runs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CollectionInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    image_api_v1_projects__project_id__robot_lab_collection_runs__ident__image__role__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                ident: string;
+                role: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    trace_api_v1_projects__project_id__robot_lab_collection_runs__ident__trace_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                ident: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    action_api_v1_projects__project_id__robot_lab_collection_runs__ident___action__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                ident: string;
+                action: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -11155,6 +11847,74 @@ export interface operations {
             };
         };
     };
+    robot_lab_get_calibration_profiles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    robot_lab_post_calibration_reuse: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /**
+                     * Confirm
+                     * @constant
+                     */
+                    confirm: "REUSE CALIBRATION";
+                    /** Port */
+                    port: string;
+                    /** Profile Key */
+                    profile_key?: string | null;
+                    /** Robot Id */
+                    robot_id: string;
+                    /**
+                     * Role
+                     * @enum {string}
+                     */
+                    role: "follower" | "leader";
+                    /** Same Arm */
+                    same_arm: boolean;
+                    /**
+                     * Source
+                     * @enum {string}
+                     */
+                    source: "saved" | "motors";
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
     robot_lab_post_calibration_start: {
         parameters: {
             query?: never;
@@ -11650,8 +12410,17 @@ export interface operations {
         requestBody?: {
             content: {
                 "application/json": {
+                    /**
+                     * Allow Planning Pause
+                     * @default false
+                     */
+                    allow_planning_pause?: boolean;
                     /** Camera Index */
                     camera_index: number;
+                    /** Cameras */
+                    cameras?: {
+                        [key: string]: number;
+                    } | null;
                     /**
                      * Task
                      * @default
@@ -11684,6 +12453,10 @@ export interface operations {
                 "application/json": {
                     /** Camera Index */
                     camera_index?: number | null;
+                    /** Cameras */
+                    cameras?: {
+                        [key: string]: number;
+                    } | null;
                     /** Jpeg */
                     jpeg?: string | null;
                     /** State */
@@ -11723,8 +12496,17 @@ export interface operations {
         requestBody?: {
             content: {
                 "application/json": {
+                    /**
+                     * Allow Planning Pause
+                     * @default false
+                     */
+                    allow_planning_pause?: boolean;
                     /** Camera Index */
                     camera_index: number;
+                    /** Cameras */
+                    cameras?: {
+                        [key: string]: number;
+                    } | null;
                     /**
                      * Confirm
                      * @constant

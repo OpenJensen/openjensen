@@ -221,6 +221,60 @@ def test_cloud_download_finishes_and_closes_before_upload(tmp_path):
     assert source.closed
 
 
+class SlowDownload(Download):
+    """Cloud storage on a slow connection."""
+
+    delay = 0.4
+
+    async def __aiter__(self):
+        yield self.content[:1024]
+        await asyncio.sleep(self.delay)
+        yield self.content[1024:]
+
+
+def test_a_slow_download_is_not_cut_off_by_the_limit_for_the_local_hand_over(tmp_path, monkeypatch):
+    """A 1.3 GB checkpoint needed fifteen minutes to fetch and one five-minute limit covered
+    both the fetch and the hand-over, so installing it always failed."""
+    monkeypatch.setattr("vla_platform.robot_policy_install.INSTALL_SECONDS", 0.2)
+    archive, artifact = bundle(tmp_path)
+    source = SlowDownload(archive.read_bytes())
+
+    async def handler(request):
+        assert await request.aread() == archive.read_bytes()
+        return httpx.Response(200, json={"installed_policy_id": "example"})
+
+    app = application(tmp_path, archive, artifact, handler, source)
+
+    async def run():
+        result = await install_artifact(
+            app, "project", artifact.id, PolicyInstallRequest(name="Pen")
+        )
+        assert result["installed_policy_id"] == "example"
+        await app.state.robot_lab.close()
+
+    asyncio.run(run())
+    assert source.closed
+
+
+def test_a_download_that_never_finishes_says_so_and_installs_nothing(tmp_path, monkeypatch):
+    monkeypatch.setattr("vla_platform.robot_policy_install.DOWNLOAD_SECONDS", 0.1)
+    archive, artifact = bundle(tmp_path)
+    source = SlowDownload(archive.read_bytes())
+    app = application(
+        tmp_path, archive, artifact, lambda _: pytest.fail("Nothing may be uploaded"), source
+    )
+
+    async def run():
+        with pytest.raises(RobotLabError, match="could not be fetched from storage") as error:
+            await install_artifact(app, "project", artifact.id, PolicyInstallRequest(name="Pen"))
+        assert error.value.status == 503
+        await app.state.robot_lab.close()
+
+    asyncio.run(run())
+    assert source.closed
+    assert not list((tmp_path / "app/policy-install").iterdir())
+
+
 def test_cloud_integrity_failure_closes_source_and_never_uploads(tmp_path):
     archive, artifact = bundle(tmp_path)
     source = Download(archive.read_bytes(), fail=True)
@@ -322,3 +376,139 @@ def test_smol_unknown_control_semantics_cannot_be_claimed_by_checkbox(tmp_path):
     )
     assert value["offline_only"] is True
     assert value["joint_names"] is None and value["action_units"] is None
+
+
+RECORDED = {
+    "units": "degrees; gripper percent",
+    "state_names": [name + ".pos" for name in JOINTS],
+    "action_names": [name + ".pos" for name in JOINTS],
+    "dataset_fps": 23,
+}
+
+
+def test_a_policy_trained_on_a_robot_lab_recording_inherits_its_units(tmp_path):
+    """SmolVLA may drive the arm only when units and joint order are on record. A tick-box
+    is not a record; the verified recording the policy was trained on is."""
+    _, artifact = bundle(tmp_path, known=False)
+    artifact.metadata["architecture"] = "smolvla"
+    request = PolicyInstallRequest(name="Duck")
+    without = _descriptor(artifact, artifact.metadata, {}, request)
+    assert without["offline_only"] is True
+    value = _descriptor(artifact, artifact.metadata, {}, request, RECORDED)
+    assert value["offline_only"] is False and not value["id"].endswith("-offline")
+    assert value["fps"] == 23 and value["joint_names"] == JOINTS
+    assert value["state_units"] == UNITS and value["action_units"] == UNITS
+    # Asking for offline use is still honoured, and a different rate is still refused.
+    offline = _descriptor(
+        artifact,
+        artifact.metadata,
+        {},
+        PolicyInstallRequest(name="Duck", offline_only=True),
+        RECORDED,
+    )
+    assert offline["offline_only"] is True
+    with pytest.raises(ValueError, match="saved training FPS"):
+        _descriptor(
+            artifact, artifact.metadata, {}, PolicyInstallRequest(name="D", fps=30), RECORDED
+        )
+
+
+def test_a_whole_frame_rate_saved_as_a_decimal_is_that_frame_rate(tmp_path):
+    """A dataset saved on this computer records 23 frames per second as 23.0, and every
+    model trained on one was refused with "Saved policy FPS is unsupported by this arm"."""
+    _, artifact = bundle(tmp_path, known=False)
+    artifact.metadata.update(
+        dataset={"fps": 23.0}, temporal_contract={"action_fps": 23, "prediction_horizon": 100}
+    )
+    value = _descriptor(
+        artifact, artifact.metadata, {}, PolicyInstallRequest(name="Duck"), RECORDED
+    )
+    assert value["fps"] == 23 and type(value["fps"]) is int and value["offline_only"] is False
+    # A rate that is not a whole number, or that disagrees, is still refused.
+    artifact.metadata["dataset"] = {"fps": 29.97}
+    with pytest.raises(ValueError, match="FPS is unsupported"):
+        _descriptor(artifact, artifact.metadata, {}, PolicyInstallRequest(name="Duck"), RECORDED)
+    artifact.metadata["dataset"] = {"fps": 30.0}
+    with pytest.raises(ValueError, match="frame rates disagree"):
+        _descriptor(artifact, artifact.metadata, {}, PolicyInstallRequest(name="Duck"), RECORDED)
+    for value in (True, "23", float("nan"), float("inf")):
+        artifact.metadata["dataset"] = {"fps": value}
+        with pytest.raises(ValueError, match="FPS is unsupported"):
+            _descriptor(
+                artifact, artifact.metadata, {}, PolicyInstallRequest(name="Duck"), RECORDED
+            )
+
+
+@pytest.mark.parametrize(
+    "change,match",
+    [
+        ({"units": "radians"}, "units are incompatible"),
+        ({"action_names": [name + ".pos" for name in reversed(JOINTS)]}, "joint order"),
+        ({"dataset_fps": 120}, "FPS is unsupported"),
+    ],
+)
+def test_a_recording_in_other_units_or_joint_order_still_blocks_arm_control(
+    tmp_path, change, match
+):
+    _, artifact = bundle(tmp_path, known=False)
+    artifact.metadata["architecture"] = "smolvla"
+    with pytest.raises(ValueError, match=match):
+        _descriptor(
+            artifact,
+            artifact.metadata,
+            {},
+            PolicyInstallRequest(name="Duck"),
+            {**RECORDED, **change},
+        )
+
+
+def test_recorded_units_are_read_only_from_a_verified_robot_lab_training_copy(tmp_path):
+    from test_dataset_combine import record, worker
+    from test_dataset_snapshots import build_dataset
+    from vla_platform.contracts import DatasetSnapshot
+    from vla_platform.datasets.snapshots import create_snapshot
+    from vla_platform.robot_policy_install import recorded_control
+
+    store = tmp_path / "workspace/dataset-snapshots"
+    # Two one-episode recordings, combined, make a valid training copy. Combining keeps
+    # what the recorder said about units.
+    two = tmp_path / "two"
+    runs = record(tmp_path / "recorded", 2)
+    code, _ = worker({"operation": "merge", "roots": [str(r) for r in runs], "output": str(two)})
+    assert code == 0
+    robot = DatasetSnapshot.model_validate(create_snapshot(tmp_path, two, store))
+    imported = DatasetSnapshot.model_validate(
+        create_snapshot(tmp_path, build_dataset(tmp_path / "video"), store)
+    )
+
+    def app(snapshot, *, project="project", many=False):
+        jobs = {
+            "train": SimpleNamespace(
+                project_id="project",
+                request=SimpleNamespace(
+                    dataset_job_id="data", dataset_job_ids=["data", "x"] if many else None
+                ),
+            ),
+            "data": SimpleNamespace(project_id=project, result=SimpleNamespace(snapshot=snapshot)),
+        }
+
+        async def get(ident):
+            return jobs.get(ident)
+
+        execution = SimpleNamespace(
+            get=get, settings=SimpleNamespace(data_dir=tmp_path / "workspace")
+        )
+        return SimpleNamespace(state=SimpleNamespace(execution=execution))
+
+    artifact = SimpleNamespace(job_id="train")
+    assert asyncio.run(recorded_control(app(robot), "project", artifact)) == {
+        "units": "degrees; gripper percent",
+        "state_names": [name + ".pos" for name in JOINTS],
+        "action_names": [name + ".pos" for name in JOINTS],
+        "dataset_fps": 10,
+    }
+    # Not a Robot Lab recording, another project's data, or several datasets: no evidence.
+    assert asyncio.run(recorded_control(app(imported), "project", artifact)) is None
+    assert asyncio.run(recorded_control(app(robot, project="other"), "project", artifact)) is None
+    assert asyncio.run(recorded_control(app(robot, many=True), "project", artifact)) is None
+    assert asyncio.run(recorded_control(app(None), "project", artifact)) is None

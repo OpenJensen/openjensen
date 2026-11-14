@@ -4,6 +4,7 @@ Adapters project records; they never duplicate execution or rewrite old history.
 Maintenance is deliberately outside this service.
 """
 
+from pathlib import PurePath
 from typing import Literal
 from urllib.parse import quote
 
@@ -76,15 +77,25 @@ OPERATIONS = [
         ("dataset.inspect", "Inspect dataset", "datasets", "/datasets/", "job"),
         ("dataset.import", "Import dataset", "datasets", "/datasets/", "upload"),
         ("dataset.convert", "Convert dataset", "datasets", "/datasets/", "interactive"),
+        (
+            "dataset.publish",
+            "Publish dataset to Hugging Face",
+            "datasets",
+            "/datasets/",
+            "interactive",
+        ),
+        ("dataset.fetch", "Add dataset from Hugging Face", "datasets", "/datasets/", "interactive"),
         ("dataset.augment", "Augment dataset", "augmentation", "/augmentation/", "job"),
         ("scene.generate", "Real to sim", "real-to-sim", "/real-to-sim/", "job"),
-        ("policy.finetune", "Fine-tune", "training", "/training/", "job"),
+        ("policy.finetune", "Train", "training", "/training/", "job"),
         ("policy.distill", "Distill", "distillation", "/distillation/", "job"),
         ("policy.quantize", "Quantize", "quantization", "/quantization/", "job"),
         ("policy.evaluate", "Evaluate", "evaluation", "/evaluation/", "job"),
-        ("policy.run", "Run policy", "simulation", "/simulation/", "job"),
+        ("policy.run", "Run in simulation", "simulation", "/simulation/", "job"),
         ("policy.export", "Export model", "models", "/models/", "job"),
         ("policy.import", "Import model", "models", "/models/", "upload"),
+        ("policy.publish", "Publish model to Hugging Face", "models", "/models/", "interactive"),
+        ("policy.fetch", "Add model from Hugging Face", "models", "/models/", "interactive"),
         ("policy.workflow", "Policy workflow", "evaluation", "/evaluation/", "job"),
         ("teaching.capture", "Record teaching", "teaching", "/ai-teleoperation/", "job"),
         ("agent.control", "AI teleoperation", "teaching", "/ai-teleoperation/", "interactive"),
@@ -94,16 +105,83 @@ OPERATIONS = [
 CATALOG = {item.id: item for item in OPERATIONS}
 
 
-def core_job(job):
+class JobNames:
+    """What a job's title needs beyond its own record.
+
+    A dataset saved on the computer is known by the name it was saved under, and a
+    training run by the model and the dataset it used, or by the name someone chose
+    for it. Without this context a title falls back to what the job itself records.
+    """
+
+    def __init__(self, datasets=None, dataset_requests=None, runs=None):
+        self.datasets = datasets or {}
+        self.dataset_requests = dataset_requests or {}
+        self.runs = runs
+
+    def dataset(self, request: IntakeRequest) -> str:
+        if request.recordings is not None:
+            return "Prepare recording"
+        if request.repo_id:
+            return request.repo_id
+        saved = self.datasets.get(request.library_id) if request.library_id else None
+        if saved:
+            return saved
+        folder = PurePath(request.path).name if request.path else ""
+        return folder or "Unnamed dataset"
+
+    def run(self, job, request: dict, fallback: str) -> str:
+        chosen = self.runs.chosen(job.project_id, job.id) if self.runs is not None else None
+        if chosen:
+            return chosen
+        model = _model_label((request.get("training") or {}).get("model_id"))
+        identifiers = request.get("dataset_job_ids") or [request.get("dataset_job_id")]
+        datasets = [
+            self.dataset(self.dataset_requests[ident])
+            for ident in identifiers
+            if ident in self.dataset_requests
+        ]
+        if len(datasets) > 1:
+            datasets = [f"{datasets[0]} + {len(datasets) - 1} more"]
+        return " · ".join([model or fallback, *datasets])
+
+
+def _model_label(model_id) -> str | None:
+    """The catalog's name for a base model, never its repository or code address."""
+    if not isinstance(model_id, str) or not model_id:
+        return None
+    from vla_platform.lifecycle.training_catalog import TRAINING_MODELS
+
+    return next((model.label for model in TRAINING_MODELS if model.model_id == model_id), model_id)
+
+
+async def job_names(state, project_id, jobs=None) -> JobNames:
+    """Read the names once for a list of jobs, or for the one job being shown."""
+    from vla_platform.lifecycle.model_names import ModelNames
+
+    if jobs is None:
+        jobs = await state.execution.list(project_id)
+    return JobNames(
+        datasets={
+            record["id"]: record["name"]
+            for record in state.dataset_library.records()
+            if record.get("project_id") == project_id and record.get("name")
+        },
+        dataset_requests={
+            job.id: job.request for job in jobs if isinstance(job.request, IntakeRequest)
+        },
+        runs=ModelNames(state.execution.settings.data_dir),
+    )
+
+
+def core_job(job, names: JobNames | None = None):
+    names = names or JobNames()
     operation = CATALOG[job.kind]
     request = job.request.model_dump(mode="json")
     title = operation.title
     if isinstance(job.request, IntakeRequest):
-        title = job.request.repo_id or "Local dataset"
-        if job.request.recordings is not None:
-            title = "Prepare recording"
+        title = names.dataset(job.request)
     elif job.kind == "policy.finetune":
-        title = (request.get("training") or {}).get("model_id") or title
+        title = names.run(job, request, title)
     parents = [
         request[key]
         for key in ("dataset_job_id", "source_job_id", "resume_job_id")
@@ -287,6 +365,38 @@ def dataset_job(record):
     )
 
 
+def share_job(record):
+    """A publish to Hugging Face, or a dataset or model added from a link there."""
+    result = record.get("result") or {}
+    inputs = dict(record["inputs"])
+    if result.get("dataset_id"):
+        inputs["dataset_id"] = result["dataset_id"]
+    return WorkJob(
+        id="share:" + record["id"],
+        source_id=record["id"],
+        project_id=record["project_id"],
+        operation=record["operation"],
+        module=CATALOG[record["operation"]].module,
+        title=record["title"],
+        status=record["status"],
+        source_status=record["status"],
+        created_at=record["created_at"],
+        updated_at=record["updated_at"],
+        stage=record["stage"],
+        message=record.get("error") or record.get("message"),
+        execution=ExecutionBinding(
+            adapter="local", infrastructure="local", target_id="huggingface", label="Hugging Face"
+        ),
+        inputs=inputs,
+        result=record.get("result"),
+        outputs=[JobLink(label="Open on Hugging Face", url=result["url"])]
+        if record["status"] == "succeeded" and result.get("url")
+        else [],
+        can_cancel=record["status"] == "running",
+        events=[WorkEvent(**event) for event in record["events"][-200:]],
+    )
+
+
 def legacy_dataset_job(record):
     converting = bool(record.get("conversion"))
     state = {
@@ -325,7 +435,9 @@ def legacy_dataset_job(record):
 
 
 async def list_jobs(state, project_id):
-    rows = [core_job(job) for job in await state.execution.list(project_id)]
+    jobs = await state.execution.list(project_id)
+    names = await job_names(state, project_id, jobs)
+    rows = [core_job(job, names) for job in jobs]
     core_ids = {job.source_id for job in rows}
     rows.extend(
         scene_job(run)
@@ -343,6 +455,9 @@ async def list_jobs(state, project_id):
         and record.get("status") != "unavailable"
         and record["id"] not in covered_datasets
     )
+    sharing = getattr(state, "huggingface_sharing", None)
+    if sharing is not None:
+        rows.extend(share_job(record) for record in sharing.jobs.records(project_id))
     return sorted(rows, key=lambda job: (job.created_at, job.id), reverse=True)
 
 
@@ -357,7 +472,11 @@ async def get_job(state, project_id, key):
     try:
         if family == "core":
             source = await state.execution.get(ident)
-            result = core_job(source) if source is not None else None
+            result = (
+                core_job(source, await job_names(state, source.project_id))
+                if source is not None
+                else None
+            )
         elif family == "scene":
             result = scene_job(state.scenes.get(ident))
         elif family == "agent":
@@ -370,6 +489,9 @@ async def get_job(state, project_id, key):
                 result = (
                     legacy_dataset_job(source) if source.get("status") != "unavailable" else None
                 )
+        elif family == "share":
+            sharing = getattr(state, "huggingface_sharing", None)
+            result = share_job(sharing.jobs.get(ident)) if sharing is not None else None
         else:
             return None
     except SceneError, AgentError, ValueError:

@@ -2,10 +2,13 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { RobotLabControlDevices } from './robot-lab-devices';
+import { RobotLabRecordingCameras } from './robot-lab-recording-cameras';
 import { Icon } from '@/components/icon';
+import { datasetLibrary } from '@/lib/dataset-library';
 import { importRobotDataset, robotApi, robotJoints } from '@/lib/robot-api';
 import { Heading, Notice, JointControl, DatasetRow } from './robot-lab-shared';
 import type { RobotLabState } from './robot-lab-state';
+import { Segmented } from './ui/choice';
 
 export function RobotLabRecord({ lab }: { lab: RobotLabState }) {
   const {
@@ -39,7 +42,6 @@ export function RobotLabRecord({ lab }: { lab: RobotLabState }) {
     setDatasetId,
     setFps,
     setImported,
-    setRecordCamera,
     setStep,
     setTask,
     state,
@@ -208,15 +210,22 @@ export function RobotLabRecord({ lab }: { lab: RobotLabState }) {
             <button className="text-button" onClick={speakPreview}>
               Test voice
             </button>
-            <small>Uses a tone if no speech voice is installed. Visual countdowns always remain available.</small>
           </div>
         )}
         {partialControl && <Notice>Dataset recording requires all six joints.</Notice>}
+        {recording?.active && (
+          <details className="robot-lab-recording-camera-details">
+            <summary>{lab.recordingCameraIndices.length} cameras in this dataset</summary>
+            <RobotLabRecordingCameras lab={lab} />
+          </details>
+        )}
+
         {!recording?.active ? (
           <>
             {!controlling && (
               <Notice>
-                <strong>No control session</strong>Start teleoperation before recording.
+                <strong>Start teleoperation first</strong>Recording saves what you do with the arm, so the arm has to be
+                under control.
                 <button className="text-button" onClick={() => setStep(3)}>
                   Open teleoperation
                 </button>
@@ -247,41 +256,27 @@ export function RobotLabRecord({ lab }: { lab: RobotLabState }) {
                 maxLength={500}
               />
             </label>
-            <label className="robot-lab-check">
-              <input
-                type="checkbox"
-                checked={recordCamera}
-                disabled={busy || !availableCameras.length}
-                onChange={(event) => setRecordCamera(event.target.checked)}
-              />
-              <span>
-                <strong>Record camera</strong>
-                {availableCameras.length
-                  ? state?.capabilities?.multi_camera_recording && selectedCameraIndices.length > 1
-                    ? ` · ${selectedCameraIndices.length} selected views saved with every frame`
-                    : ''
-                  : 'No camera available; state and actions only.'}
-              </span>
-            </label>
+            <RobotLabRecordingCameras lab={lab} />
             {guidedAvailable && (
               <section className="robot-lab-form" aria-label="Collection plan">
-                <label>
-                  Collection mode
-                  <select
-                    aria-label="Collection mode"
+                <div className="robot-lab-field">
+                  <span className="robot-lab-field-label">How episodes start and stop</span>
+                  <Segmented
+                    label="Collection mode"
                     value={guided ? 'guided' : 'manual'}
                     disabled={busy}
-                    onChange={(event) => setGuided(event.target.value === 'guided')}
-                  >
-                    <option value="guided">Timed demonstrations</option>
-                    <option value="manual">Manual episodes</option>
-                  </select>
-                </label>
+                    onChange={(value) => setGuided(value === 'guided')}
+                    options={[
+                      { value: 'guided', label: 'On a timer' },
+                      { value: 'manual', label: 'By hand' },
+                    ]}
+                  />
+                </div>
                 {guided && (
                   <>
                     <p className="robot-lab-subtle">
-                      Record a demonstration, reset the scene, then repeat. Completed episodes save automatically.
-                      Teleoperation stays under your control during resets.
+                      Each episode records for a set time, then you get time to reset the scene. Episodes save by
+                      themselves.
                     </p>
                     <div className="robot-lab-fields">
                       <label>
@@ -336,22 +331,25 @@ export function RobotLabRecord({ lab }: { lab: RobotLabState }) {
             <details className="robot-lab-details" open={!autoAvailable}>
               <summary>Advanced recording settings</summary>
               <div className="robot-lab-form">
-                <label>
-                  Frames per second
-                  <select
+                <div className="robot-lab-field">
+                  <span className="robot-lab-field-label">Frames per second</span>
+                  <Segmented
+                    label="Recording frame rate"
                     value={fps === null && autoAvailable ? 'auto' : String(fps ?? 10)}
-                    aria-label="Recording frame rate"
-                    onChange={(event) => setFps(event.target.value === 'auto' ? null : Number(event.target.value))}
                     disabled={busy}
-                  >
-                    {autoAvailable && <option value="auto">Auto — highest sustainable rate</option>}
-                    {(autoAvailable ? [1, 5, 10, 15, 20, 25, 30, 40] : [5, 10, 15, 20]).map((value) => (
-                      <option key={value} value={value}>
-                        {value} fps
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                    onChange={(value) => setFps(value === 'auto' ? null : Number(value))}
+                    options={[
+                      ...(autoAvailable
+                        ? [{ value: 'auto', label: 'Auto', name: 'Auto — highest sustainable rate' }]
+                        : []),
+                      ...(autoAvailable ? [1, 5, 10, 15, 20, 25, 30, 40] : [5, 10, 15, 20]).map((value) => ({
+                        value: String(value),
+                        label: String(value),
+                        name: `${value} fps`,
+                      })),
+                    ]}
+                  />
+                </div>
                 {guidedAvailable && guided && (
                   <label>
                     Countdown before recording (seconds)
@@ -428,11 +426,13 @@ export function RobotLabRecord({ lab }: { lab: RobotLabState }) {
               <div>
                 <strong>{recording.dataset_id}</strong>
                 <small>
-                  {recording.episode_active
-                    ? 'Recording an episode'
-                    : recording.frames > 0
-                      ? 'Episode has pending frames'
-                      : 'Ready for the next episode'}{' '}
+                  {measuring
+                    ? 'Checking recording speed'
+                    : recording.episode_active
+                      ? 'Recording an episode'
+                      : recording.frames > 0
+                        ? 'Episode has pending frames'
+                        : 'Ready for the next episode'}{' '}
                   · {recording.episodes} saved
                 </small>
               </div>
@@ -451,6 +451,11 @@ export function RobotLabRecord({ lab }: { lab: RobotLabState }) {
                   ? 'Measuring sustainable capture rate…'
                   : `${recording.fps} fps · ${recording.fps_mode === 'auto' ? 'selected automatically' : 'manual'}`}{' '}
                 {recording.rate_message}
+              </p>
+            )}
+            {recording.frames > 1 && recording.actual_fps != null && (
+              <p className="robot-lab-subtle" role="status">
+                Measured capture: {recording.actual_fps.toFixed(1)} fps · Dataset target: {recording.fps} fps
               </p>
             )}
             {collection && (
@@ -665,8 +670,8 @@ export function RobotLabRecord({ lab }: { lab: RobotLabState }) {
                   void perform(
                     `Imported ${dataset.id} into this project.`,
                     () => importRobotDataset(owner, dataset.id),
-                    () => {
-                      setImported({ dataset: dataset.id, projectId: owner });
+                    (result) => {
+                      setImported({ dataset: dataset.id, projectId: owner, id: result.id });
                       void client.invalidateQueries({ queryKey: ['datasets', owner] });
                       void client.invalidateQueries({ queryKey: ['jobs', owner] });
                     },
@@ -680,6 +685,19 @@ export function RobotLabRecord({ lab }: { lab: RobotLabState }) {
           <Notice kind="success">
             <div className="robot-lab-imported">
               <span>{imported.dataset} is in this project’s dataset library.</span>
+              {imported.id && (
+                <button
+                  className="secondary-button"
+                  onClick={() =>
+                    void datasetLibrary
+                      .get(imported.id!)
+                      .then(lab.openDataset)
+                      .catch(() => navigateStage('datasets'))
+                  }
+                >
+                  Train on this dataset
+                </button>
+              )}
               <button className="text-button" onClick={() => navigateStage('datasets')}>
                 View datasets
               </button>

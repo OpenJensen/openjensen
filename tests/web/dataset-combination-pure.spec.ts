@@ -26,9 +26,9 @@ test('matching pinned datasets combine, but immutable identity, format and timeb
   unnamed.features.action.names = null;
   expect(datasetCombinationIssue(primary, unnamed, [camera])).toBeNull();
   expect(datasetCombinationIssue(primary, primary, [camera])).toContain('already selected');
-  expect(datasetCombinationIssue(primary, { ...other, source: 'local' }, [camera])).toContain('separately');
+  expect(datasetCombinationIssue(primary, { ...other, source: 'local' }, [camera])).toContain('one at a time');
   expect(datasetCombinationIssue(primary, { ...other, format: 'lerobot_v2' }, [camera])).toContain('LeRobot v3');
-  expect(datasetCombinationIssue(primary, { ...other, revision: 'main' }, [camera])).toContain('immutable');
+  expect(datasetCombinationIssue(primary, { ...other, revision: 'main' }, [camera])).toContain('pinned revision');
   expect(datasetCombinationIssue(primary, { ...other, fps: 10 }, [camera])).toContain('10 FPS here, 30 FPS');
 });
 

@@ -11,6 +11,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from dataset import DatasetWriter, dataset_file, list_datasets, manifest, statistics
 from hardware import JOINTS
+from recording import CaptureProbe
 
 AVAILABLE = all(importlib.util.find_spec(name) is not None for name in ("numpy", "PIL", "pyarrow"))
 
@@ -46,6 +47,36 @@ class DatasetTests(unittest.TestCase):
             writer.save_episode()
         writer.finalize()
         return writer
+
+    def test_probe_uses_real_lossless_writer_and_keeps_user_dataset_empty(self):
+        import numpy as np
+        from PIL import Image
+
+        shapes = {
+            "observation.images.front": (24, 32, 3),
+            "observation.images.camera_4": (24, 32, 3),
+        }
+        owner = DatasetWriter(self.root, "user-recording", "Move the object", 40, shapes)
+        probe = CaptureProbe(owner, 10)
+        try:
+            positions = dict.fromkeys(JOINTS, 0.0)
+            bgr = np.full((24, 32, 3), [10, 20, 30], dtype=np.uint8)
+            probe.writer.add_frame(
+                positions, positions, {key: bgr[:, :, ::-1] for key in shapes}, 0
+            )
+            bgr[:] = 99  # Queued RGB frames must own their pixels.
+            probe.writer.image_writer.wait_until_done()
+            for key in shapes:
+                with Image.open(probe.writer._image_path(key, 0)) as image:
+                    self.assertEqual(image.getpixel((0, 0)), (30, 20, 10))
+            self.assertEqual(owner.frames, 0)
+            self.assertEqual(owner.episodes, [])
+            self.assertEqual(owner.fps, 40)
+        finally:
+            probe.close()
+            owner.close()
+        self.assertTrue((owner.root / "openjensen.json").exists())
+        self.assertFalse(list(owner.root.glob(".capture-check-*")))
 
     def test_two_episodes_camera_data_metadata_and_hashes(self):
         import io
@@ -152,6 +183,9 @@ class DatasetTests(unittest.TestCase):
         writer.add_frame(
             dict.fromkeys(JOINTS, 1.0), {}, np.ones((2, 3, 3), dtype=np.uint8), captured_at=0
         )
+        # Images are written in the background under a temporary name first; compare the
+        # files once they have their final names, or a slow machine is caught mid-write.
+        writer.image_writer.wait_until_done()
         before = {
             path.relative_to(writer.root): path.read_bytes()
             for path in writer.root.rglob("*")

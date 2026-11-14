@@ -76,7 +76,7 @@ test('project switching and keyboard navigation preserve scope without creating 
   await current(page).click();
   await page.keyboard.press('Tab');
   await expect(menu(page)).toHaveCount(0);
-  await expect(page.getByRole('link', { name: 'Dashboard', exact: true })).toBeFocused();
+  await expect(page.getByRole('link', { name: 'Home', exact: true })).toBeFocused();
   await current(page).click();
   // The popover may cover the page heading on a narrow screen. Exercise a
   // genuine outside click at a visible content point below its bounded menu.
@@ -111,6 +111,22 @@ test('creating from an empty menu focuses the name field and restores the new pr
   await page.reload();
   await expect(current(page)).toHaveAttribute('data-project-id', 'created-project');
   expect(writes).toEqual([{ path: '/api/v1/projects', body: { name: 'Robot lab' } }]);
+});
+
+test('a first visit shows the whole menu, so the first project can be created without scrolling', async ({ page }) => {
+  await fixture(page, true);
+  await current(page).click();
+  const create = menu(page).getByRole('menuitem', { name: 'Create project…', exact: true });
+  await expect(menu(page).getByText('No projects yet.', { exact: true })).toBeVisible();
+  await expect(create).toBeVisible();
+  // Visible to a person, not only present: nothing in the menu is cut off or scrolled away.
+  expect(await menu(page).evaluate((node) => node.scrollHeight - node.clientHeight)).toBeLessThanOrEqual(0);
+  const outer = (await menu(page).boundingBox())!;
+  for (const part of [menu(page).getByText('No projects yet.', { exact: true }), create]) {
+    const inner = (await part.boundingBox())!;
+    expect(inner.y).toBeGreaterThanOrEqual(outer.y);
+    expect(inner.y + inner.height).toBeLessThanOrEqual(outer.y + outer.height);
+  }
 });
 
 test('a failed creation retains the draft and pending retries block duplicate submissions', async ({ page }) => {

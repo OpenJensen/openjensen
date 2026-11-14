@@ -277,7 +277,7 @@ test('explicitly selects a cloud checkpoint and quantizes it with visible precis
 
 test('preserves an earlier checkpoint selected from a training run through quantization', async ({ page }) => {
   const { submitted, unexpected } = await workspace(page);
-  await page.getByRole('link', { name: 'Fine-tune', exact: true }).click();
+  await page.getByRole('link', { name: 'Train', exact: true }).click();
   await page.locator('.job-history-entry[data-job-id="recent-run"]').click();
   const checkpointActions = page.getByRole('region', { name: 'Use a trained checkpoint' });
   await expect(checkpointActions).toBeVisible();
@@ -452,14 +452,16 @@ test('keeps unsupported checkpoints visible and explains the SmolVLA quantizatio
   expect(unexpected).toEqual([]);
 });
 
-for (const stage of ['Evaluate', 'Run']) {
+for (const stage of ['Evaluate', 'Simulate']) {
   test(`${stage} explains a cloud-only setup and cannot submit to an unsupported cloud runtime`, async ({ page }) => {
     const { artifacts, submitted, unexpected } = await workspace(page, true);
     artifacts.push({ ...artifacts[0], id: 'packed-policy', label: 'Compressed policy', format: 'gguf' });
     await page.getByRole('link', { name: stage, exact: true }).click();
 
-    await page.getByRole('button', { name: stage === 'Evaluate' ? 'New evaluation' : 'New run', exact: true }).click();
-    if (stage === 'Run') await page.getByRole('button', { name: 'Check inference', exact: true }).click();
+    await page
+      .getByRole('button', { name: stage === 'Evaluate' ? 'New evaluation' : 'New simulation', exact: true })
+      .click();
+    if (stage === 'Simulate') await page.getByRole('button', { name: 'Check inference', exact: true }).click();
     await expect(page.getByRole('group', { name: 'Compute', exact: true }).getByRole('radio')).toHaveCount(0);
     await expect(choice(page, 'Compute', 'gcp')).toHaveCount(0);
     await expect(
@@ -471,7 +473,7 @@ for (const stage of ['Evaluate', 'Run']) {
       page.getByRole('button', { name: stage === 'Evaluate' ? 'Start evaluation' : 'Reload and run', exact: true }),
     ).toBeDisabled();
     await page.getByRole('button', { name: 'View training metrics', exact: true }).click();
-    await expect(page.getByRole('region', { name: 'Fine-tuning jobs' })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Training runs' })).toBeVisible();
     expect(submitted).toEqual([]);
     expect(unexpected).toEqual([]);
   });
@@ -536,12 +538,13 @@ test('model names distinguish checkpoint choices and training runs while legacy 
   await expect(picker.getByLabel('Checkpoint', { exact: true }).locator('option[value="psi-checkpoint"]')).toHaveCount(
     0,
   );
-  await page.getByRole('link', { name: 'Fine-tune', exact: true }).click();
+  await page.getByRole('link', { name: 'Train', exact: true }).click();
   const runs = page.locator('.job-history-entry');
-  await expect(runs.filter({ hasText: /SmolVLA · LORA/ })).toHaveCount(1);
-  await expect(runs.filter({ hasText: /ACT · FULL/ })).toHaveCount(1);
-  await expect(runs.filter({ hasText: /Psi-Zero · FULL/ })).toHaveCount(1);
-  await expect(runs.filter({ hasText: /FULL/ })).toHaveCount(3);
+  // Runs are listed by model and training method, then dataset.
+  await expect(runs.filter({ hasText: /SmolVLA\s*LoRA/ })).toHaveCount(1);
+  await expect(runs.filter({ hasText: /ACT\s*Full training/ })).toHaveCount(1);
+  await expect(runs.filter({ hasText: /Psi-Zero\s*Full training/ })).toHaveCount(1);
+  await expect(runs.filter({ hasText: /Full training/ })).toHaveCount(3);
   await page.locator('.job-history-entry[data-job-id="recent-run"]').click();
   const checkpointActions = page.getByRole('region', { name: 'Use a trained checkpoint' });
   await expect(
@@ -627,7 +630,7 @@ test('opens a previous quantization job from history without mixing its details 
   expect(unexpected).toEqual([]);
 });
 
-for (const stage of ['Evaluate', 'Run']) {
+for (const stage of ['Evaluate', 'Simulate']) {
   test(`${stage} uses supported cloud engine checks and ignores saved simulator preferences`, async ({ page }) => {
     await page.addInitScript(
       (id) =>
@@ -655,11 +658,13 @@ for (const stage of ['Evaluate', 'Run']) {
     await page.getByRole('link', { name: stage, exact: true }).click();
 
     await expect(
-      page.getByRole('region', { name: stage === 'Evaluate' ? 'Evaluation jobs' : 'Run jobs', exact: true }),
+      page.getByRole('region', { name: stage === 'Evaluate' ? 'Evaluation jobs' : 'Simulation runs', exact: true }),
     ).toBeVisible();
     await expect(page.getByRole('group', { name: 'My model', exact: true })).toHaveCount(0);
-    await page.getByRole('button', { name: stage === 'Evaluate' ? 'New evaluation' : 'New run', exact: true }).click();
-    if (stage === 'Run') await page.getByRole('button', { name: 'Check inference', exact: true }).click();
+    await page
+      .getByRole('button', { name: stage === 'Evaluate' ? 'New evaluation' : 'New simulation', exact: true })
+      .click();
+    if (stage === 'Simulate') await page.getByRole('button', { name: 'Check inference', exact: true }).click();
     await expectCompute(page, 'gcp');
     await expectSelectedPolicy(page, 'cloud-q8', false);
     await choosePolicy(page, 'cloud-q8');
@@ -745,13 +750,15 @@ test('shows native build progress as a setup stage without presenting it as over
   await expect(page.locator('.workflow-job-technical')).toHaveJSProperty('open', false);
 });
 
-for (const stage of ['Evaluate', 'Run']) {
+for (const stage of ['Evaluate', 'Simulate']) {
   test(`${stage} explains how to prepare a trained checkpoint when no GGUF is available`, async ({ page }) => {
     const { submitted, unexpected } = await workspace(page, true, true);
     await page.getByRole('link', { name: stage, exact: true }).click();
 
-    await page.getByRole('button', { name: stage === 'Evaluate' ? 'New evaluation' : 'New run', exact: true }).click();
-    if (stage === 'Run') await page.getByRole('button', { name: 'Check inference', exact: true }).click();
+    await page
+      .getByRole('button', { name: stage === 'Evaluate' ? 'New evaluation' : 'New simulation', exact: true })
+      .click();
+    if (stage === 'Simulate') await page.getByRole('button', { name: 'Check inference', exact: true }).click();
     await expectCompute(page, 'gcp');
     await expect(page.getByText('Quantize a SmolVLA checkpoint first.', { exact: true })).toBeVisible();
     await expect(

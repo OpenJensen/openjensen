@@ -93,14 +93,14 @@ export function TrainingPanel({
       />
       {view === 'jobs' && (
         <JobHistory
-          title="Fine-tuning jobs"
-          newLabel="Start a new fine-tuning"
+          title="Training runs"
+          newLabel="New training run"
           entries={historyEntries}
           onNew={() => openNew()}
           onSelect={chooseRun}
           loading={!!projectId && jobs.isPending}
           error={jobs.error}
-          emptyMessage="No fine-tuning jobs yet."
+          emptyMessage="No training runs yet."
           disabled={!projectId || mutation.isPending}
         />
       )}

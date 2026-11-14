@@ -3,10 +3,10 @@ import { navigationGroups, workspaceRoutes, workspaceStage } from '../../apps/we
 import { guideSectionId } from '../../apps/web/src/lib/guide-section';
 
 test('robot navigation uses canonical AI teleoperation without changing saved module IDs', () => {
-  expect(workspaceRoutes['robot-lab'].name).toBe('Initial setup');
+  expect(workspaceRoutes['robot-lab'].name).toBe('Robot Lab');
   expect(workspaceRoutes.teaching.name).toBe('AI teleoperation');
   expect(workspaceRoutes.teaching.path).toBe('/ai-teleoperation/');
-  expect(navigationGroups.find((group) => group.name === 'Robot Lab')?.items).toEqual(['robot-lab', 'teaching']);
+  expect(navigationGroups.find((group) => group.name === 'Robot')?.items).toEqual(['robot-lab', 'teaching']);
   expect(workspaceStage('/ai-teleoperation/')).toBe('teaching');
   expect(workspaceStage('/teaching/')).toBe('teaching');
   expect(workspaceStage('/teaching')).toBe('teaching');
@@ -15,8 +15,11 @@ test('robot navigation uses canonical AI teleoperation without changing saved mo
 
 test('renamed robot pages retain shared guide anchors', () => {
   expect(guideSectionId('AI teleoperation')).toBe('teaching');
-  expect(guideSectionId('Initial setup')).toBe('robot-lab');
-  expect(guideSectionId('Fine-tune')).toBe('fine-tune');
+  expect(guideSectionId('Robot Lab')).toBe('robot-lab');
+  // Renamed pages keep the anchors that saved links and the module list point at.
+  expect(guideSectionId('Home')).toBe('dashboard');
+  expect(guideSectionId('Train')).toBe('training');
+  expect(guideSectionId('Simulate')).toBe('simulation');
 });
 
 test('real to sim belongs to Data and has its own route', () => {

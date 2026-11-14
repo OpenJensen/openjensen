@@ -221,7 +221,7 @@ test('shared job filters remain usable at a narrow viewport', async ({ page }) =
 });
 
 for (const [path, history, action, setup] of [
-  ['/training/', 'Fine-tuning jobs', 'Start a new fine-tuning', 'Training setup'],
+  ['/training/', 'Training runs', 'New training run', 'Training setup'],
   ['/distillation/', 'Distillation jobs', 'Start a new distillation', 'Distillation setup'],
   ['/quantization/', 'Quantization jobs', 'Start a new quantization', 'Quantization setup'],
 ] as const) {
@@ -285,7 +285,7 @@ test('all-jobs New opens setup directly and compute is selected inside that setu
   );
   await page.goto('/jobs/');
   await page.getByRole('button', { name: 'New job', exact: true }).click();
-  await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
+  await page.getByRole('button', { name: 'Train', exact: true }).click();
   await expect(page.getByRole('navigation', { name: 'Training setup' })).toBeVisible();
   await page.getByRole('combobox', { name: 'Compute target', exact: true }).selectOption('policy-pool');
   await expect(page.getByRole('region', { name: 'Selected job compute' })).toContainText('Policy pool');
@@ -446,10 +446,11 @@ test('job filters wait for project context and submit the query after it becomes
   });
   await page.goto('/jobs/');
   const search = page.getByRole('textbox', { name: 'Search jobs', exact: true });
+  const filter = (name: string) => page.getByRole('radiogroup', { name, exact: true }).getByRole('radio');
   try {
     await expect(search).toBeDisabled();
-    await expect(page.getByRole('combobox', { name: 'Module', exact: true })).toBeDisabled();
-    await expect(page.getByRole('combobox', { name: 'Status', exact: true })).toBeDisabled();
+    await expect(filter('Module').first()).toBeDisabled();
+    await expect(filter('Status').first()).toBeDisabled();
     await expect(page.getByRole('button', { name: 'New job', exact: true })).toBeDisabled();
     await expect(search).toHaveValue('');
   } finally {
@@ -461,8 +462,12 @@ test('job filters wait for project context and submit the query after it becomes
   );
   await expect(page.locator('[data-job-id="core:failed"]')).toBeVisible();
   await expect(search).toBeEnabled();
-  await expect(page.getByRole('combobox', { name: 'Module', exact: true })).toBeEnabled();
-  await expect(page.getByRole('combobox', { name: 'Status', exact: true })).toBeEnabled();
+  await expect(filter('Module').first()).toBeEnabled();
+  await expect(filter('Status').first()).toBeEnabled();
+  // The filters are buttons, and list pages by the names the sidebar uses.
+  await expect(filter('Module').first()).toHaveText('Everything');
+  await expect(filter('Module').filter({ hasText: /^Train$/ })).toHaveCount(1);
+  await expect(filter('Module').filter({ hasText: /^training$/ })).toHaveCount(0);
   const filtered = page.waitForResponse((response) => {
     const url = new URL(response.url());
     return url.pathname === '/api/v1/projects/project/work-jobs' && url.searchParams.get('q') === 'reconstruction';
