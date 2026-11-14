@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api, isActive } from '@/lib/api';
 import { simulationTarget, simulationTaskSummary } from '@/lib/native-simulation';
 import { runLabel, runSummary } from '@/lib/run-summary';
+import { ChoiceCards } from './ui/choice';
 
 function reported(value: boolean | null | undefined) {
   return value == null ? 'Not reported' : value ? 'Yes' : 'No';
@@ -50,6 +51,29 @@ export function CloudRuns({
     staleTime: 0,
     retry: false,
   });
+  // The same message often arrives many times in a row; one line says so, newest first.
+  const steps: { key: string; stage: string; message: string; detail: string; last: string; count: number }[] = [];
+  for (const event of (events.data ?? []).slice(-100)) {
+    const detail = simulationTaskSummary(event.data) ?? '';
+    const previous = steps[0];
+    if (
+      previous &&
+      previous.stage === event.stage &&
+      previous.message === event.message &&
+      previous.detail === detail
+    ) {
+      previous.last = event.timestamp;
+      previous.count += 1;
+    } else
+      steps.unshift({
+        key: `${event.timestamp}:${steps.length}`,
+        stage: event.stage,
+        message: event.message,
+        detail,
+        last: event.timestamp,
+        count: 1,
+      });
+  }
   const [runId, setRunId] = useState('');
   const [stream, setStream] = useState<'isaac' | 'vla'>('isaac');
   const [now, setNow] = useState(() => Date.now());
@@ -95,16 +119,18 @@ export function CloudRuns({
         {projectId && jobs.isSuccess && !managed.length && <p>No application cloud jobs in this project yet.</p>}
         {job && (
           <>
-            <div className="cloud-run-picker">
-              <label htmlFor="managed-cloud-job">Application cloud job</label>
-              <select id="managed-cloud-job" value={job.id} onChange={(event) => setJobId(event.target.value)}>
-                {managed.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {runLabel(item)} · {item.id.slice(0, 8)} · {jobStatusWord(item.status)}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <ChoiceCards
+              className="cloud-run-cards"
+              label="Application cloud job"
+              value={job.id}
+              onChange={setJobId}
+              options={managed.map((item) => ({
+                value: item.id,
+                label: runLabel(item),
+                detail: `${new Date(item.created_at).toLocaleString()} · ${item.id.slice(0, 8)}`,
+                badge: jobStatusLabel(item.status),
+              }))}
+            />
             <h3>{runSummary(job)}</h3>
             <dl className="cloud-run-facts">
               <div>
@@ -145,25 +171,38 @@ export function CloudRuns({
                 Open training job
               </button>
             )}
-            <h3>Recorded job events</h3>
+            <h3>What happened</h3>
             {events.isPending && <p role="status">Loading job events…</p>}
             {events.isError && (
               <p role="alert">
                 Job events are unavailable. {events.error.message} Previously received events may be out of date.
               </p>
             )}
-            <pre className="cloud-log-tail" role="region" aria-label="Application job event log" tabIndex={0}>
-              {events.data?.length
-                ? events.data
-                    .slice(-100)
-                    .map(
-                      (event) =>
-                        `${event.timestamp} · ${event.stage} · ${event.message}${simulationTaskSummary(event.data) ? ` · ${simulationTaskSummary(event.data)}` : ''}`,
-                    )
-                    .join('\n')
-                : 'No events received for this job yet.'}
-            </pre>
-            <p className="field-help">Latest 100 events · completion does not verify task success or VM cleanup.</p>
+            <div className="cloud-events" role="region" aria-label="Application job event log" tabIndex={0}>
+              {steps.length ? (
+                <ol>
+                  {steps.map((step) => (
+                    <li key={step.key}>
+                      <time dateTime={step.last}>{new Date(step.last).toLocaleTimeString()}</time>
+                      <span>
+                        {step.message}
+                        {step.detail ? ` · ${step.detail}` : ''}
+                      </span>
+                      <small>
+                        {step.stage}
+                        {step.count > 1 ? ` · reported ${step.count} times` : ''}
+                      </small>
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <p>No events received for this job yet.</p>
+              )}
+            </div>
+            <p className="field-help">
+              Newest first, from the latest 100 events. A finished job does not prove the task succeeded or that its
+              cloud machine was removed.
+            </p>
           </>
         )}
       </section>
@@ -198,16 +237,18 @@ export function CloudRuns({
         )}
         {selected && (
           <>
-            <div className="cloud-run-picker">
-              <label htmlFor="cloud-run-select">Cloud run</label>
-              <select id="cloud-run-select" value={selected.run_id} onChange={(event) => setRunId(event.target.value)}>
-                {runs.map((run) => (
-                  <option key={run.run_id} value={run.run_id}>
-                    {run.label} · {run.run_id}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <ChoiceCards
+              className="cloud-run-cards"
+              label="Cloud run"
+              value={selected.run_id}
+              onChange={setRunId}
+              options={runs.map((run) => ({
+                value: run.run_id,
+                label: run.label,
+                detail: run.run_id,
+                badge: run.status,
+              }))}
+            />
             <div className="cloud-freshness" role="status">
               <strong>
                 {stale
