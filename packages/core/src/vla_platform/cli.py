@@ -29,6 +29,54 @@ app.add_typer(projects, name="projects")
 app.add_typer(jobs, name="jobs")
 app.command("install")(install)
 app.command("configure-updates")(configure_updates)
+application = typer.Typer(
+    no_args_is_help=True, help="Start OpenJensen when you log in, so Update can restart it."
+)
+app.add_typer(application, name="app")
+
+
+@application.command("install")
+def install_application(port: Annotated[int, typer.Option(min=1024, max=65535)] = 8000) -> None:
+    """Start OpenJensen now and whenever you log in. Update then works from the app."""
+    import subprocess
+
+    from vla_platform import app_service
+
+    try:
+        result = app_service.install(port)
+    except (OSError, ValueError, subprocess.CalledProcessError) as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1) from None
+    if result["started"]:
+        typer.echo(f"OpenJensen is running at {result['url']} and starts when you log in.")
+    else:
+        typer.echo(f"OpenJensen is starting. Open {result['url']} in a minute.")
+    typer.echo("Workspace: " + result["workspace"])
+    if result["missing_tools"]:
+        typer.echo("Updates need " + ", ".join(result["missing_tools"]) + " on this computer.")
+    elif result["updates"] is False and result["updates_message"]:
+        typer.echo(result["updates_message"])
+    elif result["updates"]:
+        typer.echo("Update & restart in the app now installs new versions.")
+
+
+@application.command("remove")
+def remove_application() -> None:
+    """Stop starting OpenJensen at login. The workspace is kept."""
+    import subprocess
+
+    from vla_platform import app_service
+
+    try:
+        result = app_service.remove()
+    except (OSError, ValueError, subprocess.CalledProcessError) as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1) from None
+    typer.echo(
+        "OpenJensen no longer starts at login. The workspace is kept."
+        if result["removed"]
+        else "OpenJensen was not set to start at login."
+    )
 
 
 def execute(operation, *, mutation: bool = False):
