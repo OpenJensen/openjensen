@@ -19,6 +19,8 @@ uv run --frozen jensen serve
 
 Open [localhost:8000](http://127.0.0.1:8000). The app includes a [workspace guide](docs/workspace-guide.md) at `/guide/` and its API reference at `/docs/`.
 
+To keep OpenJensen running without a terminal, run `uv run --frozen jensen app install` once instead of `jensen serve`. It starts now and whenever you log in (macOS and Linux), and **Update & restart** in the app installs new versions. `jensen app remove` undoes it and keeps the workspace.
+
 ## Workspace
 
 - Set up and teleoperate an SO-101 arm, then record demonstrations.
