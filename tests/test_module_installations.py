@@ -517,3 +517,138 @@ def test_uninstall_blocks_an_independent_runtime_process(tmp_path):
     finally:
         process.terminate()
         process.wait(timeout=5)
+
+
+def updated_release(tmp_path, commit="2" * 40):
+    """A release the updater built: labelled with its commit, no worker environments."""
+    release = tmp_path / "releases" / ("update-" + "1" * 32 + "-" + commit[:12])
+    (release / "workers/_cpu_readers").mkdir(parents=True)
+    (release / ".openjensen-build.json").write_text(json.dumps({"commit": commit}))
+    return release
+
+
+def reader_checks(monkeypatch):
+    """What the real check reports: an environment is ready once its interpreter exists."""
+    from pathlib import Path
+
+    import vla_platform.module_installations as module
+
+    def check(value, root, environment=None, **_):
+        target = Path(environment) if environment else root / value.directory / ".venv"
+        installed = (target / "bin/python").is_file()
+        return {
+            "ready": installed,
+            "supported_platform": True,
+            "python_matches": installed,
+            "package_versions_match": installed,
+            "external_tools": {"uv": True, "ffmpeg": True, "ffprobe": True},
+            "message": "Installed." if installed else "The selected environment is not installed.",
+        }
+
+    monkeypatch.setattr(module.shutil, "which", lambda name: "/trusted/" + name)
+    monkeypatch.setattr(module, "check_profile", check)
+
+
+def workspace_with_datasets(tmp_path):
+    from vla_platform.modules import initialize_modules
+
+    workspace = tmp_path / "workspace"
+    initialize_modules(
+        Settings(data_dir=workspace), workspace / "robot-lab-connection.json", existing=False
+    )
+    return workspace
+
+
+def test_an_updated_release_puts_back_the_dataset_reader_it_was_built_without(
+    tmp_path, monkeypatch
+):
+    reader_checks(monkeypatch)
+    workspace = workspace_with_datasets(tmp_path)
+    service = ModuleInstallations(workspace, root=updated_release(tmp_path))
+    calls = []
+
+    async def command(argv, stage):
+        calls.append(argv)
+        (service.target("datasets") / "bin").mkdir(parents=True, exist_ok=True)
+        (service.target("datasets") / "bin/python").touch()
+
+    monkeypatch.setattr(service, "_command", command)
+
+    async def run():
+        # The user's report: after Update, Dataset tools read "not installed".
+        assert not service.inspect("datasets").ready
+        operation = await service.restore_after_update()
+        assert operation is not None and operation.profile == "datasets"
+        assert operation.module is None
+        await service.task
+        assert service.operation.status == "succeeded"
+        service.cached.clear()
+        assert service.inspect("datasets").ready
+        assert reader_python(workspace) == service.target("datasets") / "bin/python"
+        assert all(str(service.target("datasets")) in " ".join(argv) for argv in calls)
+
+    asyncio.run(run())
+
+
+def test_restoring_the_reader_is_tried_once_per_release_even_after_a_failure(tmp_path, monkeypatch):
+    reader_checks(monkeypatch)
+    workspace = workspace_with_datasets(tmp_path)
+    release = updated_release(tmp_path)
+    attempts = []
+
+    async def offline(self, argv, stage):
+        attempts.append(argv)
+        raise ValueError("Dependency installation failed.")
+
+    monkeypatch.setattr(ModuleInstallations, "_command", offline)
+
+    async def run():
+        service = ModuleInstallations(workspace, root=release)
+        await service.restore_after_update()
+        await service.task
+        assert service.operation.status == "failed"
+        assert await service.restore_after_update() is None
+        # A restart of the same release does not download again at every start.
+        assert await ModuleInstallations(workspace, root=release).restore_after_update() is None
+        assert len(attempts) == 1
+        # The next update gets its own attempt.
+        newer = updated_release(tmp_path, "3" * 40)
+        assert await ModuleInstallations(workspace, root=newer).restore_after_update()
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("situation", ["source checkout", "module removed", "reader present"])
+def test_restoring_the_reader_leaves_everything_else_alone(tmp_path, monkeypatch, situation):
+    from vla_platform.modules import set_module_installed
+
+    reader_checks(monkeypatch)
+    workspace = workspace_with_datasets(tmp_path)
+    release = updated_release(tmp_path)
+    if situation == "source checkout":
+        (release / ".openjensen-build.json").unlink()
+    elif situation == "module removed":
+        set_module_installed(workspace, "datasets", False)
+    else:
+        (release / "workers/_cpu_readers/.venv/bin").mkdir(parents=True)
+        (release / "workers/_cpu_readers/.venv/bin/python").touch()
+    service = ModuleInstallations(workspace, root=release)
+
+    async def forbidden(argv, stage):
+        raise AssertionError("Nothing may be installed here")
+
+    monkeypatch.setattr(service, "_command", forbidden)
+    assert asyncio.run(service.restore_after_update()) is None
+    assert service.operation is None
+
+
+def test_application_start_restores_the_dataset_reader(tmp_path, monkeypatch):
+    started = []
+
+    async def restore(self):
+        started.append(self.data_dir)
+
+    monkeypatch.setattr(ModuleInstallations, "restore_after_update", restore)
+    with TestClient(create_app(Settings(data_dir=tmp_path / "workspace"))):
+        pass
+    assert started == [tmp_path / "workspace"]
