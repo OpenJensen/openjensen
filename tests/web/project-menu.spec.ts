@@ -192,14 +192,26 @@ test('projects move in from another workspace and are removed only on the second
       label: '~/.local/share/older-workspace',
       available: true,
       message: null,
-      projects: [{ id: 'pen', name: 'SO101 pen pickup', created_at: '2026-10-31T00:00:00Z', datasets: 2, jobs: 10 }],
+      projects: [
+        { id: 'pen', name: 'SO101 pen pickup', created_at: '2026-10-31T00:00:00Z', datasets: 2, jobs: 10, here: false },
+        {
+          id: 'alpha',
+          name: 'Robotics examples',
+          created_at: '2026-10-06T00:00:00Z',
+          datasets: 0,
+          jobs: 3,
+          here: true,
+        },
+      ],
     },
     {
       path: '/home/robot/busy-workspace',
       label: '~/busy-workspace',
       available: false,
       message: 'Open in another OpenJensen app. Close it to move projects from here.',
-      projects: [{ id: 'busy', name: 'Busy project', created_at: '2026-10-31T00:00:00Z', datasets: 0, jobs: 1 }],
+      projects: [
+        { id: 'busy', name: 'Busy project', created_at: '2026-10-31T00:00:00Z', datasets: 0, jobs: 1, here: false },
+      ],
     },
   ];
   await page.route('**/api/v1/projects/**', async (route) => {
@@ -208,7 +220,8 @@ test('projects move in from another workspace and are removed only on the second
     if (path === '/api/v1/projects/nearby') return route.fulfill({ json: nearby });
     if (path === '/api/v1/projects/move' && request.method() === 'POST') {
       calls.push({ method: 'POST', path, body: request.postDataJSON() });
-      const moved = nearby[0].projects.shift()!;
+      const moved = nearby[0].projects.find((project) => project.id === 'pen')!;
+      nearby[0].projects = nearby[0].projects.filter((project) => project !== moved);
       const project = { id: moved.id, name: moved.name, created_at: moved.created_at };
       projects.push(project);
       return route.fulfill({ json: project });
@@ -230,6 +243,7 @@ test('projects move in from another workspace and are removed only on the second
   await expect(manage.getByText('~/.local/share/older-workspace', { exact: true })).toBeVisible();
   await expect(manage.getByText('2 datasets · 10 jobs', { exact: true })).toBeVisible();
   await expect(manage.getByRole('button', { name: 'Move Busy project here', exact: true })).toBeDisabled();
+  await expect(manage.getByRole('button', { name: 'Robotics examples is already here', exact: true })).toBeDisabled();
   await expect(manage.getByText('Open in another OpenJensen app.', { exact: false })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('project-manage.png') });
 

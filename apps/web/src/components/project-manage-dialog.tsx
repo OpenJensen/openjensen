@@ -156,11 +156,11 @@ export function ManageProjectsDialog({ projects, onChanged, onClose }: Props) {
                     <button
                       type="button"
                       className="secondary-button"
-                      disabled={!workspace.available || !!working}
-                      aria-label={`Move ${project.name} here`}
+                      disabled={!workspace.available || project.here || !!working}
+                      aria-label={project.here ? `${project.name} is already here` : `Move ${project.name} here`}
                       onClick={() => void move(workspace.path, project)}
                     >
-                      {working === `move:${project.id}` ? 'Moving…' : 'Move here'}
+                      {project.here ? 'Already here' : working === `move:${project.id}` ? 'Moving…' : 'Move here'}
                     </button>
                   </li>
                 ))}

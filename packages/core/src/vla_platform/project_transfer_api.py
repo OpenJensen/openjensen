@@ -17,6 +17,7 @@ class NearbyProject(BaseModel):
     created_at: str
     datasets: int
     jobs: int
+    here: bool
 
 
 class NearbyWorkspace(BaseModel):

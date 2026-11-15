@@ -5349,6 +5349,10 @@
             "title": "Datasets",
             "type": "integer"
           },
+          "here": {
+            "title": "Here",
+            "type": "boolean"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -5367,7 +5371,8 @@
           "name",
           "created_at",
           "datasets",
-          "jobs"
+          "jobs",
+          "here"
         ],
         "title": "NearbyProject",
         "type": "object"

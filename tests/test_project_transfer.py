@@ -242,10 +242,14 @@ def test_nearby_lists_other_workspaces_on_this_computer(tmp_path):
                     "created_at": "2026-10-31T00:00:00+00:00",
                     "datasets": 1,
                     "jobs": 1,
+                    "here": False,
                 }
             ],
         }
     ]
+    add_project(current, "pen", "SO101 pen pickup")  # e.g. moved earlier; the other is a backup
+    [entry] = project_transfer.nearby(current, home)
+    assert entry["projects"][0]["here"] is True
     lock = FileLock(other / "owner.lock")
     lock.acquire()
     try:

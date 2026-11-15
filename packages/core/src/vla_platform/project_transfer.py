@@ -426,6 +426,7 @@ def nearby(current, home=None):
     candidates = [home / ".jensen", *sorted(share.glob("*")), *sorted(share.glob("*/*"))]
     with closing(connect(current, readonly=True)) as own:
         version = schema(own)
+        here = {row["id"] for row in rows(own, "SELECT id FROM projects")}
     found = []
     for root in candidates:
         try:
@@ -467,6 +468,8 @@ def nearby(current, home=None):
                         **project,
                         "datasets": datasets.count(project["id"]),
                         "jobs": counts.get(project["id"], 0),
+                        # A backup of a workspace lists projects this app already holds.
+                        "here": project["id"] in here,
                     }
                     for project in projects
                 ],
