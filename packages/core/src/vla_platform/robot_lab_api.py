@@ -1,6 +1,9 @@
 """Browser-facing Robot Lab API; credentials remain on the operator's server."""
 
+import asyncio
+import time
 from typing import Annotated, Literal
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
@@ -16,6 +19,7 @@ from pydantic import (
     model_validator,
 )
 
+from vla_platform import robot_service_restart
 from vla_platform.robot_lab_bridge import RobotLabError, safe_id, strict_json
 from vla_platform.robot_policy_install import PolicyInstallRequest, install_artifact
 
@@ -226,6 +230,42 @@ class RecordingFinishRequest(BaseModel):
 @router.get("/robot-lab/status")
 async def status(request: Request):
     return await request.app.state.robot_lab.status()
+
+
+RESTART_SECONDS = 30
+
+
+@router.post("/robot-lab/service/restart")
+async def restart_service(request: Request):
+    """Restart this computer's robot service so it finds newly connected devices.
+
+    Returns the restarted service's status. The service stops the arm (torque off),
+    closes the policy and finishes a recording before it exits.
+    """
+    bridge = request.app.state.robot_lab
+    try:
+        port = urlsplit(bridge.config()["url"]).port
+    except RobotLabError as exc:
+        raise HTTPException(exc.status, str(exc)) from None
+    before = await bridge.status()
+    previous = (before.get("diagnostics") or {}).get("boot_id") if before.get("connected") else None
+    try:
+        await asyncio.to_thread(robot_service_restart.restart, port)
+    except robot_service_restart.RestartError as exc:
+        raise HTTPException(exc.status, str(exc)) from None
+    deadline = time.monotonic() + RESTART_SECONDS
+    while True:
+        after = await bridge.status()
+        # A new boot id proves this answer comes from the restarted process.
+        if after.get("connected") and (after.get("diagnostics") or {}).get("boot_id") != previous:
+            return JSONResponse(after, headers={"Cache-Control": "no-store"})
+        if time.monotonic() >= deadline:
+            raise HTTPException(
+                503,
+                f"The robot connection service did not come back within {RESTART_SECONDS} "
+                "seconds. Check its USB cables and try again.",
+            )
+        await asyncio.sleep(0.5)
 
 
 async def proxy(path: str, request: Request):

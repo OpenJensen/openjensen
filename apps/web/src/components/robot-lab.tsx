@@ -32,7 +32,7 @@ export function RobotLab() {
     previousSessionError,
     reconnecting,
     recording,
-    refresh,
+    restart,
     robotId,
     session,
     state,
@@ -84,12 +84,8 @@ export function RobotLab() {
               Exit large view
             </button>
           )}
-          <button
-            className="text-button"
-            onClick={() => void refresh()}
-            disabled={busy || checkingConnection || status.isPending}
-          >
-            {checkingConnection ? 'Refreshing…' : 'Refresh devices'}
+          <button className="text-button" onClick={() => void restart()} disabled={checkingConnection}>
+            {checkingConnection ? 'Restarting…' : 'Restart devices'}
           </button>
           {(active || session?.torque_enabled || session?.error || pending === 'Arm stopped.') && (
             <button

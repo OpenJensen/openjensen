@@ -926,13 +926,24 @@ export function useRobotLab() {
     setVerificationReady(false);
     void perform('Arm stopped.', () => robotApi.stop());
   }
-  async function refresh() {
+  // Restarting the device service is how newly plugged cameras and arms are found and a
+  // stuck camera or policy is cleared. The service stops the arm before it exits.
+  async function restart() {
+    ownedRef.current = false;
+    setOwnsSession(false);
+    setReconnecting(false);
+    setMotionReady(false);
+    setVerificationReady(false);
     setCheckingConnection(true);
     setError(null);
     setNotice(null);
     try {
-      await Promise.allSettled([status.refetch(), ...(online ? [devices.refetch(), datasets.refetch()] : [])]);
+      client.setQueryData(statusKey, await robotApi.restartService());
+      if (mounted.current) setNotice('Devices restarted.');
+    } catch (failure) {
+      if (mounted.current) setError(readable(failure));
     } finally {
+      await client.invalidateQueries({ queryKey: ['robot-lab'] });
       if (mounted.current) setCheckingConnection(false);
     }
   }
@@ -1305,7 +1316,7 @@ export function useRobotLab() {
     reconnecting,
     recordCamera,
     recording,
-    refresh,
+    restart,
     reidentify,
     responding,
     robotId,
