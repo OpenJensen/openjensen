@@ -72,6 +72,7 @@ from vla_platform.modules import (
     workspace_modules,
 )
 from vla_platform.modules_api import router as modules_router
+from vla_platform.project_transfer_api import router as project_transfer_router
 from vla_platform.projects import Projects
 from vla_platform.recordings_api import router as recordings_router
 from vla_platform.robot_lab_api import router as robot_lab_router
@@ -269,6 +270,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(decision_router)
     app.include_router(recordings_router)
     app.include_router(dataset_library_router)
+    app.include_router(project_transfer_router)
     app.include_router(robot_lab_router)
     app.include_router(scenes_router)
     app.include_router(updates_router)

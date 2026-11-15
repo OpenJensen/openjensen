@@ -182,3 +182,77 @@ test('long names and creation fit a narrow dark screen without clipping the menu
   await expect(current(page)).toBeFocused();
   expect(writes).toEqual([]);
 });
+
+test('projects move in from another workspace and are removed only on the second click', async ({ page }, testInfo) => {
+  const { projects, writes } = await fixture(page);
+  const calls: { method: string; path: string; body?: unknown }[] = [];
+  const nearby = [
+    {
+      path: '/home/robot/.local/share/older-workspace',
+      label: '~/.local/share/older-workspace',
+      available: true,
+      message: null,
+      projects: [{ id: 'pen', name: 'SO101 pen pickup', created_at: '2026-10-31T00:00:00Z', datasets: 2, jobs: 10 }],
+    },
+    {
+      path: '/home/robot/busy-workspace',
+      label: '~/busy-workspace',
+      available: false,
+      message: 'Open in another OpenJensen app. Close it to move projects from here.',
+      projects: [{ id: 'busy', name: 'Busy project', created_at: '2026-10-31T00:00:00Z', datasets: 0, jobs: 1 }],
+    },
+  ];
+  await page.route('**/api/v1/projects/**', async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    if (path === '/api/v1/projects/nearby') return route.fulfill({ json: nearby });
+    if (path === '/api/v1/projects/move' && request.method() === 'POST') {
+      calls.push({ method: 'POST', path, body: request.postDataJSON() });
+      const moved = nearby[0].projects.shift()!;
+      const project = { id: moved.id, name: moved.name, created_at: moved.created_at };
+      projects.push(project);
+      return route.fulfill({ json: project });
+    }
+    if (request.method() === 'DELETE') {
+      calls.push({ method: 'DELETE', path });
+      const id = path.split('/').pop()!;
+      const [removed] = projects.splice(
+        projects.findIndex((project) => project.id === id),
+        1,
+      );
+      return route.fulfill({ json: { id, name: removed.name, datasets: 0, jobs: 0 } });
+    }
+    return route.fallback();
+  });
+  await current(page).click();
+  await menu(page).getByRole('menuitem', { name: 'Manage projects…', exact: true }).click();
+  const manage = page.getByRole('dialog', { name: 'Projects', exact: true });
+  await expect(manage.getByText('~/.local/share/older-workspace', { exact: true })).toBeVisible();
+  await expect(manage.getByText('2 datasets · 10 jobs', { exact: true })).toBeVisible();
+  await expect(manage.getByRole('button', { name: 'Move Busy project here', exact: true })).toBeDisabled();
+  await expect(manage.getByText('Open in another OpenJensen app.', { exact: false })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('project-manage.png') });
+
+  await manage.getByRole('button', { name: 'Move SO101 pen pickup here', exact: true }).click();
+  await expect(manage.getByRole('status')).toHaveText('Moved SO101 pen pickup here.');
+  await expect(current(page)).toHaveAttribute('data-project-id', 'pen');
+  await expect(manage.getByRole('button', { name: 'Remove SO101 pen pickup', exact: true })).toBeVisible();
+
+  await manage.getByRole('button', { name: 'Remove PushT benchmark', exact: true }).click();
+  await manage.getByRole('button', { name: 'Keep', exact: true }).click();
+  expect(calls.filter((call) => call.method === 'DELETE')).toEqual([]);
+  await manage.getByRole('button', { name: 'Remove PushT benchmark', exact: true }).click();
+  await expect(manage.getByText('Datasets, jobs and recordings are deleted.', { exact: true })).toBeVisible();
+  await manage.getByRole('button', { name: 'Remove PushT benchmark', exact: true }).click();
+  await expect(manage.getByRole('status')).toHaveText('Removed PushT benchmark.');
+  await expect(manage.getByRole('button', { name: 'Remove PushT benchmark', exact: true })).toHaveCount(0);
+  expect(calls).toEqual([
+    {
+      method: 'POST',
+      path: '/api/v1/projects/move',
+      body: { workspace: '/home/robot/.local/share/older-workspace', project_id: 'pen' },
+    },
+    { method: 'DELETE', path: '/api/v1/projects/beta' },
+  ]);
+  expect(writes).toEqual([]);
+});
