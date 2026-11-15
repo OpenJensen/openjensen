@@ -405,6 +405,7 @@ async function request<T>(
 
 export const robotApi = {
   status: () => request<RobotStatus>('/status'),
+  restartService: () => request<RobotStatus>('/service/restart', {}, { timeoutMs: 60_000 }),
   policyCatalog: () => request<RobotPolicyCatalog>('/policy/catalog'),
   loadPolicy: (policy_id: string) => request<RobotStatus>('/policy/load', { policy_id }, { timeoutMs: 215_000 }),
   previewPolicy: (input: {

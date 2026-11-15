@@ -19,7 +19,7 @@ export function RobotLabDevices({ lab }: { lab: RobotLabState }) {
       </div>
       {online && !lab.state?.capabilities?.device_registry && (
         <Notice kind="warning">
-          Install the updated robot connection service to save device names and roles, then refresh devices.
+          Install the updated robot connection service to save device names and roles, then restart devices.
         </Notice>
       )}
       {!online && (
@@ -27,12 +27,12 @@ export function RobotLabDevices({ lab }: { lab: RobotLabState }) {
           Device connection service unavailable. Saved configurations return when the service reconnects.
         </Notice>
       )}
-      {devices.isError && <Notice kind="warning">Device discovery failed. Refresh devices to retry.</Notice>}
+      {devices.isError && <Notice kind="warning">Device discovery failed. Restart devices to retry.</Notice>}
       {!catalog.length && (
         <div className="robot-lab-device-empty">
           <Icon name="robot" size={32} />
           <h3>No devices yet</h3>
-          <p>Connect an arm’s USB cable, then refresh devices.</p>
+          <p>Connect an arm’s USB cable, then restart devices.</p>
         </div>
       )}
       <div className="robot-lab-device-tiles">
