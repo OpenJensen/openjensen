@@ -15,10 +15,6 @@ import test_robot_lab as fixtures
 from hardware import JOINTS, HardwareError, normalized
 from motion import control_limits
 from policy import (
-    MAX_ACCELERATION,
-    MAX_SPEED,
-    PLANNING_PAUSE_SECONDS,
-    PREDICTION_TOLERANCE,
     UNITS,
     admit,
 )
@@ -353,94 +349,62 @@ class PolicyTests(unittest.TestCase):
             lower_joint: held[lower_joint] + 2,
             upper_joint: held[upper_joint] - 2,
         }
-        moment = runner.last_apply + 0.025
-        goals = runner.apply(measured, moment)
-        for joint, direction in ((lower_joint, 1), (upper_joint, -1)):
-            step = direction * (goals[joint] - held[joint])
-            self.assertGreater(step, 0)
-            self.assertLessEqual(step, MAX_ACCELERATION * 0.025**2 + 1e-8)
+        goals = runner.apply(measured, runner.last_apply + 0.025)
+        self.assertEqual(goals[lower_joint], held[lower_joint] + 2)
+        self.assertEqual(goals[upper_joint], held[upper_joint] - 2)
 
-    def test_targets_obey_speed_acceleration_limits_and_manual_heartbeat_cannot_extend_authority(
+    def test_targets_go_straight_to_the_motors_and_manual_heartbeat_cannot_extend_authority(
         self,
     ):
+        """The arm follows the policy at the speed it was trained on, as LeRobot does."""
         runner = self.prepare()
         with patch.object(runner, "_run"):
             runner.start(self.run_payload())
             runner.thread.join(timeout=1)
         measured = copy.deepcopy(self.lab.positions)
-        runner.predicted = {j: measured[j] + 5 for j in JOINTS}
-        now = time.monotonic()
-        runner.last_apply = now
-        previous, velocity = measured, dict.fromkeys(JOINTS, 0.0)
-        for step in range(1, 201):
-            if step == 80:
-                runner.predicted = {j: measured[j] - (3 if j != "gripper" else -3) for j in JOINTS}
-            moment = now + step * 0.025
-            runner.last_prediction = moment
-            goals = runner.apply(previous, moment)
-            for j in JOINTS:
-                current = (goals[j] - previous[j]) / 0.025
-                self.assertLessEqual(abs(current), MAX_SPEED + 1e-8)
-                self.assertLessEqual(abs(current - velocity[j]), MAX_ACCELERATION * 0.025 + 1e-6)
-                velocity[j] = current
-            previous = goals
+        ranges = control_limits(self.lab.calibration)
+        far = {
+            j: min(ranges[j]["max"], max(ranges[j]["min"], measured[j] + 40)) for j in JOINTS
+        }
+        runner.predicted = dict(far)
+        runner.last_prediction = time.monotonic()
+        self.assertEqual(runner.apply(measured, time.monotonic()), far)
+        self.assertEqual(runner.commanded, far)
         with self.assertRaisesRegex(ValueError, "cannot renew"):
             self.lab.control_heartbeat({"expected_generation": self.lab.generation})
         runner.operator_deadline = time.monotonic() - 1
         with self.assertRaisesRegex(HardwareError, "heartbeat"):
-            runner.apply(previous, time.monotonic())
+            runner.apply(measured, time.monotonic())
         runner.operator_deadline = time.monotonic() + 10
         runner.run_deadline = time.monotonic() - 1
         self.assertTrue(runner.expired())
 
-    def test_small_prediction_overshoots_keep_motion_inside_original_bounds(self):
+    def test_targets_past_the_calibrated_range_are_held_at_its_edge(self):
+        """A folded arm rests on its limit; a policy asking a little past it keeps running."""
         runner = self.prepare()
         with patch.object(runner, "_run"):
             runner.start(self.run_payload())
             runner.thread.join(timeout=1)
         ranges = control_limits(self.lab.calibration)
         calibration = copy.deepcopy(self.lab.calibration)
+        measured = dict(self.lab.positions)
         for side, direction in (("min", -1), ("max", 1)):
-            with self.subTest(side=side):
-                measured = {j: ranges[j][side] - direction * 0.1 for j in JOINTS}
-                runner.commanded = dict(measured)
-                runner.velocity = dict.fromkeys(JOINTS, 0.0)
-                predicted = {j: ranges[j][side] + direction * PREDICTION_TOLERANCE for j in JOINTS}
-                runner.predicted = dict(predicted)
-                now = time.monotonic()
-                runner.last_apply = now
-                previous, velocity = measured, dict.fromkeys(JOINTS, 0.0)
-                for step in range(1, 201):
-                    moment = now + step * 0.025
-                    runner.last_prediction = moment
-                    goals = runner.apply(previous, moment)
-                    for j in JOINTS:
-                        self.assertGreaterEqual(goals[j], ranges[j]["min"])
-                        self.assertLessEqual(goals[j], ranges[j]["max"])
-                        current = (goals[j] - previous[j]) / 0.025
-                        self.assertLessEqual(abs(current), MAX_SPEED + 1e-8)
-                        self.assertLessEqual(
-                            abs(current - velocity[j]), MAX_ACCELERATION * 0.025 + 1e-6
-                        )
-                        velocity[j] = current
-                    previous = goals
-                self.assertEqual(runner.predicted, predicted)
-                self.assertEqual(self.lab.calibration, calibration)
+            for overshoot in (0.5, 6.4, 90.0):
+                with self.subTest(side=side, overshoot=overshoot):
+                    runner.predicted = {j: ranges[j][side] + direction * overshoot for j in JOINTS}
+                    runner.last_prediction = time.monotonic()
+                    goals = runner.apply(measured, time.monotonic())
+                    self.assertEqual(goals, {j: ranges[j][side] for j in JOINTS})
+        self.assertEqual(self.lab.calibration, calibration)
 
-    def test_large_or_nonfinite_prediction_overshoots_still_reject_without_goals(self):
+    def test_nonfinite_predictions_still_reject_without_goals(self):
         runner = self.prepare()
         with patch.object(runner, "_run"):
             runner.start(self.run_payload())
             runner.thread.join(timeout=1)
         measured = dict(self.lab.positions)
-        ranges = control_limits(self.lab.calibration)
         for joint in JOINTS:
-            for target in (
-                ranges[joint]["min"] - PREDICTION_TOLERANCE - 0.001,
-                ranges[joint]["max"] + PREDICTION_TOLERANCE + 0.001,
-                float("nan"),
-                float("inf"),
-            ):
+            for target in (float("nan"), float("inf"), float("-inf")):
                 with self.subTest(joint=joint, target=target):
                     runner.commanded = dict(measured)
                     runner.predicted = dict(measured) | {joint: target}
@@ -532,15 +496,15 @@ class PolicyTests(unittest.TestCase):
         self.assertGreater(min(gaps), 0.8 / runner.model["fps"])
         self.lab.stop()
 
-    def test_a_policy_that_keeps_falling_behind_is_still_stopped(self):
+    def test_a_policy_slower_than_the_frame_rate_keeps_running(self):
+        """Every step late: the run continues at the policy's own pace while the arm holds."""
         runner, calls = self.run_with_slow_predictions(lambda number: True)
-        deadline = time.monotonic() + 4
-        while self.lab.mode != "idle" and time.monotonic() < deadline:
+        deadline = time.monotonic() + 3
+        while runner.steps < 6 and self.lab.mode == "policy" and time.monotonic() < deadline:
             time.sleep(0.01)
-        self.assertEqual(self.lab.mode, "idle")
-        self.assertFalse(self.lab.torque)
-        self.assertIn("cannot maintain the trained frame rate", self.lab.error)
-        self.assertLessEqual(len(calls), 4)
+        self.assertEqual(self.lab.mode, "policy", self.lab.error)
+        self.assertGreaterEqual(runner.steps, 6)
+        self.lab.stop()
 
     def planning_takes(self, runner, seconds):
         """Make the first prediction after every reset take ``seconds``, like a policy
@@ -558,64 +522,34 @@ class PolicyTests(unittest.TestCase):
 
         runner.runtime.request = request
 
-    def test_slow_planning_fails_the_check_and_says_how_to_run_the_policy(self):
-        runner, _, _ = self.install()
-        runner.load({"policy_id": "pen"})
-        self.lab.camera = Camera()
-        self.planning_takes(runner, 0.6)
-        runner.preflight({"camera_index": 0})
-        check = runner.check
-        self.assertFalse(check["passed"])
-        self.assertTrue(check["planning_pause_needed"])
-        self.assertEqual(check["prediction_limit_ms"], 500)
-        self.assertRegex(check["message"], r"takes 6\d\d ms to plan .* 500 ms is allowed")
-        self.assertIn("allow planning pauses", check["message"])
-        # The slow prediction was measured, not cut off: the policy is still loaded.
-        self.assertFalse(runner.runtime.closed)
-        self.assertEqual(runner.phase, "ready")
-
-        runner.preflight({"camera_index": 0, "allow_planning_pause": True})
-        check = runner.check
-        self.assertTrue(check["passed"], check)
-        self.assertTrue(check["planning_pause"])
-        self.assertFalse(check["planning_pause_needed"])
-        self.assertEqual(check["prediction_limit_ms"], PLANNING_PAUSE_SECONDS * 1000)
-        self.assertEqual(self.buses, [])
-        with self.assertRaisesRegex(ValueError, "Choose a camera"):
-            runner.preflight({"camera_index": 0, "allow_planning_pause": "yes"})
-
-    def test_planning_slower_than_the_pause_allows_cannot_be_run_at_all(self):
+    def test_slow_planning_passes_the_check_and_says_how_long_it_takes(self):
+        """A policy that thinks for 0.6 or 1.6 s between moves is run, not refused."""
         runner, _, _ = self.install()
         runner.load({"policy_id": "pen"})
         self.lab.camera = Camera()
         self.planning_takes(runner, 1.6)
-        with patch("policy.PLANNING_PAUSE_SECONDS", 1.5):
-            for payload in (
-                {"camera_index": 0},
-                {"camera_index": 0, "allow_planning_pause": True},
-            ):
-                runner.preflight(payload)
-                self.assertFalse(runner.check["passed"])
-                self.assertFalse(runner.check["planning_pause_needed"])
-                self.assertIn("cannot sustain", runner.check["message"])
+        runner.preflight({"camera_index": 0})
+        check = runner.check
+        self.assertTrue(check["passed"], check)
+        self.assertFalse(check["planning_pause_needed"])
+        self.assertRegex(check["message"], r"up to 1[67]\d\d ms")
+        self.assertIn("while the arm holds", check["message"])
+        # The slow prediction was measured, not cut off: the policy is still loaded.
+        self.assertFalse(runner.runtime.closed)
+        self.assertEqual(runner.phase, "ready")
+        self.assertEqual(self.buses, [])
+        with self.assertRaisesRegex(ValueError, "Choose a camera"):
+            runner.preflight({"camera_index": 0, "allow_planning_pause": "yes"})
 
-    def test_a_run_pauses_for_planning_only_when_its_check_allowed_it(self):
+    def test_the_old_planning_pause_choice_no_longer_matters(self):
         runner = self.prepare()
-        runner.check = {
-            "passed": True,
-            "camera_index": 0,
-            "planning_pause": True,
-            "checked_at": time.monotonic(),
-        }
-        # The check and the run must agree, in both directions.
-        with self.assertRaisesRegex(ValueError, "Check this policy"):
-            runner.start(self.run_payload())
-        runner.check["planning_pause"] = False
-        with self.assertRaisesRegex(ValueError, "Check this policy"):
-            runner.start(self.run_payload() | {"allow_planning_pause": True})
+        runner.check = {"passed": True, "camera_index": 0, "planning_pause": True}
+        runner.check["checked_at"] = time.monotonic()
+        runner.start(self.run_payload())
+        self.assertEqual(self.lab.mode, "policy")
+        self.lab.stop()
         with self.assertRaisesRegex(ValueError, "Run duration"):
             runner.start(self.run_payload() | {"allow_planning_pause": 1})
-        self.assertEqual(self.lab.mode, "manual")
 
     def run_slow_planner(self, pause):
         runner = self.prepare()
@@ -635,23 +569,14 @@ class PolicyTests(unittest.TestCase):
         threading.Thread(target=control_loop, daemon=True).start()
         return runner
 
-    def test_an_allowed_planning_pause_does_not_stop_the_run(self):
-        runner = self.run_slow_planner(True)
+    def test_slow_planning_never_stops_a_run(self):
+        runner = self.run_slow_planner(False)
         deadline = time.monotonic() + 3
         while runner.steps < 6 and self.lab.mode == "policy" and time.monotonic() < deadline:
             time.sleep(0.01)
         self.assertEqual(self.lab.mode, "policy", self.lab.error)
         self.assertGreaterEqual(runner.steps, 6)
         self.lab.stop()
-
-    def test_without_the_allowance_slow_planning_disables_torque_as_before(self):
-        self.run_slow_planner(False)
-        deadline = time.monotonic() + 3
-        while self.lab.mode != "idle" and time.monotonic() < deadline:
-            time.sleep(0.01)
-        self.assertEqual(self.lab.mode, "idle")
-        self.assertFalse(self.lab.torque)
-        self.assertIn("fell behind", self.lab.error)
 
     def camera_at(self, rate):
         """A camera that produces a new frame ``rate`` times a second."""
@@ -697,40 +622,66 @@ class PolicyTests(unittest.TestCase):
         self.assertEqual(check["fresh_frames"], check["samples"])
         self.assertTrue(check["passed"], check)
 
-    def test_a_camera_slower_than_the_policy_fails_the_check(self):
+    def test_a_camera_slower_than_the_policy_still_passes_the_check(self):
         runner, _, _ = self.install()
         runner.load({"policy_id": "pen"})
-        # The policy runs at 13 FPS. At 4 FPS most steps see a frame older than one step
-        # whatever the machine's timer does; at 8 every other step sat exactly on the limit.
-        self.camera_at(4)
+        self.camera_at(4)  # The policy runs at 13 FPS.
         runner.preflight({"camera_index": 0})
         check = runner.check
-        self.assertFalse(check["passed"])
+        self.assertTrue(check["passed"], check)
         self.assertLess(check["fresh_frames"], check["samples"] * 0.9)
-        self.assertEqual(check["camera_fresh_frames"], {FRONT: check["fresh_frames"]})
-        self.assertIn("cannot sustain", check["message"])
 
-    def test_a_camera_slower_than_the_policy_stops_a_run(self):
-        runner = self.prepare()
-        self.camera_at(8)
-        runner.start(self.run_payload())
-
+    def keep_running(self, runner, generation):
         def control_loop():
             while self.lab.mode == "policy":
                 try:
+                    runner.heartbeat({"expected_generation": generation})
                     runner.apply(dict(self.lab.positions), time.monotonic())
                 except HardwareError as error:
-                    self.lab.stop(str(error))
+                    # "Authority was revoked" means the run already stopped itself; its
+                    # own reason stands, as the motor loop leaves it.
+                    if "revoked" not in str(error):
+                        self.lab.stop(str(error))
+                    return
+                except ValueError:
                     return
                 time.sleep(0.01)
 
         threading.Thread(target=control_loop, daemon=True).start()
-        deadline = time.monotonic() + 5
-        while self.lab.mode != "idle" and time.monotonic() < deadline:
+
+    def test_a_camera_slower_than_the_policy_does_not_stop_a_run(self):
+        runner = self.prepare()
+        self.camera_at(8)
+        runner.start(self.run_payload())
+        self.keep_running(runner, self.lab.generation)
+        deadline = time.monotonic() + 3
+        while runner.steps < 20 and self.lab.mode == "policy" and time.monotonic() < deadline:
             time.sleep(0.01)
+        self.assertEqual(self.lab.mode, "policy", self.lab.error)
+        self.assertGreaterEqual(runner.steps, 20)
+        self.lab.stop()
+
+    def test_a_frozen_camera_still_stops_a_run(self):
+        runner = self.prepare()
+        frozen = time.monotonic()
+
+        def latest(index, max_age=0.15):
+            if time.monotonic() - frozen > max_age:
+                raise RuntimeError("Camera frame is stale")
+            return {"jpeg": b"frame", "captured_monotonic": frozen}
+
+        self.lab.camera = Camera()
+        self.lab.camera.latest_timed_jpeg = latest
+        self.lab.camera.read_latest_timed = lambda index, timeout: (b"frame", frozen)
+        with patch("policy.CAMERA_STALE_SECONDS", 0.4):
+            runner.start(self.run_payload())
+            self.keep_running(runner, self.lab.generation)
+            deadline = time.monotonic() + 4
+            while self.lab.mode != "idle" and time.monotonic() < deadline:
+                time.sleep(0.01)
         self.assertEqual(self.lab.mode, "idle")
         self.assertFalse(self.lab.torque)
-        self.assertIn("camera fell below the trained frame rate", self.lab.error)
+        self.assertIn("stale", self.lab.error)
 
     def chunked(self, runner, size):
         """Make the fake policy plan ``size`` actions at a time, like ACT and SmolVLA: the
@@ -777,34 +728,6 @@ class PolicyTests(unittest.TestCase):
         # The check ends by clearing the plan, so whatever comes next plans first.
         self.assertEqual(runner.replay, 0)
 
-    def test_a_slow_camera_still_stops_a_run_on_steps_that_only_replay(self):
-        runner = self.prepare()
-        self.camera_at(8)
-        self.chunked(runner, 1000)
-        runner.start(self.run_payload())
-        generation = self.lab.generation
-
-        def control_loop():
-            while self.lab.mode == "policy":
-                try:
-                    # The camera check needs about two seconds of steps, as long as one
-                    # operator heartbeat lasts, so keep the operator present as the page does.
-                    runner.heartbeat({"expected_generation": generation})
-                    runner.apply(dict(self.lab.positions), time.monotonic())
-                except HardwareError as error:
-                    self.lab.stop(str(error))
-                    return
-                except ValueError:
-                    return
-                time.sleep(0.01)
-
-        threading.Thread(target=control_loop, daemon=True).start()
-        deadline = time.monotonic() + 5
-        while self.lab.mode != "idle" and time.monotonic() < deadline:
-            time.sleep(0.01)
-        self.assertEqual(self.lab.mode, "idle")
-        self.assertIn("camera fell below the trained frame rate", self.lab.error)
-
     def test_a_policy_that_does_not_report_a_plan_gets_images_on_every_step(self):
         runner, _, _ = self.install()
         runner.load({"policy_id": "pen"})
@@ -849,13 +772,13 @@ class PolicyTests(unittest.TestCase):
         self.assertEqual(check["fresh_frames"], 0)
         self.assertAlmostEqual(check["camera_fps"][FRONT], 30, delta=1)
         self.assertTrue(check["passed"], check)
-        # A camera that really delivers too few frames fails, however young its frames.
+        # A camera that delivers fewer frames than the policy steps is reported, and
+        # runs: the policy sees its newest frame.
         self.counting_camera(rate=8, age=0.0)
         runner.preflight({"camera_index": 0})
         check = runner.check
-        self.assertEqual(check["fresh_frames"], check["samples"])
         self.assertAlmostEqual(check["camera_fps"][FRONT], 8, delta=1)
-        self.assertFalse(check["passed"])
+        self.assertTrue(check["passed"], check)
 
     def test_a_run_reopens_camera_readers_the_service_closed_after_the_check(self):
         """The check opened the readers; 30 s idle closed them; the run died at once with

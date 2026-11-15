@@ -2767,29 +2767,37 @@ class RobotLab:
 
     def _watchdog(self):
         while not self.finished.wait(0.1):
-            # A delayed watchdog result cannot stop a later controller, including
-            # the manual-to-agent transfer that preserves the serial generation.
+            self._watchdog_check()
+
+    def _watchdog_check(self):
+        # A delayed watchdog result cannot stop a later controller, including
+        # the manual-to-agent transfer that preserves the serial generation.
+        # Control start sets the controller, mode and heartbeat in one locked step; read
+        # them the same way. Read in between, a new session would show the previous
+        # session's old heartbeat and be stopped as it started.
+        with self.lifecycle_lock:
             generation, mode = self.generation, self.mode
-            reason = None
-            if mode == "agent":
-                if self.agent.expired():
-                    reason = "AI operator or execution lease expired; torque disabled"
-            elif mode == "policy":
-                if self.policy.expired():
-                    reason = "Policy operator heartbeat or run duration expired; torque disabled"
-            elif mode not in {"idle", "calibration"} and time.monotonic() - self.heartbeat > (
-                10 if mode in {"setup", "verification"} else 2
-            ):
-                reason = (
-                    "Setup heartbeat timed out; ID work stopped"
-                    if mode == "setup"
-                    else "Browser heartbeat timed out; motor torque disabled"
-                )
-            if reason:
-                try:
-                    self.stop(reason, expected_generation=generation, expected_mode=mode)
-                except RequestError:
-                    pass
+            heartbeat_age = time.monotonic() - self.heartbeat
+        reason = None
+        if mode == "agent":
+            if self.agent.expired():
+                reason = "AI operator or execution lease expired; torque disabled"
+        elif mode == "policy":
+            if self.policy.expired():
+                reason = "Policy operator heartbeat or run duration expired; torque disabled"
+        elif mode not in {"idle", "calibration"} and heartbeat_age > (
+            10 if mode in {"setup", "verification"} else 2
+        ):
+            reason = (
+                "Setup heartbeat timed out; ID work stopped"
+                if mode == "setup"
+                else "Browser heartbeat timed out; motor torque disabled"
+            )
+        if reason:
+            try:
+                self.stop(reason, expected_generation=generation, expected_mode=mode)
+            except RequestError:
+                pass
 
     def close(self):
         self.finished.set()

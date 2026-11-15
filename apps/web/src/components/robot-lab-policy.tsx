@@ -41,8 +41,6 @@ export function RobotLabPolicy({ lab }: { lab: RobotLabState }) {
   const [viewCameras, setViewCameras] = useState<Record<string, number>>({});
   const [stage, setStage] = useState<Stage | null>(null);
   const [failure, setFailure] = useState<{ stage: Stage; message: string } | null>(null);
-  // Set when the check finds a policy that plans slowly: the run waits for one more yes.
-  const [pauseOffer, setPauseOffer] = useState<number | null>(null);
   const [finishAt, setFinishAt] = useState<number | null>(null);
   const [now, setNow] = useState(0);
   const sequence = useRef(0);
@@ -82,7 +80,6 @@ export function RobotLabPolicy({ lab }: { lab: RobotLabState }) {
         )
       : null;
   const camerasReady = views.length > 0 && cameras !== null;
-  const pauseSeconds = policy?.limits?.planning_pause_seconds ?? 3;
   const starting = stage !== null && !running;
   const typeName = (type?: string | null) => (type === 'smolvla' ? 'SmolVLA' : 'ACT');
 
@@ -126,12 +123,11 @@ export function RobotLabPolicy({ lab }: { lab: RobotLabState }) {
     setViewCameras(next);
   }
 
-  function start(allowPause: boolean) {
+  function start() {
     if (!choice || !cameras) return;
     const run = ++sequence.current;
     const task = requiresTask ? lab.task.trim() : undefined;
     setFailure(null);
-    setPauseOffer(null);
     if (task) {
       try {
         localStorage.setItem(taskKey, JSON.stringify({ ...savedTasks(), [choice.id]: task }));
@@ -162,23 +158,10 @@ export function RobotLabPolicy({ lab }: { lab: RobotLabState }) {
           }
           at = 'check';
           setStage('check');
-          status = await robotApi.preflightPolicy(
-            lab.cameraIndex,
-            task,
-            views.length > 1 ? cameras : undefined,
-            allowPause,
-          );
+          status = await robotApi.preflightPolicy(lab.cameraIndex, task, views.length > 1 ? cameras : undefined);
           if (!current()) return abandon();
           const check = status.policy?.preflight;
-          if (!check?.passed) {
-            if (check?.planning_pause_needed && !allowPause) {
-              lab.client.setQueryData(statusKey, status);
-              setPauseOffer(check.max_latency_ms);
-              setStage(null);
-              return undefined;
-            }
-            throw new Error(check?.message ?? 'The camera and speed check did not pass.');
-          }
+          if (!check?.passed) throw new Error(check?.message ?? 'The camera check did not pass.');
           at = 'hold';
           setStage('hold');
           status = await robotApi.startControl({
@@ -203,7 +186,6 @@ export function RobotLabPolicy({ lab }: { lab: RobotLabState }) {
             expected_generation: generation,
             camera_index: lab.cameraIndex,
             ...(views.length > 1 ? { cameras } : {}),
-            ...(allowPause ? { allow_planning_pause: true } : {}),
             duration_seconds: runSeconds,
             ...(task ? { task } : {}),
           });
@@ -272,7 +254,6 @@ export function RobotLabPolicy({ lab }: { lab: RobotLabState }) {
                   onChange={(id) => {
                     setSelected(id);
                     setFailure(null);
-                    setPauseOffer(null);
                   }}
                   options={installed.map((item) => ({
                     value: item.id,
@@ -382,25 +363,10 @@ export function RobotLabPolicy({ lab }: { lab: RobotLabState }) {
                     onChange={(event) => setAttending(event.target.checked)}
                   />
                   <span>
-                    <strong>I am at the arm and its path is clear.</strong>The arm moves slowly (10°/s). Stop, a lost
-                    connection or a late prediction switches the motors off.
+                    <strong>I am at the arm and its path is clear.</strong>The arm moves at the speed the policy was
+                    trained at. Stop or a lost connection switches the motors off.
                   </span>
                 </label>
-                {pauseOffer !== null && !running && (
-                  <Notice kind="warning">
-                    <strong>This policy thinks for up to {Math.round(pauseOffer)} ms between moves.</strong>
-                    That is longer than the usual limit. While it plans, the arm holds still; a pause longer than{' '}
-                    {pauseSeconds} s still switches the motors off.
-                    <div className="robot-lab-actions">
-                      <button className="primary-button" disabled={!canStart} onClick={() => start(true)}>
-                        Allow planning pauses and start
-                      </button>
-                      <button className="text-button" onClick={() => setPauseOffer(null)}>
-                        Cancel
-                      </button>
-                    </div>
-                  </Notice>
-                )}
                 {(starting || running || failure) && (
                   <ol className="robot-lab-run-steps" aria-label="Run progress">
                     {stages.map((item, index) => {
@@ -460,7 +426,7 @@ export function RobotLabPolicy({ lab }: { lab: RobotLabState }) {
                     <button
                       className="primary-button robot-lab-run-button"
                       disabled={!canStart}
-                      onClick={() => start(false)}
+                      onClick={() => start()}
                     >
                       {starting ? 'Starting…' : 'Start run'}
                     </button>

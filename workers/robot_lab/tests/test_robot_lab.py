@@ -1050,6 +1050,28 @@ class SafetyTests(unittest.TestCase):
         self.assertFalse(self.buses[-1].opened)
         self.assertIn("heartbeat", self.lab.error)
 
+    def test_watchdog_never_stops_a_session_that_is_still_starting(self):
+        # The previous session ended long ago, so the remembered heartbeat is stale.
+        self.lab.heartbeat = time.monotonic() - 60
+        checks = []
+        load = self.lab.rest_positions.load
+
+        def load_during_watchdog(*args):
+            # The watchdog thread looks while control start sets up the new session.
+            thread = threading.Thread(target=self.lab._watchdog_check, daemon=True)
+            thread.start()
+            thread.join(0.3)
+            checks.append(thread)
+            return load(*args)
+
+        with patch.object(self.lab.rest_positions, "load", side_effect=load_during_watchdog):
+            self.start()
+        checks[0].join(2)
+        self.assertFalse(checks[0].is_alive())
+        self.assertEqual(self.lab.mode, "manual")
+        self.assertTrue(self.lab.torque)
+        self.assertIsNone(self.lab.error)
+
     def test_recording_deadlines_do_not_accumulate_processing_jitter(self):
         from types import SimpleNamespace
 
