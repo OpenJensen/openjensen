@@ -188,7 +188,7 @@ test('projects move in from another workspace and are removed only on the second
   const calls: { method: string; path: string; body?: unknown }[] = [];
   const nearby = [
     {
-      path: '/home/robot/.local/share/older-workspace',
+      path: '/srv/robot/.local/share/older-workspace',
       label: '~/.local/share/older-workspace',
       available: true,
       message: null,
@@ -205,7 +205,7 @@ test('projects move in from another workspace and are removed only on the second
       ],
     },
     {
-      path: '/home/robot/busy-workspace',
+      path: '/srv/robot/busy-workspace',
       label: '~/busy-workspace',
       available: false,
       message: 'Open in another OpenJensen app. Close it to move projects from here.',
@@ -264,7 +264,7 @@ test('projects move in from another workspace and are removed only on the second
     {
       method: 'POST',
       path: '/api/v1/projects/move',
-      body: { workspace: '/home/robot/.local/share/older-workspace', project_id: 'pen' },
+      body: { workspace: '/srv/robot/.local/share/older-workspace', project_id: 'pen' },
     },
     { method: 'DELETE', path: '/api/v1/projects/beta' },
   ]);
