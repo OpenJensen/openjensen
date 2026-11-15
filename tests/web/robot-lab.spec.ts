@@ -227,21 +227,18 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin', 
         return route.fulfill({ json: state.status });
       }
       if (action === '/policy/preflight') {
-        const slow = state.policyPlanningMs > 500 && !body.allow_planning_pause;
+        // Planning time is reported, not judged: the arm holds while the policy plans.
         state.status.policy.preflight = {
-          passed: !slow && !state.policyCheckFailure,
+          passed: !state.policyCheckFailure,
           camera_index: body.camera_index,
           ...(body.cameras ? { cameras: body.cameras } : {}),
-          planning_pause: !!body.allow_planning_pause,
-          planning_pause_needed: slow,
-          prediction_limit_ms: body.allow_planning_pause ? 1500 : 500,
           checked_at: performance.now() / 1000,
           measured_fps: 13,
           mean_latency_ms: 20,
           max_latency_ms: state.policyPlanningMs,
-          message: slow
-            ? 'This policy takes 680 ms to plan its next actions; 500 ms is allowed.'
-            : state.policyCheckFailure || 'Camera and inference meet the frame rate',
+          message:
+            state.policyCheckFailure ||
+            `Cameras deliver frames and the policy answers; it plans in up to ${state.policyPlanningMs} ms while the arm holds.`,
         };
         return route.fulfill({ json: state.status });
       }
@@ -3039,23 +3036,18 @@ test('an arm plugged in after the page opened is chosen without a click', async 
   expect(state.errors).toEqual([]);
 });
 
-test('a policy that plans slowly runs only after the operator allows planning pauses', async ({ page }, testInfo) => {
+test('a policy that plans slowly runs straight away while the arm holds between plans', async ({ page }, testInfo) => {
   const state = await fixture(page, true, 'Darwin', false);
-  state.policyPlanningMs = 680;
+  state.policyPlanningMs = 1680;
   await openTab(page, 'Run policy');
-  const allow = page.getByRole('button', { name: 'Allow planning pauses and start', exact: true });
-  await expect(allow).toHaveCount(0);
+  await expect(page.getByText('The arm moves at the speed the policy was trained at.', { exact: false })).toBeVisible();
   await atTheArm(page).check();
   await startRun(page).click();
-  // The check found the policy too slow for the usual limit: the run waits for one more yes.
-  await expect(page.getByText('This policy thinks for up to 680 ms between moves.', { exact: true })).toBeVisible();
-  expect(writes(state, '/policy/preflight').at(-1)?.body).toEqual({ camera_index: 0 });
-  expect(writes(state, '/control/start')).toEqual([]);
-  await page.screenshot({ path: testInfo.outputPath('run-policy-planning-pause.png'), fullPage: true });
-  await allow.click();
   await expect.poll(() => writes(state, '/policy/start').length).toBe(1);
-  expect(writes(state, '/policy/preflight').at(-1)?.body).toEqual({ camera_index: 0, allow_planning_pause: true });
-  expect(writes(state, '/policy/start').at(-1)?.body).toMatchObject({ camera_index: 0, allow_planning_pause: true });
+  expect(writes(state, '/policy/preflight').at(-1)?.body).toEqual({ camera_index: 0 });
+  expect(writes(state, '/policy/start').at(-1)?.body).not.toHaveProperty('allow_planning_pause');
+  await expect(page.getByRole('button', { name: 'Allow planning pauses and start', exact: true })).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath('run-policy-slow-planner.png'), fullPage: true });
   await page.getByRole('button', { name: 'Stop arm and disable torque' }).click();
   expect(state.errors).toEqual([]);
 });
