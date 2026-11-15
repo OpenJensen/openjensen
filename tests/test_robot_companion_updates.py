@@ -21,6 +21,8 @@ def service(tmp_path, monkeypatch):
     monkeypatch.setattr(updates.sys, "platform", "linux")
     configuration = tmp_path / "configuration"
     monkeypatch.setenv("XDG_CONFIG_HOME", str(configuration))
+    # No test reads this computer's own LaunchAgents.
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
     source, desired = tmp_path / "installed", tmp_path / "application"
     for tree, body in ((source, "# old\n"), (desired, "# new\n")):
         tree.mkdir()
@@ -276,7 +278,8 @@ def test_unmanaged_application_reports_warning_without_source_change(service):
 
 
 def reports(service, monkeypatch, files):
-    """The paired service is not one this application may replace; it only answers for itself."""
+    """A Mac with no installed service of its own (a tunnel to another computer, for example):
+    the paired service is not one this application may replace; it only answers for itself."""
     monkeypatch.setattr(updates.sys, "platform", "darwin")
     monkeypatch.setattr(updates, "reported_files", lambda pairing: files)
 
@@ -645,3 +648,166 @@ def test_startup_warning_is_exposed_in_update_status(tmp_path, monkeypatch):
         await application.close()
 
     asyncio.run(check())
+
+
+@pytest.fixture
+def mac_service(service, tmp_path, monkeypatch):
+    """The same installed service, registered by the installer as a macOS LaunchAgent."""
+    import plistlib
+
+    monkeypatch.setattr(updates.sys, "platform", "darwin")
+    agent = tmp_path / "home/Library/LaunchAgents" / (updates.LABEL + ".plist")
+    agent.parent.mkdir(parents=True)
+    definition = {
+        "Label": updates.LABEL,
+        "ProgramArguments": service["arguments"],
+        "WorkingDirectory": str(service["source"]),
+        "RunAtLoad": True,
+        "KeepAlive": True,
+        "ThrottleInterval": 10,
+        "EnvironmentVariables": {"PATH": "/usr/bin:/bin", "PYTHONUNBUFFERED": "1"},
+        "StandardOutPath": str(tmp_path / "logs/companion.log"),
+        "StandardErrorPath": str(tmp_path / "logs/companion-error.log"),
+    }
+    agent.write_bytes(plistlib.dumps(definition))
+    agent.chmod(0o600)
+    receipt = dict(json.loads(service["receipt_path"].read_text()))
+    receipt.update(platform="darwin", services=[updates.LABEL, updates.LABEL + ".tunnel"])
+    service["receipt_path"].write_text(json.dumps(receipt))
+    job = {"loaded": True, "path": str(agent), "pid": 4242, "alive": True, "uid": None}
+    commands = []
+
+    def command(*args, **kwargs):
+        commands.append(args)
+        if args[:2] == ("launchctl", "print"):
+            if not job["loaded"]:
+                raise updates.subprocess.CalledProcessError(113, args)
+            # Nested blocks repeat field names; only the top level describes this job.
+            return (
+                f"gui/501/{updates.LABEL} = {{\n\tactive count = 1\n\tpath = {job['path']}\n"
+                "\tstate = running\n\tendpoints = {\n\t\tstate = active\n\t}\n"
+                f"\tpid = {job['pid']}\n"
+                "\tinherited environment = {\n\t\tSECRET => hidden\n\t}\n}\n"
+            )
+        if args[:2] == ("launchctl", "bootout"):
+            job.update(loaded=False, alive=False)
+        if args[:2] == ("launchctl", "bootstrap"):
+            job.update(loaded=True, alive=True, pid=job["pid"] + 1)
+        if args[0] == "ps":
+            uid = job["uid"] if job["uid"] is not None else updates.os.getuid()
+            return f"{uid} {uid} {uid} Sat Nov 14 12:11:55 2026\n"
+        return ""
+
+    def kill(pid, signal):
+        if pid != job["pid"] or not job["alive"]:
+            raise ProcessLookupError(pid)
+
+    monkeypatch.setattr(updates, "command", command)
+    monkeypatch.setattr(updates.os, "kill", kill)
+    monkeypatch.setattr(
+        updates,
+        "process_arguments",
+        lambda pid: definition["ProgramArguments"] if pid == job["pid"] else [],
+    )
+    return {**service, "agent": agent, "definition": definition, "job": job, "commands": commands}
+
+
+def launchd(fixture):
+    return [args[1] for args in fixture["commands"] if args[1] in {"bootout", "bootstrap"}]
+
+
+def test_installer_launch_agent_on_a_mac_updates_with_the_application(mac_service):
+    preserved = {
+        name: mac_service[name].read_bytes()
+        for name in ("python", "token", "agent", "receipt_path", "pairing_path")
+    }
+    value = updates.reconcile(
+        mac_service["desired"], mac_service["pairing_path"], allow_update=True
+    )
+    assert value == {
+        "state": "updated",
+        "message": "Robot control service updated and verified with this application.",
+        "managed": True,
+    }
+    assert launchd(mac_service) == ["bootout", "bootstrap"]
+    assert (mac_service["source"] / "server.py").read_text() == "# new\n"
+    assert (mac_service["data"] / "saved.json").read_text() == "saved captures and calibration"
+    assert all(mac_service[name].read_bytes() == body for name, body in preserved.items())
+
+
+def test_a_mac_service_already_running_this_code_is_left_alone(mac_service):
+    value = updates.reconcile(mac_service["source"], mac_service["pairing_path"], allow_update=True)
+    assert value["state"] == "current" and value["managed"]
+    assert launchd(mac_service) == []
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        "extra environment",
+        "alternate program",
+        "loaded from another file",
+        "another account",
+        "different arguments",
+        "no receipt",
+    ],
+)
+def test_a_mac_service_that_cannot_be_proven_ours_is_never_restarted(mac_service, change):
+    import plistlib
+
+    definition = dict(mac_service["definition"])
+    if change == "extra environment":
+        definition["EnvironmentVariables"] = {"DYLD_INSERT_LIBRARIES": "/tmp/other.dylib"}
+    elif change == "alternate program":
+        definition["Program"] = "/bin/sh"
+    elif change == "loaded from another file":
+        mac_service["job"]["path"] = "/Library/LaunchAgents/other.plist"
+    elif change == "another account":
+        mac_service["job"]["uid"] = updates.os.getuid() + 1
+    elif change == "different arguments":
+        definition["ProgramArguments"] = [*definition["ProgramArguments"][:-1], "/elsewhere"]
+    else:
+        mac_service["receipt_path"].unlink()
+    mac_service["agent"].write_bytes(plistlib.dumps(definition))
+    value = updates.reconcile(
+        mac_service["desired"], mac_service["pairing_path"], allow_update=True
+    )
+    assert value == updates.result("needs_update", updates.HELP)
+    assert launchd(mac_service) == []
+    assert (mac_service["source"] / "server.py").read_text() == "# old\n"
+
+
+def test_a_mac_service_that_fails_to_start_gets_its_previous_code_back(mac_service, monkeypatch):
+    checks = []
+
+    def health(*args):
+        checks.append((mac_service["source"] / "server.py").read_text())
+        if len(checks) == 1:
+            raise RuntimeError("new service failed")
+
+    monkeypatch.setattr(updates, "wait_healthy", health)
+    value = updates.reconcile(
+        mac_service["desired"], mac_service["pairing_path"], allow_update=True
+    )
+    assert "rolled back" in value["message"]
+    assert checks == ["# new\n", "# old\n"]
+    assert launchd(mac_service) == ["bootout", "bootstrap", "bootout", "bootstrap"]
+    assert (mac_service["source"] / "server.py").read_text() == "# old\n"
+
+
+@pytest.mark.skipif(updates.sys.platform != "darwin", reason="Reads arguments the macOS way")
+def test_mac_process_arguments_keep_spaces_exactly(tmp_path):
+    import subprocess
+    import sys
+
+    folder = tmp_path / "Application Support"
+    folder.mkdir()
+    arguments = [sys.executable, "-c", "import time; time.sleep(30)", "--data-dir", str(folder)]
+    process = subprocess.Popen(arguments)
+    try:
+        assert updates.process_arguments(process.pid) == arguments
+        assert updates.mac_process_matches(process.pid, arguments)
+        assert not updates.mac_process_matches(process.pid, arguments[:-1])
+    finally:
+        process.terminate()
+        process.wait(timeout=5)

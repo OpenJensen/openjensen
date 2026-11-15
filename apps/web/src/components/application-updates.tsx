@@ -63,6 +63,8 @@ export function ApplicationUpdates() {
   const operation = value?.operation;
   const busy = confirming || active.has(operation?.phase ?? '') || Boolean(pending);
   const available = value?.state === 'available';
+  // A server that cannot restart itself says why once, instead of offering a button that fails.
+  const updatable = available && Boolean(value?.automatic_update);
   const short = (commit?: string | null) => commit?.slice(0, 8) ?? 'Unknown';
 
   useEffect(() => {
@@ -237,8 +239,8 @@ export function ApplicationUpdates() {
             {value.companion_update.message}
           </p>
         )}
-        {!value?.automatic_update && <p>{value?.setup_message}</p>}
-        {available && !busy && (
+        {!value?.automatic_update && value?.setup_message && <p>{value.setup_message}</p>}
+        {updatable && !busy && (
           <p>Update this server for everyone using it? The workspace will be backed up and the server will restart.</p>
         )}
         {error && (
@@ -265,7 +267,7 @@ export function ApplicationUpdates() {
           <button type="button" className="secondary-button" onClick={() => setOpen(false)}>
             {busy ? 'Close' : 'Cancel'}
           </button>
-          {available && (
+          {updatable && (
             <button type="button" className="primary-button" disabled={busy} onClick={() => void apply()}>
               {confirming ? 'Starting…' : busy ? 'Updating…' : 'Update & restart'}
             </button>
