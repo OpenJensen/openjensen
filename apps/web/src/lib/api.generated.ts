@@ -2960,6 +2960,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/robot-lab/service/restart": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restart Service
+         * @description Restart this computer's robot service so it finds newly connected devices.
+         *
+         *     Returns the restarted service's status. The service stops the arm (torque off),
+         *     closes the policy and finishes a recording before it exits.
+         */
+        post: operations["restart_service_api_v1_robot_lab_service_restart_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/robot-lab/setup/assembled/accept": {
         parameters: {
             query?: never;
@@ -12921,6 +12944,26 @@ export interface operations {
                 };
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    restart_service_api_v1_robot_lab_service_restart_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
