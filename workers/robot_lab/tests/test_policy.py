@@ -638,7 +638,10 @@ class PolicyTests(unittest.TestCase):
                     runner.heartbeat({"expected_generation": generation})
                     runner.apply(dict(self.lab.positions), time.monotonic())
                 except HardwareError as error:
-                    self.lab.stop(str(error))
+                    # "Authority was revoked" means the run already stopped itself; its
+                    # own reason stands, as the motor loop leaves it.
+                    if "revoked" not in str(error):
+                        self.lab.stop(str(error))
                     return
                 except ValueError:
                     return
