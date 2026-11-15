@@ -5339,6 +5339,87 @@
         "title": "NativeReplay",
         "type": "object"
       },
+      "NearbyProject": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "datasets": {
+            "title": "Datasets",
+            "type": "integer"
+          },
+          "here": {
+            "title": "Here",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "jobs": {
+            "title": "Jobs",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "created_at",
+          "datasets",
+          "jobs",
+          "here"
+        ],
+        "title": "NearbyProject",
+        "type": "object"
+      },
+      "NearbyWorkspace": {
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "projects": {
+            "items": {
+              "$ref": "#/components/schemas/NearbyProject"
+            },
+            "title": "Projects",
+            "type": "array"
+          }
+        },
+        "required": [
+          "path",
+          "label",
+          "available",
+          "message",
+          "projects"
+        ],
+        "title": "NearbyWorkspace",
+        "type": "object"
+      },
       "ObservabilityPolicy": {
         "additionalProperties": false,
         "properties": {
@@ -6082,6 +6163,57 @@
           "name"
         ],
         "title": "ProjectCreate",
+        "type": "object"
+      },
+      "ProjectMove": {
+        "additionalProperties": false,
+        "properties": {
+          "project_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Project Id",
+            "type": "string"
+          },
+          "workspace": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Workspace",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspace",
+          "project_id"
+        ],
+        "title": "ProjectMove",
+        "type": "object"
+      },
+      "ProjectRemoval": {
+        "properties": {
+          "datasets": {
+            "title": "Datasets",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "jobs": {
+            "title": "Jobs",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "datasets",
+          "jobs"
+        ],
+        "title": "ProjectRemoval",
         "type": "object"
       },
       "Proposal": {
@@ -13508,6 +13640,117 @@
           }
         },
         "summary": "Create Project"
+      }
+    },
+    "/api/v1/projects/move": {
+      "post": {
+        "description": "Move a project from another workspace on this computer into this one.",
+        "operationId": "move_api_v1_projects_move_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectMove"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Project"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Move",
+        "tags": [
+          "Projects"
+        ]
+      }
+    },
+    "/api/v1/projects/nearby": {
+      "get": {
+        "description": "Other OpenJensen workspaces on this computer, with the projects each holds.",
+        "operationId": "nearby_api_v1_projects_nearby_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/NearbyWorkspace"
+                  },
+                  "title": "Response Nearby Api V1 Projects Nearby Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Nearby",
+        "tags": [
+          "Projects"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}": {
+      "delete": {
+        "description": "Delete a project and its datasets, jobs and recordings from this workspace.",
+        "operationId": "remove_api_v1_projects__project_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectRemoval"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove",
+        "tags": [
+          "Projects"
+        ]
       }
     },
     "/api/v1/projects/{project_id}/agent-sessions": {

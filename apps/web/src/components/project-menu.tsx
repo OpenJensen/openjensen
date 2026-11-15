@@ -4,6 +4,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent
 import { createPortal } from 'react-dom';
 import type { Project } from '@/lib/api';
 import { Icon } from '@/components/icon';
+import { ManageProjectsDialog } from '@/components/project-manage-dialog';
 import './project-menu.css';
 
 type ProjectMenuProps = {
@@ -12,6 +13,7 @@ type ProjectMenuProps = {
   disabled?: boolean;
   onSelect: (id: string) => void;
   onCreate: (name: string) => Promise<unknown>;
+  onChanged: (select?: string) => Promise<unknown> | void;
 };
 
 function CreateProjectDialog({ onCreate, onClose }: Pick<ProjectMenuProps, 'onCreate'> & { onClose: () => void }) {
@@ -112,7 +114,7 @@ function CreateProjectDialog({ onCreate, onClose }: Pick<ProjectMenuProps, 'onCr
   );
 }
 
-export function ProjectMenu({ projects, value, onSelect, onCreate, disabled = false }: ProjectMenuProps) {
+export function ProjectMenu({ projects, value, onSelect, onCreate, onChanged, disabled = false }: ProjectMenuProps) {
   const id = useId();
   const trigger = useRef<HTMLButtonElement>(null);
   const menu = useRef<HTMLDivElement>(null);
@@ -121,9 +123,10 @@ export function ProjectMenu({ projects, value, onSelect, onCreate, disabled = fa
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
   const [creating, setCreating] = useState(false);
+  const [managing, setManaging] = useState(false);
   const [placement, setPlacement] = useState({ left: 16, top: 0, width: 260, height: 320 });
   const selected = projects.find((project) => project.id === value);
-  const expanded = open && !disabled && !creating;
+  const expanded = open && !disabled && !creating && !managing;
 
   function close(restoreFocus = false) {
     setOpen(false);
@@ -144,13 +147,16 @@ export function ProjectMenu({ projects, value, onSelect, onCreate, disabled = fa
     if (index === projects.length) {
       close();
       setCreating(true);
+    } else if (index === projects.length + 1) {
+      close();
+      setManaging(true);
     } else if (projects[index]) {
       onSelect(projects[index].id);
       close(true);
     }
   }
   function keyDown(event: KeyboardEvent) {
-    const last = projects.length;
+    const last = projects.length + 1;
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault();
       setActive((active + (event.key === 'ArrowDown' ? 1 : last)) % (last + 1));
@@ -169,7 +175,7 @@ export function ProjectMenu({ projects, value, onSelect, onCreate, disabled = fa
       const now = event.timeStamp;
       const text = (now - search.current.time < 600 ? search.current.text : '') + event.key.toLowerCase();
       const query = [...text].every((character) => character === text[0]) ? text[0] : text;
-      const labels = [...projects.map((project) => project.name), 'Create project'];
+      const labels = [...projects.map((project) => project.name), 'Create project', 'Manage projects'];
       const match = Array.from({ length: labels.length }, (_, offset) => (active + offset + 1) % labels.length).find(
         (index) => labels[index].toLowerCase().startsWith(query),
       );
@@ -188,7 +194,7 @@ export function ProjectMenu({ projects, value, onSelect, onCreate, disabled = fa
       const above = bounds.top - 22;
       // Measure what the menu holds: an empty list still shows a note, a divider and
       // "Create project…", which is taller than one row per project plus one.
-      const content = menu.current ? menu.current.scrollHeight + 2 : (projects.length + 1) * 44 + 22;
+      const content = menu.current ? menu.current.scrollHeight + 2 : (projects.length + 2) * 44 + 22;
       const desired = Math.min(320, content);
       const upwards = below < desired && above > below;
       const height = Math.max(44, Math.min(desired, upwards ? above : below));
@@ -210,7 +216,7 @@ export function ProjectMenu({ projects, value, onSelect, onCreate, disabled = fa
 
   useEffect(() => {
     if (expanded) {
-      const index = Math.min(active, projects.length);
+      const index = Math.min(active, projects.length + 1);
       if (index !== active) setActive(index);
       items.current[index]?.focus({ preventScroll: true });
       items.current[index]?.scrollIntoView({ block: 'nearest' });
@@ -254,7 +260,7 @@ export function ProjectMenu({ projects, value, onSelect, onCreate, disabled = fa
         onKeyDown={(event) => {
           if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
             event.preventDefault();
-            show(event.key === 'ArrowUp' ? projects.length : undefined);
+            show(event.key === 'ArrowUp' ? projects.length + 1 : undefined);
           } else if (event.key === 'Escape') close();
         }}
       >
@@ -319,9 +325,33 @@ export function ProjectMenu({ projects, value, onSelect, onCreate, disabled = fa
               <Icon name="plus" size={16} />
               <span>Create project…</span>
             </button>
+            <button
+              ref={(element) => {
+                items.current[projects.length + 1] = element;
+              }}
+              type="button"
+              role="menuitem"
+              tabIndex={active === projects.length + 1 ? 0 : -1}
+              className="project-menu-item project-menu-create"
+              onFocus={() => setActive(projects.length + 1)}
+              onClick={() => choose(projects.length + 1)}
+            >
+              <Icon name="folder" size={16} />
+              <span>Manage projects…</span>
+            </button>
           </div>,
           document.body,
         )}
+      {managing && (
+        <ManageProjectsDialog
+          projects={projects}
+          onChanged={onChanged}
+          onClose={() => {
+            setManaging(false);
+            trigger.current?.focus({ preventScroll: true });
+          }}
+        />
+      )}
       {creating && (
         <CreateProjectDialog
           onCreate={onCreate}
