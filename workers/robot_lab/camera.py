@@ -18,6 +18,11 @@ from camera_modes import camera_identity, linux_modes, validate_mode
 MAX_CAMERA_INDEX = 63
 
 
+# How long a background reader keeps reopening a camera that stopped returning frames
+# before it reports the camera as failed.
+READER_RECOVERY_SECONDS = 15.0
+
+
 class CameraPool:
     def __init__(self, dispatcher=None):
         self.dispatcher = dispatcher
@@ -217,19 +222,36 @@ class CameraPool:
             thread.start()
 
     def _read_loop(self, index, stop):
-        failures = 0
+        failures, failing_since = 0, None
         while not stop.is_set():
             try:
                 self.read(index, _background=True, _stop=stop)
-                failures = 0
+                failures, failing_since = 0, None
                 stop.wait(0.001)
             except Exception as error:
                 failures += 1
-                if failures >= 10:
+                failing_since = failing_since or time.monotonic()
+                if time.monotonic() - failing_since >= READER_RECOVERY_SECONDS:
                     with self.frame_lock:
                         self.reader_errors[index] = str(error)
                     return
-                stop.wait(0.01)
+                if failures % 10 == 0:
+                    # A USB camera resets when its cable is jostled, for example by the
+                    # arm it rides on; the open handle then returns nothing. Reopen it.
+                    self._release_handle(index)
+                    stop.wait(0.5)
+                else:
+                    stop.wait(0.01)
+
+    def _release_handle(self, index):
+        """Close one camera's device handle but keep its reader, so the next read reopens."""
+        with self.capture_locks[index]:
+            with self.frame_lock:
+                capture = self.handles.pop(index, None)
+                self.multi_rate_handles.discard(index)
+                self.fixed_rate_handles.discard(index)
+            if capture is not None:
+                capture.release()
 
     def read_latest(self, index=0, max_age=0.5):
         # Never acquire the device lock or wait on VideoCapture.read here.

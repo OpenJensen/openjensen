@@ -82,9 +82,6 @@ export type RobotPolicyState = {
     passed: boolean;
     camera_index: number;
     cameras?: Record<string, number>;
-    planning_pause?: boolean;
-    planning_pause_needed?: boolean;
-    prediction_limit_ms?: number;
     checked_at: number;
     valid_for_ms?: number;
     fps: number;
@@ -97,11 +94,8 @@ export type RobotPolicyState = {
   } | null;
   device: string | null;
   limits: {
-    max_speed: number;
-    max_acceleration: number;
     max_run_seconds: number;
     operator_heartbeat_seconds: number;
-    planning_pause_seconds?: number;
   };
 };
 export type RobotPolicyCatalog = {
@@ -416,18 +410,12 @@ export const robotApi = {
     cameras?: Record<string, number>;
     task?: string;
   }) => request<RobotStatus>('/policy/preview', input, { timeoutMs: 90_000 }),
-  preflightPolicy: (
-    camera_index: number,
-    task?: string,
-    cameras?: Record<string, number>,
-    allowPlanningPause = false,
-  ) =>
+  preflightPolicy: (camera_index: number, task?: string, cameras?: Record<string, number>) =>
     request<RobotStatus>(
       '/policy/preflight',
       {
         camera_index,
         ...(cameras ? { cameras } : {}),
-        ...(allowPlanningPause ? { allow_planning_pause: true } : {}),
         ...(task === undefined ? {} : { task }),
       },
       { timeoutMs: 30_000 },
@@ -436,7 +424,6 @@ export const robotApi = {
     expected_generation: number;
     camera_index: number;
     cameras?: Record<string, number>;
-    allow_planning_pause?: boolean;
     duration_seconds: number;
     task?: string;
   }) =>
