@@ -33,6 +33,7 @@ function Workbench({ children }: { children: ReactNode }) {
     projectId,
     selectProject,
     projectMutation,
+    projectsChanged,
     setSettingsTab,
     navigateStage,
     modules,
@@ -120,6 +121,7 @@ function Workbench({ children }: { children: ReactNode }) {
                 disabled={projects.isPending}
                 onSelect={selectProject}
                 onCreate={(name) => projectMutation.mutateAsync(name)}
+                onChanged={projectsChanged}
               />
             </section>
             <nav
