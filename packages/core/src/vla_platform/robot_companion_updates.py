@@ -1,10 +1,12 @@
-"""Reconcile an attested local Linux robot service with the installed application.
+"""Reconcile an attested local robot service with the installed application.
 
-Pairing with a loopback URL is not proof of locality: it may be an SSH tunnel.
-Only an owned user service, matching live process arguments and matching private
-pairing credential permit replacement. Existing installer receipts must also
-match. Runtime, device data and credentials stay at their existing paths. No
-dependency installation or motor command is issued.
+The service is the one deploy/install_robot_lab.py registers: a systemd user unit
+on Linux or a LaunchAgent on macOS. Pairing with a loopback URL is not proof of
+locality: it may be an SSH tunnel. Only an owned user service, matching live
+process arguments and matching private pairing credential permit replacement.
+Existing installer receipts must also match (on macOS one is required). Runtime,
+device data and credentials stay at their existing paths. No dependency
+installation or motor command is issued.
 
 A service this application may not replace (another platform, a tunnel, an
 installation made by hand) is only asked which code it runs: it reports a
@@ -16,6 +18,7 @@ import contextvars
 import hmac
 import json
 import os
+import plistlib
 import shlex
 import shutil
 import stat
@@ -27,6 +30,19 @@ from pathlib import Path
 from urllib.request import Request, urlopen
 
 UNIT = "openjensen-robot-lab.service"
+LABEL = "com.openjensen.robot-lab"
+# Exactly what the installer writes; anything else could run other code at start.
+AGENT_KEYS = {
+    "Label",
+    "ProgramArguments",
+    "WorkingDirectory",
+    "RunAtLoad",
+    "KeepAlive",
+    "ThrottleInterval",
+    "EnvironmentVariables",
+    "StandardOutPath",
+    "StandardErrorPath",
+}
 DEADLINE = contextvars.ContextVar("robot_service_update_deadline", default=None)
 HELP = (
     "Robot control service update could not be verified automatically. "
@@ -198,6 +214,100 @@ def service_info():
     }
 
 
+def agent_file():
+    return Path.home() / "Library/LaunchAgents" / (LABEL + ".plist")
+
+
+def loaded_agent():
+    """The path, state and process launchd reports for the robot service's own job."""
+    output = command("launchctl", "print", "gui/" + str(os.getuid()) + "/" + LABEL)
+    fields = {}
+    for line in output.splitlines():
+        # Top-level fields only: nested blocks repeat names such as "state".
+        if not line.startswith("\t") or line.startswith("\t\t"):
+            continue
+        key, separator, value = line.strip().partition(" = ")
+        if separator and key in {"path", "state", "pid"}:
+            fields.setdefault(key, value.strip())
+    return fields
+
+
+def process_arguments(pid):
+    """The exact arguments of a running process, spaces included (macOS)."""
+    import ctypes
+
+    library = ctypes.CDLL(None, use_errno=True)
+    maximum = ctypes.c_int(0)
+    size = ctypes.c_size_t(ctypes.sizeof(maximum))
+    names = (ctypes.c_int * 2)(1, 8)  # CTL_KERN, KERN_ARGMAX
+    if library.sysctl(names, 2, ctypes.byref(maximum), ctypes.byref(size), None, 0) != 0:
+        raise OSError(ctypes.get_errno(), "Process arguments are unavailable")
+    buffer = ctypes.create_string_buffer(maximum.value)
+    size = ctypes.c_size_t(maximum.value)
+    names = (ctypes.c_int * 3)(1, 49, pid)  # CTL_KERN, KERN_PROCARGS2
+    # The kernel answers only for this user's own processes.
+    if library.sysctl(names, 3, buffer, ctypes.byref(size), None, 0) != 0:
+        raise OSError(ctypes.get_errno(), "Process arguments are unavailable")
+    raw = buffer.raw[: size.value]
+    count = int.from_bytes(raw[:4], sys.byteorder)
+    position = raw.index(b"\0", 4)  # end of the executable path
+    while position < len(raw) and raw[position] == 0:
+        position += 1
+    values = raw[position:].split(b"\0")
+    if count < 1 or len(values) < count:
+        raise ValueError("The robot process arguments are incomplete")
+    return [os.fsdecode(value) for value in values[:count]]
+
+
+def mac_process_identity(pid):
+    fields = command("ps", "-o", "uid=,ruid=,svuid=,lstart=", "-p", str(pid)).split(None, 3)
+    if len(fields) != 4 or [int(value) for value in fields[:3]] != [os.getuid()] * 3:
+        raise ValueError("The robot process is not owned by this user")
+    # The start time guards against the number being reused by another process.
+    return fields[3].strip()
+
+
+def mac_process_matches(pid, arguments):
+    started = mac_process_identity(pid)
+    running = process_arguments(pid)
+    if mac_process_identity(pid) != started:
+        raise ValueError("The robot process changed during inspection")
+    return running == arguments
+
+
+def agent_info():
+    path = agent_file()
+    if path.is_symlink():
+        raise ValueError("The robot service file is not an owned local agent")
+    body = private_bytes(path, private=False)
+    value = plistlib.loads(body)
+    environment = value.get("EnvironmentVariables", {}) if isinstance(value, dict) else None
+    arguments = value.get("ProgramArguments") if isinstance(value, dict) else None
+    if (
+        not isinstance(value, dict)
+        or set(value) - AGENT_KEYS
+        or value.get("Label") != LABEL
+        or not isinstance(environment, dict)
+        or set(environment) - {"PATH", "PYTHONUNBUFFERED"}
+        or not isinstance(arguments, list)
+        or not all(isinstance(argument, str) for argument in arguments)
+    ):
+        raise ValueError("The robot service has unverified launch settings")
+    loaded = loaded_agent()
+    if loaded.get("state") != "running" or loaded.get("path") != str(path):
+        raise ValueError("The robot service is not running from its installed file")
+    pid = int(loaded["pid"])
+    if not mac_process_matches(pid, arguments):
+        raise ValueError("The running robot process does not match the managed service")
+    return {
+        "arguments": arguments,
+        "unit": str(path),
+        "launch_arguments": arguments,
+        "unit_evidence": [(str(path), body)],
+        "working_directory": value.get("WorkingDirectory"),
+    }
+
+
 def owned_without_other_writers(info):
     if info.st_uid != os.getuid() or info.st_mode & 0o002:
         return False
@@ -221,9 +331,9 @@ def owned_without_other_writers(info):
 
 
 def attest(pairing):
-    if sys.platform != "linux" or pairing.get("url") != "http://127.0.0.1:18101":
-        raise ValueError("Only the verified local Linux service can update automatically")
-    info = service_info()
+    if sys.platform not in {"linux", "darwin"} or pairing.get("url") != "http://127.0.0.1:18101":
+        raise ValueError("Only the verified local service can update automatically")
+    info = service_info() if sys.platform == "linux" else agent_info()
     arguments = info["arguments"]
     if len(arguments) != 10 or arguments[2::2] != [
         "--host",
@@ -251,15 +361,18 @@ def attest(pairing):
     try:
         receipt_body = private_bytes(receipt_path)
     except FileNotFoundError:
-        # Older local deployments predate installer receipts. The exact owned
+        # Older Linux deployments predate installer receipts. The exact owned
         # systemd unit, live process tree and matching private pairing credential
         # above/below attest the same service without guessing installation paths.
+        if sys.platform != "linux":
+            raise
         receipt_body = None
     if receipt_body is not None:
         receipt = json.loads(receipt_body)
         if any(receipt.get(key) != value for key, value in expected.items()):
             raise ValueError("The installer receipt does not match the running service")
-        if receipt.get("platform") != "linux" or UNIT not in receipt.get("services", []):
+        name = UNIT if sys.platform == "linux" else LABEL
+        if receipt.get("platform") != sys.platform or name not in receipt.get("services", []):
             raise ValueError("The service is not registered by the local installer")
     token = private_bytes(token_file, 4096).decode().strip()
     if not isinstance(pairing.get("token"), str) or not hmac.compare_digest(
@@ -417,7 +530,47 @@ def idle(pairing):
 
 
 def control(action):
-    command("systemctl", "--user", action, UNIT, timeout=25)
+    if sys.platform != "darwin":
+        command("systemctl", "--user", action, UNIT, timeout=25)
+        return
+    domain = "gui/" + str(os.getuid())
+    if action == "start":
+        command("launchctl", "bootstrap", domain, str(agent_file()), timeout=25)
+        return
+    try:
+        pid = int(loaded_agent()["pid"])
+    except subprocess.CalledProcessError:
+        return  # Not loaded: already stopped.
+    except KeyError, ValueError:
+        pid = None
+    try:
+        command("launchctl", "bootout", domain + "/" + LABEL, timeout=25)
+    except subprocess.CalledProcessError:
+        pass  # Already unloading; the wait below decides.
+    # launchd answers before the process has exited and released the serial port.
+    deadline = time.monotonic() + remaining(25)
+    while running(pid) or agent_loaded():
+        if time.monotonic() > deadline:
+            raise RuntimeError("The robot service did not stop")
+        time.sleep(0.1)
+
+
+def running(pid):
+    if pid is None:
+        return False
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError, PermissionError:
+        return False  # Exited; the number may already belong to another account.
+
+
+def agent_loaded():
+    try:
+        command("launchctl", "print", "gui/" + str(os.getuid()) + "/" + LABEL, timeout=5)
+        return True
+    except subprocess.CalledProcessError:
+        return False
 
 
 def wait_healthy(pairing, expected):

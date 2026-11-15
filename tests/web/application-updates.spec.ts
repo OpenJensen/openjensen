@@ -266,32 +266,21 @@ test('unavailable browser storage keeps the workspace and update dialog usable',
   expect(errors).toEqual([]);
 });
 
-test('an available update replaces check with update even without legacy operator configuration', async ({ page }) => {
-  let writes = 0;
+test('a server that cannot restart itself says how to fix it once and offers no update button', async ({ page }) => {
+  const writes: unknown[] = [];
+  const setup = 'Run jensen app install once on this computer; after that, Update works from here.';
   await page.route('**/api/v1/updates**', (route) => {
-    if (route.request().method() === 'POST') {
-      writes += 1;
-      return route.fulfill({
-        status: 409,
-        json: { detail: 'Restart this older installation with jensen serve, then retry.' },
-      });
-    }
-    return route.fulfill({
-      json: {
-        ...initial,
-        automatic_update: false,
-        setup_message: 'This installation uses the standard application launcher.',
-      },
-    });
+    if (route.request().method() === 'POST') writes.push(route.request().postDataJSON());
+    return route.fulfill({ json: { ...initial, automatic_update: false, setup_message: setup } });
   });
   await page.goto('/dashboard/');
-  await page.getByRole('button', { name: 'Version and updates' }).click();
+  const chip = page.getByRole('button', { name: 'Version and updates' });
+  await expect(chip).toHaveText('Update available');
+  await chip.click();
   const dialog = page.getByRole('dialog', { name: 'OpenJensen updates' });
-  await expect(dialog.getByRole('button', { name: 'Check for updates' })).toHaveCount(0);
-  await expect(dialog.getByRole('button', { name: 'Update & restart' })).toBeEnabled();
-  expect(writes).toBe(0);
-  await dialog.getByRole('button', { name: 'Update & restart' }).click();
-  await expect(dialog.getByRole('alert')).toContainText('Restart this older installation');
-  await expect(dialog.getByRole('button', { name: 'Update & restart' })).toBeEnabled();
-  expect(writes).toBe(1);
+  await expect(dialog.getByText(setup, { exact: true })).toHaveCount(1);
+  await expect(dialog).not.toContainText('Update this server for everyone');
+  await expect(dialog.getByRole('button', { name: 'Update & restart' })).toHaveCount(0);
+  await expect(dialog.getByRole('alert')).toHaveCount(0);
+  expect(writes).toEqual([]);
 });
