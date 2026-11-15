@@ -17934,6 +17934,26 @@
         ]
       }
     },
+    "/api/v1/robot-lab/service/restart": {
+      "post": {
+        "description": "Restart this computer's robot service so it finds newly connected devices.\n\nReturns the restarted service's status. The service stops the arm (torque off),\ncloses the policy and finishes a recording before it exits.",
+        "operationId": "restart_service_api_v1_robot_lab_service_restart_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Restart Service",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
     "/api/v1/robot-lab/setup/assembled/accept": {
       "post": {
         "operationId": "robot_lab_post_setup_assembled_accept",
