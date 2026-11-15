@@ -1351,6 +1351,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects/move": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Move
+         * @description Move a project from another workspace on this computer into this one.
+         */
+        post: operations["move_api_v1_projects_move_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/nearby": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Nearby
+         * @description Other OpenJensen workspaces on this computer, with the projects each holds.
+         */
+        get: operations["nearby_api_v1_projects_nearby_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove
+         * @description Delete a project and its datasets, jobs and recordings from this workspace.
+         */
+        delete: operations["remove_api_v1_projects__project_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects/{project_id}/agent-sessions": {
         parameters: {
             query?: never;
@@ -5523,6 +5583,34 @@ export interface components {
             /** Units */
             units: string[];
         };
+        /** NearbyProject */
+        NearbyProject: {
+            /** Created At */
+            created_at: string;
+            /** Datasets */
+            datasets: number;
+            /** Here */
+            here: boolean;
+            /** Id */
+            id: string;
+            /** Jobs */
+            jobs: number;
+            /** Name */
+            name: string;
+        };
+        /** NearbyWorkspace */
+        NearbyWorkspace: {
+            /** Available */
+            available: boolean;
+            /** Label */
+            label: string;
+            /** Message */
+            message: string | null;
+            /** Path */
+            path: string;
+            /** Projects */
+            projects: components["schemas"]["NearbyProject"][];
+        };
         /** ObservabilityPolicy */
         ObservabilityPolicy: {
             /**
@@ -5802,6 +5890,24 @@ export interface components {
         };
         /** ProjectCreate */
         ProjectCreate: {
+            /** Name */
+            name: string;
+        };
+        /** ProjectMove */
+        ProjectMove: {
+            /** Project Id */
+            project_id: string;
+            /** Workspace */
+            workspace: string;
+        };
+        /** ProjectRemoval */
+        ProjectRemoval: {
+            /** Datasets */
+            datasets: number;
+            /** Id */
+            id: string;
+            /** Jobs */
+            jobs: number;
             /** Name */
             name: string;
         };
@@ -9979,6 +10085,90 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Project"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    move_api_v1_projects_move_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectMove"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Project"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    nearby_api_v1_projects_nearby_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NearbyWorkspace"][];
+                };
+            };
+        };
+    };
+    remove_api_v1_projects__project_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectRemoval"];
                 };
             };
             /** @description Validation Error */

@@ -126,6 +126,8 @@ export type PolicyOptions = {
 };
 
 export type Project = components['schemas']['Project'];
+export type NearbyWorkspace = components['schemas']['NearbyWorkspace'];
+export type ProjectRemoval = components['schemas']['ProjectRemoval'];
 export type Job = components['schemas']['Job'];
 export type DatasetProfile = components['schemas']['DatasetProfile'];
 export type Capability = components['schemas']['Capability'];
@@ -379,6 +381,12 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ name }),
     }),
+  // Moving copies datasets and checkpoints when the other workspace is on another disk.
+  nearbyProjects: () => request<NearbyWorkspace[]>('/projects/nearby', undefined, 60_000),
+  moveProject: (workspace: string, project_id: string) =>
+    request<Project>('/projects/move', { method: 'POST', body: JSON.stringify({ workspace, project_id }) }, 3_600_000),
+  removeProject: (id: string) =>
+    request<ProjectRemoval>(`/projects/${encodeURIComponent(id)}`, { method: 'DELETE' }, 600_000),
   jobs: (projectId: string) => request<Job[]>(`/projects/${encodeURIComponent(projectId)}/jobs`),
   inspect: (projectId: string, body: IntakeRequest) =>
     request<Job>(

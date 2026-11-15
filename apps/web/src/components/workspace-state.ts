@@ -201,6 +201,15 @@ export function useWorkbenchState() {
       selectProject(project.id);
     },
   });
+  // After a project moves in or is removed: read the list again, then show the moved
+  // project, or another one when the open project was removed.
+  async function projectsChanged(next?: string) {
+    const refreshed = await projects.refetch();
+    void queryClient.invalidateQueries();
+    const list = refreshed.data ?? [];
+    if (next) selectProject(next);
+    else if (!list.some((item) => item.id === projectId) && list[0]) selectProject(list[0].id);
+  }
   const project = projects.data?.find((item) => item.id === projectId);
   function openDataset(entry: LibraryDataset) {
     selectProject(entry.project_id);
@@ -517,6 +526,7 @@ export function useWorkbenchState() {
   const stage = workspaceRoutes[activeStage];
 
   return {
+    projectsChanged,
     projectId,
     requestedWorkJob,
     manualTeachingInstruction,
