@@ -249,24 +249,65 @@ class LatestCameraTests(unittest.TestCase):
 
     def test_repeated_capture_failures_are_bounded_and_visible(self):
         read = Mock(return_value=(False, None))
-        released = []
+        released, opened = [], []
         capture = SimpleNamespace(
             isOpened=lambda: True,
             set=lambda *a: None,
             read=read,
             release=lambda: released.append(1),
         )
+        cv = self.fake_cv(capture)
+        cv.VideoCapture = lambda *args: opened.append(1) or capture
         pool = CameraPool()
-        with patch.dict(sys.modules, cv2=self.fake_cv(capture)):
+        with (
+            patch.dict(sys.modules, cv2=cv),
+            patch("camera.READER_RECOVERY_SECONDS", 0.8),
+        ):
             pool.start_reader()
             thread = pool.readers[0][0]
-            thread.join(timeout=2)
+            thread.join(timeout=3)
             self.assertFalse(thread.is_alive())
-            self.assertEqual(read.call_count, 10)
+            # It tried to reopen the camera before giving up, then said so.
+            self.assertGreater(len(opened), 1)
             with self.assertRaisesRegex(RuntimeError, "Camera capture failed"):
                 pool.read_latest()
             pool.close()
-        self.assertEqual(released, [1])
+        self.assertEqual(len(released), len(opened))
+
+    def test_a_camera_that_resets_is_reopened_and_its_reader_continues(self):
+        """The gripper camera stopped returning frames as the arm swung; every later run
+        failed until the service restarted."""
+        state = {"reads": 0, "opened": 0}
+
+        def read():
+            state["reads"] += 1
+            # The first handle dies after a few frames; a reopened one works.
+            if state["opened"] == 1 and state["reads"] > 3:
+                return False, None
+            return True, object()
+
+        capture = SimpleNamespace(
+            isOpened=lambda: True, set=lambda *a: None, read=read, release=lambda: None
+        )
+        cv = self.fake_cv(capture)
+
+        def open_capture(*args):
+            state["opened"] += 1
+            return capture
+
+        cv.VideoCapture = open_capture
+        pool = CameraPool()
+        with patch.dict(sys.modules, cv2=cv):
+            pool.start_reader()
+            deadline = time.monotonic() + 3
+            while state["opened"] < 2 and time.monotonic() < deadline:
+                time.sleep(0.01)
+            time.sleep(0.1)
+            self.assertEqual(state["opened"], 2)
+            self.assertTrue(pool.readers[0][0].is_alive())
+            frame = pool.read_latest(0, max_age=0.5)
+            self.assertIsNotNone(frame)
+            pool.close()
 
     def test_close_during_capture_does_not_reopen_or_publish_an_old_frame(self):
         entered, release = threading.Event(), threading.Event()
