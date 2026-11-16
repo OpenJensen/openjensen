@@ -1,12 +1,13 @@
 'use client';
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useWorkbenchState } from '@/components/workspace-state';
 import { WorkspaceContext } from '@/components/workspace-context';
 import { Icon } from '@/components/icon';
+import { McpSetup } from '@/components/mcp-setup';
 import { WorkspaceShell } from '@/components/workspace-shell';
 import { ApplicationUpdates } from '@/components/application-updates';
 import { ProjectMenu } from '@/components/project-menu';
@@ -79,6 +80,21 @@ function Workbench({ children }: { children: ReactNode }) {
   }, [retainedComposer]);
   const composerStage = retainedComposer ?? lastComposer;
   const configurationDetour = ['settings', 'cloud-apis', 'modules'].includes(activeStage);
+  // On a phone the menu scrolls sideways; keep the open page in view.
+  const menu = useRef<HTMLElement>(null);
+  const menuItems = modules.data?.length;
+  useEffect(() => {
+    const navigation = menu.current;
+    const link = navigation?.querySelector<HTMLElement>('[aria-current="page"]');
+    if (!navigation || !link || navigation.scrollWidth <= navigation.clientWidth) return;
+    const viewport = navigation.getBoundingClientRect();
+    const bounds = link.getBoundingClientRect();
+    if (bounds.left >= viewport.left && bounds.right <= viewport.right) return;
+    navigation.scrollBy({
+      left: bounds.left - viewport.left - (viewport.width - bounds.width) / 2,
+      behavior: 'instant',
+    });
+  }, [activeStage, menuItems]);
   const [datasetsVisited, setDatasetsVisited] = useState(activeStage === 'datasets');
   useEffect(() => {
     if (activeStage === 'datasets') setDatasetsVisited(true);
@@ -89,6 +105,8 @@ function Workbench({ children }: { children: ReactNode }) {
       <WorkspaceShell
         headerActions={<ApplicationUpdates />}
         showGuideShortcut={false}
+        showApiShortcut={false}
+        sidebarClassName="sidebar-main-menu"
         onHomeNavigate={() => navigateStage('dashboard')}
         breadcrumb={
           <>
@@ -100,12 +118,9 @@ function Workbench({ children }: { children: ReactNode }) {
         }
         navigation={
           <>
-            <section className="projects-section" aria-labelledby="projects-heading">
-              <div className="sidebar-section-label">
-                <h2 id="projects-heading">Project</h2>
-              </div>
+            <section className="projects-section" aria-label="Project">
               {projects.isPending && (
-                <p className="sidebar-note" role="status">
+                <p className="visually-hidden" role="status">
                   Loading projects…
                 </p>
               )}
@@ -125,7 +140,8 @@ function Workbench({ children }: { children: ReactNode }) {
               />
             </section>
             <nav
-              className="stage-navigation grouped-navigation"
+              ref={menu}
+              className="stage-navigation main-menu"
               aria-label="Policy lifecycle"
               aria-busy={modules.isPending}
               onFocusCapture={(event) => {
@@ -152,12 +168,11 @@ function Workbench({ children }: { children: ReactNode }) {
                 return (
                   items.length > 0 && (
                     <div
-                      className="navigation-group"
+                      className={`main-menu-group${group.setup ? ' main-menu-setup' : ''}`}
                       key={group.name ?? group.items[0]}
                       role={group.name ? 'group' : undefined}
                       aria-label={group.name}
                     >
-                      {group.name && <p className="sidebar-section-label">{group.name}</p>}
                       <ul className="stage-list">
                         {items.map((id) => {
                           const item = workspaceRoutes[id];
@@ -174,7 +189,7 @@ function Workbench({ children }: { children: ReactNode }) {
                                 }}
                                 aria-current={activeStage === id ? 'page' : undefined}
                               >
-                                <Icon name={item.icon} size={18} />
+                                <Icon name={item.icon} size={20} />
                                 <span>{item.name}</span>
                               </Link>
                             </li>
@@ -192,8 +207,9 @@ function Workbench({ children }: { children: ReactNode }) {
         <div className={`page-heading${activeStage === 'training' ? ' training-page-heading' : ''}`}>
           <h1>{stage.name}</h1>
           <div className="page-actions">
+            {activeStage === 'teaching' && <McpSetup />}
             <a className="page-guide" href={publicPath(`/guide/#${guideSectionId(stage.name)}`)}>
-              <Icon name="book" size={16} />
+              <Icon name="book" size={18} />
               Guide
             </a>
           </div>

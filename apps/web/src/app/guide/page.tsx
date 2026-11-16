@@ -75,6 +75,7 @@ export default async function GuidePage() {
   return (
     <WorkspaceShell
       showGuideShortcut={false}
+      showApiShortcut={false}
       contentClassName="guide-page"
       skipLabel="Skip to guide"
       sidebarLabel="Guide navigation"
@@ -97,6 +98,10 @@ export default async function GuidePage() {
               </li>
             ))}
           </ul>
+          <a className="guide-api" href={publicPath('/docs/')}>
+            <Icon name="external" size={18} />
+            API reference
+          </a>
         </nav>
       }
     >

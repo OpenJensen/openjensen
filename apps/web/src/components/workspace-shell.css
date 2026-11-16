@@ -3,16 +3,15 @@
   padding-top: 24px;
 }
 .brand {
-  margin-bottom: 22px;
+  margin-bottom: 18px;
 }
 .brand-mark,
 .main-shell {
   box-shadow: none;
 }
 .sidebar .projects-section {
-  margin: 0 0 18px;
-  padding: 0 5px 16px;
-  border-bottom: 1px solid var(--line);
+  margin: 0 0 12px;
+  padding: 0;
 }
 /* Every page fits a 900px-tall window; shorter windows scroll, with a shadow at the clipped edge. */
 @media (min-width: 701px) {
@@ -24,35 +23,55 @@
       radial-gradient(farthest-side at 50% 100%, rgb(0 0 0 / 0.12), transparent) bottom / 100% 8px no-repeat scroll;
   }
 }
-.grouped-navigation {
-  display: grid;
-  gap: 11px;
+/* The main menu: every page one click away, in the order of the work. Lines, not
+   small headings, separate the groups; screen readers hear each group's name. */
+.main-menu {
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
 }
-.grouped-navigation .sidebar-section-label {
-  font-size: 10px;
-  letter-spacing: 1px;
+.main-menu-group + .main-menu-group {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--line);
 }
-.grouped-navigation .stage-list {
-  margin-top: 6px;
+.main-menu .stage-list {
+  margin: 0;
   gap: 2px;
 }
-.grouped-navigation .stage-button {
-  min-height: 32px;
-  font-size: 13px;
-  padding-block: 5px;
+.main-menu .stage-button {
+  min-height: 36px;
+  gap: 12px;
+  padding: 7px 12px;
+  border-radius: 9px;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.35;
 }
-.grouped-navigation .stage-button.selected {
+.main-menu .stage-button > svg {
+  color: var(--muted);
+}
+.main-menu .stage-button:hover {
+  background: var(--hover);
+}
+.main-menu .stage-button.selected {
+  background: var(--selected);
+  color: var(--primary);
+  font-weight: 650;
   box-shadow: none;
 }
-.sidebar-bottom {
-  padding-top: 20px;
+.main-menu .stage-button.selected > svg {
+  color: var(--primary);
 }
-.sidebar-links {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px 18px;
-  border-top: 1px solid var(--line);
-  padding-top: 16px;
+@media (min-width: 701px) {
+  /* Setup sits at the bottom of a tall window and scrolls with the rest in a short one. */
+  .main-menu .main-menu-setup {
+    margin-top: auto;
+  }
+  .main-menu-group:has(+ .main-menu-setup) {
+    padding-bottom: 4px;
+  }
 }
 .workflow-choices {
   margin-bottom: 28px;
@@ -177,61 +196,75 @@
   .sidebar .brand {
     margin-bottom: 14px;
   }
-  .sidebar .projects-section {
-    margin: 0 0 14px;
-    padding: 0 0 14px;
-    border-top: 0;
+  /* Phone: the logo and the open project share a row; the menu scrolls sideways below. */
+  .sidebar-main-menu {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    column-gap: 12px;
   }
-  .grouped-navigation {
-    display: flex;
+  .sidebar-main-menu .brand {
+    margin: 0;
+  }
+  .sidebar-main-menu .brand-copy {
+    display: none;
+  }
+  .sidebar-main-menu .sidebar-content {
+    display: contents;
+  }
+  .sidebar-main-menu .projects-section {
+    display: block;
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+  .sidebar-main-menu .project-card {
+    min-height: 52px;
+    padding: 7px 12px;
+  }
+  .sidebar-main-menu .project-card-mark {
+    display: none;
+  }
+  .sidebar-main-menu .project-card-name {
+    -webkit-line-clamp: 1;
+  }
+  .main-menu {
+    grid-column: 1 / -1;
+    flex-direction: row;
     align-items: stretch;
-    gap: 16px;
+    min-width: 0;
     overflow-x: auto;
     overscroll-behavior-x: contain;
     padding: 4px 3px 7px;
-    margin: -4px -3px -7px;
+    margin: 8px -3px -7px;
     scroll-padding-inline: 6px;
     scrollbar-width: thin;
   }
-  .grouped-navigation .navigation-group {
+  .main-menu-group {
+    display: flex;
     flex: 0 0 auto;
-    min-width: 0;
   }
-  .grouped-navigation .sidebar-section-label {
-    display: block;
-    padding: 0 7px;
-    font-size: 9px;
+  .main-menu-group + .main-menu-group {
+    margin: 0 0 0 6px;
+    padding: 0 0 0 6px;
+    border-top: 0;
+    border-left: 1px solid var(--line);
   }
-  .grouped-navigation .stage-list {
+  .main-menu .stage-list {
     display: flex;
     flex-direction: row;
-    gap: 2px;
-    margin-top: 3px;
   }
-  .grouped-navigation .stage-button {
+  .main-menu .stage-button {
     width: auto;
     min-height: 44px;
-    font-size: 12px;
-    gap: 6px;
-    padding: 8px 10px;
+    gap: 8px;
+    padding: 8px 12px;
+    font-size: 15px;
     white-space: nowrap;
   }
-  .grouped-navigation .stage-button svg {
-    width: 14px;
-    height: 14px;
-  }
-  .grouped-navigation .navigation-group:last-child {
-    border: 0;
-    padding: 0;
-  }
-  .grouped-navigation .navigation-group:last-child > p {
-    display: block;
-  }
-  .grouped-navigation .navigation-group:last-child .stage-list {
-    margin-top: 3px;
-  }
-  .grouped-navigation .navigation-group:last-child .stage-button {
-    min-height: 44px;
+  .main-menu .stage-button svg {
+    width: 18px;
+    height: 18px;
   }
   .mode-card-grid,
   .mode-card-grid.two-columns {
@@ -278,15 +311,17 @@
   flex-wrap: wrap;
   gap: 16px;
 }
-.page-guide {
+.page-guide,
+.page-heading-link {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 15px;
   text-decoration: none;
 }
-.page-guide:hover {
+.page-guide:hover,
+.page-heading-link:hover {
   color: var(--ink);
 }
 .mobile-guide-link {
@@ -373,9 +408,8 @@
   .sidebar .brand {
     margin-bottom: 10px;
   }
-  .sidebar .projects-section {
-    margin-bottom: 10px;
-    padding-bottom: 10px;
+  .sidebar-main-menu .brand {
+    margin-bottom: 0;
   }
   .sidebar-content {
     min-width: 0;

@@ -367,8 +367,14 @@ export function ApiReference() {
         </li>
         <li>
           <a className="stage-button selected" href={apiReferenceUrl} aria-current="page">
-            <Icon name="book" size={19} />
+            <Icon name="external" size={19} />
             <span>API reference</span>
+          </a>
+        </li>
+        <li>
+          <a className="stage-button" href={publicPath('/guide/')}>
+            <Icon name="book" size={19} />
+            <span>Guide</span>
           </a>
         </li>
       </ul>
