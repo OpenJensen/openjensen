@@ -78,6 +78,7 @@ test('every project is a card, one click opens it, and nothing is a dropdown', a
   await choice(page, 'Robotics examples').click();
   await expect(projects(page)).toHaveCount(0);
   await expect(current(page)).toHaveAttribute('data-project-id', 'alpha');
+  await expect(current(page)).toBeFocused();
   await page.keyboard.press('Tab');
   await expect(page.getByRole('link', { name: 'Home', exact: true })).toBeFocused();
   // A click outside the window closes it without changing anything.
