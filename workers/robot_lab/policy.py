@@ -43,6 +43,10 @@ PREDICTION_TIMEOUT_SECONDS = 30.0
 
 # How long a passing camera and inference check allows a run to start.
 PREFLIGHT_VALID_SECONDS = 60
+# Why a running policy stops when a deadline passes. A run that used its whole duration
+# ends as completed, whichever part of the service notices first.
+HEARTBEAT_LOST = "Policy operator heartbeat stopped"
+RUN_COMPLETED = "Policy run completed"
 
 
 def admit(root, ident):
@@ -892,10 +896,19 @@ class PolicyRunner:
                 self.error = reason
             self.predicted = None
 
+    def expiry(self):
+        """Why a running policy must stop now: its operator went quiet or its time is up."""
+        if self.phase != "running":
+            return None
+        now = time.monotonic()
+        if now > self.operator_deadline:
+            return HEARTBEAT_LOST
+        if now > self.run_deadline:
+            return RUN_COMPLETED
+        return None
+
     def expired(self):
-        return self.phase == "running" and time.monotonic() > min(
-            self.operator_deadline, self.run_deadline
-        )
+        return self.expiry() is not None
 
     def apply(self, measured, now):
         with self.lock:
@@ -906,9 +919,11 @@ class PolicyRunner:
             ):
                 raise HardwareError("Policy controller authority was revoked")
             self.last_health = now
-            if self.expired():
-                raise HardwareError("Policy operator heartbeat or run duration expired")
-            if self.predicted is None:
+            why = self.expiry()
+            if why == HEARTBEAT_LOST:
+                raise HardwareError(why)
+            if why or self.predicted is None:
+                # When the time is up, hold the arm while the run ends as completed.
                 return dict(self.commanded)
             self.last_apply = now
             ranges = control_limits(self.lab.calibration)
@@ -925,7 +940,7 @@ class PolicyRunner:
             return dict(goals)
 
     def _run(self, cameras, duration, generation, cancel):
-        reason = "Policy run completed; torque disabled"
+        reason = RUN_COMPLETED + "; torque disabled"
         try:
             if not isinstance(cameras, dict):  # One camera, given by its index.
                 cameras = {self.model["camera_key"]: cameras}
@@ -947,7 +962,9 @@ class PolicyRunner:
                             ) from None
                         time.sleep(0.02)
             self._reset_policy()
-            deadline, due = time.monotonic() + duration, time.monotonic()
+            # The run's time counts from its start, camera warm-up included, as the watchdog
+            # counts it; a later deadline here would let the watchdog end every run first.
+            deadline, due = self.run_deadline, time.monotonic()
             while not cancel.is_set() and time.monotonic() < deadline:
                 if generation != self.lab.generation or self.lab.mode != "policy":
                     return

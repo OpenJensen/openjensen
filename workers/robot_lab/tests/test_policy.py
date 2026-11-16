@@ -373,11 +373,46 @@ class PolicyTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "cannot renew"):
             self.lab.control_heartbeat({"expected_generation": self.lab.generation})
         runner.operator_deadline = time.monotonic() - 1
-        with self.assertRaisesRegex(HardwareError, "heartbeat"):
+        with self.assertRaisesRegex(HardwareError, "heartbeat stopped"):
             runner.apply(measured, time.monotonic())
         runner.operator_deadline = time.monotonic() + 10
         runner.run_deadline = time.monotonic() - 1
         self.assertTrue(runner.expired())
+        # A run whose time is up holds the arm until it ends as completed; it is not a fault.
+        self.assertEqual(runner.expiry(), "Policy run completed")
+        self.assertEqual(runner.apply(measured, time.monotonic()), far)
+
+    def test_a_run_that_uses_its_whole_time_ends_as_completed(self):
+        """However the end is noticed, a full-length run reads as completed, not as a fault."""
+        runner = self.prepare()
+        with patch.object(runner, "_run"):
+            runner.start(self.run_payload())
+            runner.thread.join(timeout=1)
+        runner.run_deadline = time.monotonic() - 0.01
+        self.lab._watchdog_check()
+        self.assertEqual(self.lab.mode, "idle")
+        self.assertEqual(self.lab.error, "Policy run completed; torque disabled")
+
+    def test_the_run_loop_ends_at_the_same_deadline_as_the_watchdog(self):
+        runner = self.prepare()
+        with patch.object(runner, "_run"):
+            runner.start(self.run_payload())
+            runner.thread.join(timeout=1)
+        # Camera warm-up used up the run's time: the loop must not add its own duration.
+        runner.run_deadline = time.monotonic() - 0.01
+        with patch.object(runner, "_predict") as predict:
+            runner._run(0, 10, runner.generation, runner.cancel)
+        predict.assert_not_called()
+        self.assertEqual(self.lab.error, "Policy run completed; torque disabled")
+
+    def test_a_silent_operator_is_reported_as_a_lost_heartbeat(self):
+        runner = self.prepare()
+        with patch.object(runner, "_run"):
+            runner.start(self.run_payload())
+            runner.thread.join(timeout=1)
+        runner.operator_deadline = time.monotonic() - 0.01
+        self.lab._watchdog_check()
+        self.assertEqual(self.lab.error, "Policy operator heartbeat stopped; torque disabled")
 
     def test_targets_past_the_calibrated_range_are_held_at_its_edge(self):
         """A folded arm rests on its limit; a policy asking a little past it keeps running."""
