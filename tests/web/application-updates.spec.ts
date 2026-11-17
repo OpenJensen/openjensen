@@ -4,12 +4,12 @@ const old = '1'.repeat(40);
 const target = '2'.repeat(40);
 const initial = {
   installed: { version: '0.1.0', commit: old, host: 'Workspace server' },
-  channel: 'main',
+  channel: 'release',
   upstream_commit: target,
-  latest_release: 'v0.0.1',
+  latest_release: 'v0.1.1',
   state: 'available',
   checked_at: '2026-10-24T14:00:00Z',
-  message: 'An update from upstream main is available.',
+  message: 'Version 0.1.1 is available.',
   automatic_update: true,
   setup_message: null,
   operation: null,
@@ -21,7 +21,7 @@ test('current app still reports a robot control service requiring an update', as
       json: {
         ...initial,
         state: 'current',
-        message: 'Up to date with upstream main.',
+        message: 'Up to date with the latest release, v0.1.1.',
         companion_update: {
           state: 'needs_update',
           managed: false,
@@ -41,7 +41,7 @@ test('a robot control service that runs the same code is an ordinary line, not a
       json: {
         ...initial,
         state: 'current',
-        message: 'Up to date with upstream main.',
+        message: 'Up to date with the latest release, v0.1.1.',
         companion_update: {
           state: 'current',
           managed: false,
@@ -73,7 +73,7 @@ test('a branch build never passes for the release that shares its number', async
           released: false,
         },
         state: 'diverged',
-        message: 'This development build differs from upstream main; update manually.',
+        message: 'This development build differs from the latest release; update manually.',
         automatic_update: false,
       },
     }),
@@ -95,7 +95,7 @@ test('a released build shows its plain number and no development note', async ({
         ...initial,
         installed: { ...initial.installed, version: '0.1.30', label: '0.1.30', branch: 'main', released: true },
         state: 'current',
-        message: 'Up to date with upstream main.',
+        message: 'Up to date with the latest release, v0.1.1.',
       },
     }),
   );
@@ -117,7 +117,7 @@ test('update discovery is read only and confirmation identifies the server and e
   const dialog = page.getByRole('dialog', { name: 'OpenJensen updates' });
   await expect(dialog).toContainText('Workspace server');
   await expect(dialog).toContainText('v0.1.0');
-  await expect(dialog).toContainText('v0.0.1');
+  await expect(dialog).toContainText('v0.1.1');
   await expect(dialog.getByRole('link', { name: target.slice(0, 8) })).toHaveAttribute(
     'href',
     `https://github.com/OpenJensen/openjensen/commit/${target}`,
@@ -165,6 +165,9 @@ test('accepted update reports progress and reloads once the confirmed version is
   await page.goto('/dashboard/');
   const initialOrigin = await page.evaluate(() => performance.timeOrigin);
   await page.getByRole('button', { name: 'Version and updates' }).click();
+  // The dialog names the release it installs: its number and its commit.
+  await expect(page.getByRole('dialog')).toContainText('Version 0.1.1 is available.');
+  await expect(page.getByRole('dialog').locator('dd').filter({ hasText: 'v0.1.1' })).toContainText('22222222');
   await page.getByRole('button', { name: 'Update & restart' }).click();
   await expect(page.getByRole('dialog')).toContainText('Building the new version…');
   // The bar, its percentage and the version button all say how far the update has got.
@@ -205,12 +208,16 @@ test('busy server error stays in the confirmation dialog without claiming an upd
 test('development builds are identified without offering a downgrade to main', async ({ page }) => {
   await page.route('**/api/v1/updates**', (route) =>
     route.fulfill({
-      json: { ...initial, state: 'ahead', message: 'This development build is ahead of upstream main.' },
+      json: {
+        ...initial,
+        state: 'ahead',
+        message: 'This development build is newer than the latest release, v0.1.1.',
+      },
     }),
   );
   await page.goto('/dashboard/');
   await page.getByRole('button', { name: 'Version and updates' }).click();
-  await expect(page.getByRole('dialog')).toContainText('ahead of upstream main');
+  await expect(page.getByRole('dialog')).toContainText('newer than the latest release');
   await expect(page.getByRole('button', { name: 'Update & restart' })).toHaveCount(0);
 });
 
