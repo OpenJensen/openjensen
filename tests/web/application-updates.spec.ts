@@ -128,7 +128,9 @@ test('update discovery is read only and confirmation identifies the server and e
   expect(writes).toEqual([]);
 });
 
-test('accepted update reports progress and reloads once the confirmed version is running', async ({ page }) => {
+test('accepted update reports progress and reloads once the confirmed version is running', async ({
+  page,
+}, testInfo) => {
   let state: any = initial;
   let writes = 0;
   let complete = false;
@@ -147,6 +149,7 @@ test('accepted update reports progress and reloads once the confirmed version is
           phase: 'building',
           target_commit: target,
           message: 'Building the new version…',
+          progress: 45,
         },
       };
     }
@@ -164,6 +167,12 @@ test('accepted update reports progress and reloads once the confirmed version is
   await page.getByRole('button', { name: 'Version and updates' }).click();
   await page.getByRole('button', { name: 'Update & restart' }).click();
   await expect(page.getByRole('dialog')).toContainText('Building the new version…');
+  // The bar, its percentage and the version button all say how far the update has got.
+  const bar = page.getByRole('progressbar', { name: 'Update progress', exact: true });
+  await expect(bar).toHaveAttribute('aria-valuenow', '45');
+  await expect(page.getByRole('dialog')).toContainText('45%');
+  await expect(page.getByRole('button', { name: 'Version and updates' })).toHaveText('Updating… 45%');
+  await page.getByRole('dialog').screenshot({ path: testInfo.outputPath('update-progress.png') });
   const reloaded = page.waitForEvent('framenavigated', {
     predicate: (frame) => frame === page.mainFrame(),
   });
@@ -238,6 +247,11 @@ test('lost acceptance reply reconnects to the same update without submitting twi
   await page.getByRole('button', { name: 'Version and updates' }).click();
   await page.getByRole('button', { name: 'Update & restart' }).click();
   await expect(page.getByRole('dialog')).toContainText('Building the new version…');
+  // An updater that reports only its stage still moves the bar to where that stage starts.
+  await expect(page.getByRole('progressbar', { name: 'Update progress', exact: true })).toHaveAttribute(
+    'aria-valuenow',
+    '3',
+  );
   complete = true;
   await expect.poll(() => page.evaluate(() => performance.timeOrigin)).not.toBe(initialOrigin);
   await expect(page.getByRole('button', { name: 'Version and updates' })).toHaveText('v0.1.0');

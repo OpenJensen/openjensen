@@ -83,6 +83,9 @@ for (const theme of ['Light', 'Dark']) {
 test('theme selection survives home/reference navigation and direct reloads', async ({ page, context }) => {
   await page.goto('/datasets/');
   await page.getByRole('button', { name: 'Dark', exact: true }).click();
+  // The API reference is reached from the guide, which every page links to.
+  await page.locator('.page-heading .page-guide').click();
+  await expect(page).toHaveURL(/\/guide\//);
   await page.locator('a[href="/docs/"]:visible').first().click();
   await expect(page).toHaveURL(/\/docs\/$/);
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
