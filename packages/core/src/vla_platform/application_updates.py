@@ -1,4 +1,4 @@
-"""Version discovery and confirmed, host-owned updates from the canonical main branch."""
+"""Version discovery and confirmed, host-owned updates to published releases of main."""
 
 import asyncio
 import json
@@ -21,6 +21,7 @@ UPSTREAM = "https://api.github.com/repos/OpenJensen/openjensen"
 ROOT = Path(__file__).resolve().parents[4]
 ACTIVE_PHASES = update_runner.ACTIVE_PHASES
 SHA = re.compile(r"^[0-9a-f]{40}$")
+RELEASE = re.compile(r"^v[0-9]+\.[0-9]+\.[0-9]+$")
 
 
 class UpdateError(ValueError):
@@ -64,7 +65,9 @@ class CompanionUpdateStatus(BaseModel):
 
 class UpdateStatus(BaseModel):
     installed: ApplicationVersion
-    channel: Literal["main"] = "main"
+    # Updates are published releases. "main" is kept for clients that read the field.
+    channel: Literal["release", "main"] = "release"
+    # The commit of the latest release, which is what Update installs.
     upstream_commit: str | None = None
     latest_release: str | None = None
     state: Literal["unchecked", "current", "available", "ahead", "diverged", "unknown", "error"]
@@ -281,57 +284,54 @@ class ApplicationUpdates:
 
             checked_at = datetime.now(UTC).isoformat()
             try:
-                response = await self.client.get(UPSTREAM + "/commits/main")
+                # Updates follow published releases: each one passed CI on main first.
+                response = await self.client.get(UPSTREAM + "/releases/latest")
+                response.raise_for_status()
+                release = response.json()["tag_name"]
+                if not isinstance(release, str) or not RELEASE.fullmatch(release):
+                    raise ValueError("Invalid release tag")
+                response = await self.client.get(UPSTREAM + f"/commits/{release}")
                 response.raise_for_status()
                 target = response.json()["sha"]
                 if not isinstance(target, str) or not SHA.fullmatch(target):
-                    raise ValueError("Invalid upstream commit")
+                    raise ValueError("Invalid release commit")
+                version = release.removeprefix("v")
                 commit = self.installed.commit
                 state, message = (
                     "unknown",
                     "This build has no recorded commit; automatic update is unavailable.",
                 )
                 if commit is None and self.native_path is not None:
-                    state, message = (
-                        "available",
-                        "The latest upstream main can be installed for this build.",
-                    )
+                    state, message = "available", f"Version {version} can be installed."
                 if target == commit:
-                    state, message = "current", "Up to date with upstream main."
+                    state, message = "current", f"Up to date with the latest release, {release}."
                 elif commit:
                     response = await self.client.get(UPSTREAM + f"/compare/{commit}...{target}")
                     if response.status_code == 404:
                         state, message = (
                             "unknown",
-                            "This development build cannot be compared with upstream main.",
+                            "This development build cannot be compared with the latest release.",
                         )
                     else:
                         response.raise_for_status()
                         relation = response.json()["status"]
                         state, message = {
-                            "ahead": ("available", "An update from upstream main is available."),
+                            "ahead": ("available", f"Version {version} is available."),
                             "behind": (
                                 "ahead",
-                                "This development build is ahead of upstream main.",
+                                f"This development build is newer than the latest release, "
+                                f"{release}.",
                             ),
                             "diverged": (
                                 "diverged",
-                                "This development build differs from upstream main; "
+                                "This development build differs from the latest release; "
                                 "update manually.",
                             ),
-                            "identical": ("current", "Up to date with upstream main."),
+                            "identical": (
+                                "current",
+                                f"Up to date with the latest release, {release}.",
+                            ),
                         }[relation]
-                release = self.value.get("latest_release")
-                try:
-                    response = await self.client.get(UPSTREAM + "/releases/latest")
-                    response.raise_for_status()
-                    tag = response.json()["tag_name"]
-                    if isinstance(tag, str) and re.fullmatch(
-                        r"v[0-9]+\.[0-9]+\.[0-9]+(?:-[\w.-]+)?", tag
-                    ):
-                        release = tag
-                except httpx.HTTPError, ValueError, KeyError, TypeError:
-                    pass  # Release metadata is separate from the main update channel.
                 self.value = dict(
                     state=state,
                     message=message,
@@ -342,7 +342,7 @@ class ApplicationUpdates:
             except httpx.HTTPError, ValueError, KeyError, TypeError:
                 self.value = dict(
                     state="error",
-                    message="Could not check upstream main. Try again later.",
+                    message="Could not check for a new release. Try again later.",
                     checked_at=checked_at,
                     latest_release=self.value.get("latest_release"),
                 )
