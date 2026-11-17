@@ -173,6 +173,11 @@ function Workbench({ children }: { children: ReactNode }) {
                       role={group.name ? 'group' : undefined}
                       aria-label={group.name}
                     >
+                      {group.name && (
+                        <p className="main-menu-heading" aria-hidden="true">
+                          {group.name}
+                        </p>
+                      )}
                       <ul className="stage-list">
                         {items.map((id) => {
                           const item = workspaceRoutes[id];

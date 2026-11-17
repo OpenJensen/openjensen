@@ -35,8 +35,7 @@ export const isModule = (id: StageId): id is FeatureModuleId => !!workspaceRoute
 
 // The sidebar follows the journey: set up the robot and record, keep datasets, train,
 // test, then look at what came out. It lists the same pages on a first visit as later.
-// Group names are for screen readers; on screen a line separates the groups, and the
-// setup group stays at the bottom of the sidebar.
+// Each group opens with its name and a line; the setup group stays at the bottom.
 export const navigationGroups: { name?: string; items: StageId[]; setup?: true }[] = [
   { items: ['dashboard'] },
   { name: 'Robot', items: ['robot-lab', 'teaching'] },
