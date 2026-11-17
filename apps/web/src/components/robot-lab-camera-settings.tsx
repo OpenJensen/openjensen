@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { robotApi, type CameraCaptureMode, type CameraCaptureSettings } from '@/lib/robot-api';
+import { Segmented } from './ui/choice';
 
 function modeKey(mode: CameraCaptureMode) {
   return `${mode.fourcc}:${mode.width}:${mode.height}:${mode.fps}`;
@@ -17,12 +18,14 @@ function chooseMode(camera: CameraCaptureSettings) {
 
 export function RobotLabCameraSettings({
   indices,
+  name,
   locked,
   preview,
   setPreview,
   onApplied,
 }: {
   indices: number[];
+  name: (index: number) => string;
   locked: boolean;
   preview: boolean;
   setPreview: (value: boolean) => void;
@@ -83,10 +86,7 @@ export function RobotLabCameraSettings({
   return (
     <details className="robot-lab-form" onToggle={(event) => setOpen(event.currentTarget.open)}>
       <summary>Resolution and frame rate</summary>
-      <p className="robot-lab-subtle">
-        Modes reported by each camera. Applying checks that the selected cameras can open together. Dataset frame rate
-        is set separately in recording settings.
-      </p>
+      <p className="robot-lab-subtle">Applying opens the cameras that are on together to check they work.</p>
       {error && (
         <p className="robot-lab-error" role="alert">
           {error}
@@ -96,7 +96,7 @@ export function RobotLabCameraSettings({
       {open && !cameras.length && !error && <p role="status">Reading camera modes…</p>}
       {cameras.map((camera) => {
         const draft = drafts[camera.index];
-        if (!draft) return <p key={camera.index}>No selectable native modes reported for camera {camera.index}.</p>;
+        if (!draft) return <p key={camera.index}>{name(camera.index)} reports no modes to choose from.</p>;
         const formats = Array.from(new Set(camera.modes.map((mode) => mode.fourcc)));
         const resolutions = Array.from(
           new Set(
@@ -106,73 +106,64 @@ export function RobotLabCameraSettings({
         const rates = camera.modes.filter(
           (mode) => mode.fourcc === draft.fourcc && mode.width === draft.width && mode.height === draft.height,
         );
+        const pick = (mode: CameraCaptureMode | undefined) =>
+          mode && setDrafts((values) => ({ ...values, [camera.index]: mode }));
+        const disabled = locked || pending;
         return (
-          <fieldset key={camera.index} disabled={locked || pending}>
-            <legend>Camera {camera.index}</legend>
-            <label>
-              Format
-              <select
-                aria-label={`Camera ${camera.index} format`}
+          <fieldset key={camera.index} disabled={disabled}>
+            <legend>{name(camera.index)}</legend>
+            <div className="choice-field">
+              <span>Format</span>
+              <Segmented
+                label={`Camera ${camera.index} format`}
                 value={draft.fourcc}
-                onChange={(event) => {
-                  const mode =
+                disabled={disabled}
+                options={formats.map((value) => ({
+                  value,
+                  label: value === 'MJPG' ? 'MJPEG (compressed)' : value === 'YUYV' ? 'YUYV (uncompressed)' : value,
+                }))}
+                onChange={(value) =>
+                  pick(
                     camera.modes.find(
-                      (mode) =>
-                        mode.fourcc === event.target.value &&
-                        mode.width === draft.width &&
-                        mode.height === draft.height,
-                    ) ?? camera.modes.find((mode) => mode.fourcc === event.target.value);
-                  if (mode) setDrafts((values) => ({ ...values, [camera.index]: mode }));
-                }}
-              >
-                {formats.map((value) => (
-                  <option key={value} value={value}>
-                    {value === 'MJPG' ? 'MJPEG (compressed)' : value === 'YUYV' ? 'YUYV (uncompressed)' : value}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Resolution
-              <select
-                aria-label={`Camera ${camera.index} resolution`}
+                      (mode) => mode.fourcc === value && mode.width === draft.width && mode.height === draft.height,
+                    ) ?? camera.modes.find((mode) => mode.fourcc === value),
+                  )
+                }
+              />
+            </div>
+            <div className="choice-field">
+              <span>Resolution</span>
+              <Segmented
+                label={`Camera ${camera.index} resolution`}
                 value={`${draft.width}×${draft.height}`}
-                onChange={(event) => {
-                  const mode = camera.modes.find(
-                    (mode) => mode.fourcc === draft.fourcc && `${mode.width}×${mode.height}` === event.target.value,
-                  );
-                  if (mode) setDrafts((values) => ({ ...values, [camera.index]: mode }));
-                }}
-              >
-                {resolutions.map((value) => (
-                  <option key={value}>{value}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Capture frame rate
-              <select
-                aria-label={`Camera ${camera.index} frame rate`}
+                disabled={disabled}
+                options={resolutions.map((value) => ({ value, label: value }))}
+                onChange={(value) =>
+                  pick(
+                    camera.modes.find(
+                      (mode) => mode.fourcc === draft.fourcc && `${mode.width}×${mode.height}` === value,
+                    ),
+                  )
+                }
+              />
+            </div>
+            <div className="choice-field">
+              <span>Capture frame rate</span>
+              <Segmented
+                label={`Camera ${camera.index} frame rate`}
                 value={modeKey(draft)}
-                onChange={(event) => {
-                  const mode = rates.find((mode) => modeKey(mode) === event.target.value);
-                  if (mode) setDrafts((values) => ({ ...values, [camera.index]: mode }));
-                }}
-              >
-                {rates.map((mode) => (
-                  <option key={modeKey(mode)} value={modeKey(mode)}>
-                    {mode.fps} fps
-                  </option>
-                ))}
-              </select>
-            </label>
+                disabled={disabled}
+                options={rates.map((mode) => ({ value: modeKey(mode), label: `${mode.fps} fps` }))}
+                onChange={(value) => pick(rates.find((mode) => modeKey(mode) === value))}
+              />
+            </div>
             {camera.actual && (
-              <small>
-                Negotiated: {camera.actual.width}×{camera.actual.height} · {camera.actual.fps} fps ·{' '}
+              <p className="robot-lab-subtle">
+                Running at {camera.actual.width}×{camera.actual.height} · {camera.actual.fps} fps ·{' '}
                 {camera.actual.fourcc}
-              </small>
+                {camera.measured_fps !== null && ` · measured ${camera.measured_fps} fps`}
+              </p>
             )}
-            {camera.measured_fps !== null && <small>Measured capture: {camera.measured_fps} fps</small>}
           </fieldset>
         );
       })}

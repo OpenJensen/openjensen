@@ -237,11 +237,18 @@
 .robot-lab-camera-empty {
   color: var(--muted);
   text-align: center;
-  font-size: 11px;
-  padding: 15px;
+  font-size: 14px;
+  line-height: 1.45;
+  padding: 16px;
   display: grid;
-  gap: 7px;
+  gap: 8px;
   justify-items: center;
+}
+.robot-lab-camera-empty strong {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--ink);
+  font-size: 15px;
 }
 .robot-lab-camera-live {
   position: absolute;
@@ -249,10 +256,11 @@
   left: 9px;
   background: #142331cc;
   color: white;
-  font-size: 9px;
-  letter-spacing: 0.9px;
-  padding: 3px 6px;
-  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  padding: 3px 8px;
+  border-radius: 5px;
 }
 .robot-lab-camera-live::before {
   content: '';
@@ -1391,15 +1399,132 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 8px;
+  gap: 10px;
+  min-height: 34px;
 }
 .robot-lab-camera-tile-heading strong {
-  font-size: 12px;
+  font-size: 15px;
+  font-weight: 600;
   overflow-wrap: anywhere;
 }
-.robot-lab-camera-options > summary {
-  display: none;
+/* Each camera is one card: name, On/Off switch, and its picture while it is on. */
+.robot-lab-cameras .robot-lab-camera-views {
+  display: grid;
+  gap: 10px;
+}
+.robot-lab-cameras .robot-lab-camera-tile {
+  display: grid;
+  gap: 10px;
+  padding: 10px 12px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.robot-lab-cameras .robot-lab-camera-tile.off {
+  padding-bottom: 10px;
+  background: var(--subtle);
+}
+.robot-lab-cameras .robot-lab-camera-tile.off strong {
+  color: var(--muted);
+  font-weight: 500;
+}
+.robot-lab-cameras .robot-lab-camera {
+  margin: 0;
+}
+.robot-lab-camera-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.robot-lab-camera-actions > button {
+  flex: 1 1 auto;
+}
+.robot-lab-camera-switch {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 4px 12px 4px 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.robot-lab-camera-switch > span {
+  position: relative;
+  width: 34px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--line-strong);
+  transition: background 0.15s ease;
+}
+.robot-lab-camera-switch > span::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 25%);
+  transition: transform 0.15s ease;
+}
+.robot-lab-camera-switch[aria-checked='true'] {
+  border-color: var(--accent);
+  color: var(--primary);
+}
+.robot-lab-camera-switch[aria-checked='true'] > span {
+  background: var(--accent);
+}
+.robot-lab-camera-switch[aria-checked='true'] > span::after {
+  transform: translateX(14px);
+}
+.robot-lab-camera-switch:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+.robot-lab-camera-note,
+.robot-lab-camera-none {
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+.robot-lab-camera-none {
+  margin: 0 0 12px;
+}
+.robot-lab-cameras > details {
+  margin-top: 14px;
+}
+.robot-lab-cameras > details > summary {
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 500;
+}
+.robot-lab-cameras fieldset {
+  display: grid;
+  gap: 12px;
+  margin: 12px 0 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.robot-lab-cameras legend {
+  padding: 0 4px;
+  font-size: 15px;
+  font-weight: 600;
+}
+.robot-lab-cameras .choice-field {
+  font-size: 14px;
+}
+.robot-lab-cameras .segmented button {
+  font-size: 14px;
 }
 .robot-lab-camera-delayed {
   position: absolute;
@@ -1486,6 +1611,12 @@
   min-width: 0;
   min-height: 0;
 }
+.robot-lab-camera-workspace .robot-lab-cameras .robot-lab-camera-tile {
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
 .robot-lab-camera-workspace .robot-lab-camera-tile[hidden] {
   display: none;
 }
@@ -1500,17 +1631,6 @@
   position: absolute;
   inset: 0;
   object-fit: contain;
-}
-.robot-lab-camera-workspace .robot-lab-camera-options {
-  flex-shrink: 0;
-  margin-top: 12px;
-  max-height: 32vh;
-  overflow-y: auto;
-}
-.robot-lab-camera-workspace .robot-lab-camera-options > summary {
-  display: list-item;
-  cursor: pointer;
-  padding: 8px 0;
 }
 .robot-lab-camera-workspace .robot-lab-card-header {
   flex-shrink: 0;

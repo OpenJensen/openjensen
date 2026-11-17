@@ -2343,12 +2343,9 @@ test('Linux companion discovers USB and camera without motor commands', async ({
   await expect(page.getByRole('heading', { name: 'Datasets on the robot computer', exact: true })).toBeVisible();
   state.cameraFailure = true;
   await page.getByRole('button', { name: 'Start preview', exact: true }).click();
-  await expect(
-    page.getByText(
-      'Camera could not open. Check camera permissions on the robot computer or close another app using it.',
-      { exact: true },
-    ),
-  ).toBeVisible();
+  const camera = page.getByRole('region', { name: 'Camera preview', exact: true });
+  await expect(camera.getByText('This camera won’t open.', { exact: true })).toBeVisible();
+  await expect(camera).toContainText('check camera permission on the robot computer');
   expect(state.writes).toEqual([]);
   expect(state.errors).toEqual([]);
 });
@@ -3457,12 +3454,14 @@ test('native camera resolution and rate settings apply together and persist', as
   await openTab(page, 'Record');
   await page.getByRole('checkbox', { name: 'Record Side USB', exact: true }).check();
   await page.getByText('Resolution and frame rate', { exact: true }).click();
-  await expect(page.getByLabel('Camera 0 resolution', { exact: true })).toBeVisible();
-  await page.getByLabel('Camera 0 format', { exact: true }).selectOption('YUYV');
-  await expect(page.getByLabel('Camera 0 resolution', { exact: true })).toHaveValue('800×600');
-  await expect(page.getByLabel('Camera 0 frame rate', { exact: true })).toContainText('10 fps');
-  await page.getByLabel('Camera 4 resolution', { exact: true }).selectOption('1280×720');
-  await expect(page.getByLabel('Camera 4 frame rate', { exact: true })).toContainText('30 fps');
+  // Every mode is a visible choice, never a dropdown.
+  await expect(choices(page, 'Camera 0 resolution')).toBeVisible();
+  await expect(page.locator('.robot-lab-side select')).toHaveCount(0);
+  await choice(page, 'Camera 0 format', 'YUYV').click();
+  await expect(chosen(page, 'Camera 0 resolution')).toHaveText('800×600');
+  await expect(chosen(page, 'Camera 0 frame rate')).toHaveText('10 fps');
+  await choice(page, 'Camera 4 resolution', '1280×720').click();
+  await expect(chosen(page, 'Camera 4 frame rate')).toHaveText('30 fps');
   await page.getByRole('button', { name: 'Apply camera settings', exact: true }).click();
   await expect(
     page.getByText('Camera settings saved. All selected cameras opened together.', { exact: true }),
@@ -3474,6 +3473,54 @@ test('native camera resolution and rate settings apply together and persist', as
     ],
   });
   await page.screenshot({ path: testInfo.outputPath('native-camera-mode-controls.png'), fullPage: true });
+  expect(writes(state, '/control/start')).toEqual([]);
+  expect(writes(state, '/recording/start')).toEqual([]);
+  expect(state.errors).toEqual([]);
+});
+
+test('each camera is one card with a plain name and an On/Off switch', async ({ page }, testInfo) => {
+  const state = await fixture(page, true, 'Linux', false);
+  state.status.capabilities.multi_camera_recording = true;
+  state.status.capabilities.camera_mode_controls = true;
+  // Linux names cameras by driver and device; two of these are the same model.
+  state.cameras = [
+    { index: 0, name: 'EasyCamera: EasyCamera · /dev/video0', width: 640, height: 480 },
+    { index: 2, name: 'USB Camera: USB Camera · /dev/video2', width: 640, height: 480 },
+    { index: 4, name: 'USB Camera: USB Camera · /dev/video4', width: 640, height: 480 },
+  ];
+  await page.reload();
+  await page.route('**/api/v1/robot-lab/camera.jpg?**', (route) =>
+    new URL(route.request().url()).searchParams.get('index') === '4'
+      ? route.fulfill({ status: 503, json: { detail: 'Camera busy.' } })
+      : route.fulfill({ contentType: 'image/png', body: pixel }),
+  );
+  await openTab(page, 'Teleoperate');
+  const panel = page.getByRole('region', { name: 'Camera preview', exact: true });
+  const use = (name: string) => panel.getByRole('switch', { name: `Use ${name}`, exact: true });
+  await expect(panel.locator('.robot-lab-camera-tile-heading strong')).toHaveText([
+    'EasyCamera',
+    'USB Camera 1',
+    'USB Camera 2',
+  ]);
+  await expect(use('EasyCamera')).toHaveAttribute('aria-checked', 'true');
+  // The only camera that is on cannot be switched off.
+  await expect(use('EasyCamera')).toBeDisabled();
+  await use('USB Camera 1').click();
+  await use('USB Camera 2').click();
+  await expect(use('EasyCamera')).toBeEnabled();
+  await use('EasyCamera').click();
+  await expect(use('EasyCamera')).toHaveAttribute('aria-checked', 'false');
+  await panel.getByRole('button', { name: 'Start preview', exact: true }).click();
+  // The first camera that is on leads; a camera that fails says so in its own card.
+  await expect(panel.getByAltText('Live view from the selected robot camera', { exact: true })).toHaveAttribute(
+    'src',
+    /index=2.*cameras=2,4/,
+  );
+  const failed = panel.locator('.robot-lab-camera-tile').filter({ hasText: 'USB Camera 2' });
+  await expect(failed.getByText('This camera won’t open.', { exact: true })).toBeVisible();
+  await expect(panel.getByRole('button', { name: 'Retry cameras', exact: true })).toBeVisible();
+  await expect(panel.locator('select')).toHaveCount(0);
+  await panel.screenshot({ path: testInfo.outputPath('camera-cards.png') });
   expect(writes(state, '/control/start')).toEqual([]);
   expect(writes(state, '/recording/start')).toEqual([]);
   expect(state.errors).toEqual([]);
