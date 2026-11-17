@@ -168,12 +168,18 @@ export function RobotLabCalibrate({ lab }: { lab: RobotLabState }) {
         {session?.mode === 'calibration' && calibration?.phase === 'ranges' && (
           <>
             <Notice>
-              Move each joint through its full travel without forcing it. Keep cables clear. Wrist roll uses its full
-              encoder range.
+              {calibration.role === 'follower'
+                ? 'Move each joint through its full travel without forcing it. Keep cables clear. Turn the wrist to both of its ends too: it will never be driven past them.'
+                : 'Move each joint through its full travel without forcing it. Keep cables clear. Wrist roll uses its full encoder range.'}
             </Notice>
             <div className="robot-lab-mapping-heading">
               <h3>Joint ranges</h3>
-              <span>{capturedRanges}/5 ranges detected · wrist roll automatic</span>
+              <span>
+                {capturedRanges}/5 ranges detected ·{' '}
+                {calibration.role === 'follower' && calibration.wrist_sweep
+                  ? `wrist ${wristDegrees(calibration.wrist_sweep.low)} to ${wristDegrees(calibration.wrist_sweep.high)}`
+                  : 'wrist roll automatic'}
+              </span>
             </div>
             <RangeTable positions={session.positions} mins={calibration.mins} maxes={calibration.maxes} calibration />
             <div className="robot-lab-actions">
@@ -232,3 +238,5 @@ export function RobotLabCalibrate({ lab }: { lab: RobotLabState }) {
     </>
   );
 }
+
+const wristDegrees = (value: number) => `${value > 0 ? '+' : ''}${Math.round(value)}°`;
