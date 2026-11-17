@@ -9467,8 +9467,11 @@
             "type": "boolean"
           },
           "channel": {
-            "const": "main",
-            "default": "main",
+            "default": "release",
+            "enum": [
+              "release",
+              "main"
+            ],
             "title": "Channel",
             "type": "string"
           },
@@ -10126,7 +10129,7 @@
   },
   "info": {
     "title": "OPEN JENSEN local VLA application",
-    "version": "0.1.42"
+    "version": "0.1.43"
   },
   "openapi": "3.1.0",
   "paths": {
