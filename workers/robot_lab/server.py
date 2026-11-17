@@ -74,6 +74,7 @@ from verification import (
     latest_saved_mapping,
     saved_mapping,
 )
+from wrist_range import RangeRecorder, WristRanges, full_turn_angle
 
 # The code this process started from; a later edit on disk does not change what runs.
 SOURCE_FILES = source_files()
@@ -261,6 +262,12 @@ class RobotLab:
         self.commanded_raw = {}
         self.middle_motion = None
         self.rest_positions = RestPositions(self.data_dir)
+        self.wrist_ranges = WristRanges(self.data_dir)
+        self.wrist_recorder = None
+        self.wrist_range = None
+        # The wrist's ends, followed through the calibration sweep, and the range saved from them.
+        self.wrist_sweep = None
+        self.calibration_wrist = None
         self.rest_targets = None
         self.rest_motion = None
         self.rest_phase = "idle"
@@ -819,6 +826,7 @@ class RobotLab:
             plan = self.collection
             collection = plan.snapshot(time.monotonic()) if plan else None
             rest_motion, rest_phase = self.rest_motion, self.rest_phase
+            wrist_range, wrist_recorder = self.wrist_range, self.wrist_recorder
             rest_calibration = dict(self.calibration)
             rest_targets = (
                 self.rest_targets
@@ -857,6 +865,7 @@ class RobotLab:
                 "control": hardware,
                 "lerobot_position_control": hardware,
                 "rest_position": hardware,
+                "wrist_range": hardware,
                 "persistent_diagnostics": True,
                 "gripper_load_tolerance": True,
                 "lerobot_observation_ranges": True,
@@ -894,10 +903,16 @@ class RobotLab:
                 "targets": dict(self.action)
                 if self.mode in {"manual", "leader", "agent", "policy"}
                 else {},
-                "joint_limits": control_limits(self.calibration) if self.mode == "manual" else {},
+                "joint_limits": self._joint_limits() if self.mode == "manual" else {},
                 "slider_targets": dict(self.action) if self.mode == "manual" else {},
                 "torque_limits": dict(self.controller.torque_limits) if self.controller else {},
                 "torque_enabled": self.torque,
+                "wrist_range": {
+                    "saved": (
+                        {"min": wrist_range[0], "max": wrist_range[1]} if wrist_range else None
+                    ),
+                    "recording": wrist_recorder.snapshot() if wrist_recorder else None,
+                },
                 "rest_position": {
                     "saved": rest_targets is not None,
                     "phase": rest_phase,
@@ -919,7 +934,11 @@ class RobotLab:
                 else (10.0 if self.mode in {"setup", "verification"} else 2.0),
                 "error": self.error,
             },
-            "calibration": json.loads(json.dumps(self.calibration_state)),
+            "calibration": {
+                **json.loads(json.dumps(self.calibration_state)),
+                "wrist_sweep": self.wrist_sweep.snapshot() if self.wrist_sweep else None,
+                "wrist_range": self.calibration_wrist,
+            },
             "assembled": assembled,
             "verification": copy_verification,
             "mapping_checks": self.mapping_checks.snapshot(assembled.get("port")),
@@ -1330,6 +1349,7 @@ class RobotLab:
     def _calibration_resume(self):
         with self.lock:
             self._idle()
+            self.wrist_sweep = None
             draft = self.calibration_draft.read()
             if draft is None:
                 raise RequestError("No captured calibration to resume")
@@ -1526,6 +1546,12 @@ class RobotLab:
                 self.calibration_state.update(
                     phase="ranges", offsets=offsets, mins=dict(raw), maxes=dict(raw)
                 )
+                self.wrist_sweep = (
+                    RangeRecorder(full_turn_angle(raw["wrist_roll"]))
+                    if "wrist_roll" in raw
+                    else None
+                )
+                self.calibration_wrist = None
                 self._checkpoint_calibration(force=True)
                 self.heartbeat = time.monotonic()
         return self.status()
@@ -1582,6 +1608,7 @@ class RobotLab:
                     atomic_json(path, calibration)
                     path.chmod(0o600)
                     self._archive_calibration(self.robot_id, self.role, path, "manual calibration")
+                    self.calibration_wrist = self._save_swept_wrist(calibration)
                     self.calibration_revisions.acknowledge(
                         self.port, self.robot_id, self.role, path
                     )
@@ -1624,6 +1651,7 @@ class RobotLab:
             port = self._port(payload.get("port"))
             robot_id = safe_slug(payload.get("robot_id"))
             calibration = self.load_calibration(robot_id, "follower", port)
+            wrist_range = self.wrist_ranges.load(robot_id, calibration)
             calibration = {j: calibration[j] for j in joints}
             if to_middle:
                 middle_targets(calibration)
@@ -1695,7 +1723,10 @@ class RobotLab:
                         self.leader_calibration = leader_calibration
                     if mode != "handguide":
                         control = LeRobotPositionControl(
-                            bus, calibration, lambda: control_generation[0] == self.generation
+                            bus,
+                            calibration,
+                            lambda: control_generation[0] == self.generation,
+                            safe_ranges=self._wrist_bounds(wrist_range, calibration),
                         )
                         control.configure()
                         # Sample again after configuration, immediately before holding.
@@ -1757,6 +1788,8 @@ class RobotLab:
                 )
                 self.rest_motion = None
                 self.rest_phase = "idle"
+                self.wrist_range = wrist_range if "wrist_roll" in calibration else None
+                self.wrist_recorder = None
                 self.controller = control
                 self.torque = mode != "handguide"
                 self.error = None
@@ -1839,6 +1872,97 @@ class RobotLab:
                         self.error = None
         return self.status()
 
+    def _save_swept_wrist(self, calibration):
+        """A follower's wrist ends from the calibration sweep become its range for this calibration.
+
+        A sweep that missed the wrist's ends saves no range; the calibration still saves, and
+        the range can be recorded by hand afterwards.
+        """
+        sweep, self.wrist_sweep = self.wrist_sweep, None
+        if self.role != "follower" or sweep is None:
+            return None
+        try:
+            low, high = sweep.result()
+        except ValueError:
+            return None
+        self.wrist_ranges.save(self.robot_id, low, high, calibration)
+        self.diagnostics.emit(
+            "wrist_range_saved",
+            context={"min": low, "max": high, "robot": self.robot_id, "source": "calibration"},
+        )
+        return {"min": low, "max": high}
+
+    @staticmethod
+    def _wrist_bounds(wrist_range, calibration):
+        """The recorded wrist range as raw goal bounds for the motor bridge."""
+        if wrist_range is None or "wrist_roll" not in calibration:
+            return {}
+        low, high = (denormalized("wrist_roll", value, calibration) for value in wrist_range)
+        return {"wrist_roll": (low, high)}
+
+    def _joint_limits(self):
+        limits = control_limits(self.calibration)
+        if self.wrist_range is not None and "wrist_roll" in limits:
+            low, high = self.wrist_range
+            entry = limits["wrist_roll"]
+            limits["wrist_roll"] = {"min": max(entry["min"], low), "max": min(entry["max"], high)}
+        return limits
+
+    def wrist_range_action(self, payload, action):
+        """Record the follower's wrist range by hand, save it, cancel, or clear it."""
+        require(
+            payload,
+            "confirm",
+            {
+                "start": "RECORD WRIST RANGE",
+                "save": "SAVE WRIST RANGE",
+                "cancel": "CANCEL WRIST RANGE",
+                "clear": "CLEAR WRIST RANGE",
+            }[action],
+        )
+        with self.lock, self.lifecycle_lock:
+            if set(self.calibration) != set(JOINTS) or self.mode not in {
+                "manual",
+                "leader",
+                "handguide",
+            }:
+                raise RequestError("The wrist range needs an active session with all six joints")
+            if time.monotonic() - self.heartbeat > 2:
+                raise RequestError("Control heartbeat expired; stop and reconnect")
+            if action == "start":
+                if self.mode != "handguide":
+                    raise RequestError(
+                        "Start hand guiding first: the wrist is turned by hand with motors off"
+                    )
+                self.wrist_recorder = RangeRecorder(self.positions["wrist_roll"])
+            elif action == "save":
+                if self.wrist_recorder is None:
+                    raise RequestError("Record the wrist range first")
+                try:
+                    low, high = self.wrist_recorder.result()
+                except ValueError as error:
+                    raise RequestError(str(error)) from None
+                self.wrist_range = self.wrist_ranges.save(
+                    self.robot_id, low, high, self.calibration
+                )
+                self.wrist_recorder = None
+                # A session already holding the arm applies the new range at once.
+                if self.controller is not None:
+                    self.controller.bridge.safe_ranges = self._wrist_bounds(
+                        self.wrist_range, self.calibration
+                    )
+                self.diagnostics.emit(
+                    "wrist_range_saved", context={"min": low, "max": high, "robot": self.robot_id}
+                )
+            elif action == "cancel":
+                self.wrist_recorder = None
+            else:
+                self.wrist_ranges.clear(self.robot_id)
+                self.wrist_range = None
+                if self.controller is not None:
+                    self.controller.bridge.safe_ranges = {}
+        return self.status()
+
     def jog(self, payload):
         with self.lock:
             if self.mode != "manual" or not self.torque:
@@ -1861,7 +1985,7 @@ class RobotLab:
             ):
                 raise RequestError("Choose a valid joint and a finite position")
             if absolute:
-                limits = control_limits(self.calibration)[joint]
+                limits = self._joint_limits()[joint]
                 if not limits["min"] <= value <= limits["max"]:
                     raise RequestError("Slider target is outside the calibrated joint limits")
             elif not 0 < abs(value) <= 10:
@@ -1934,6 +2058,8 @@ class RobotLab:
             self.middle_motion = None
             self.rest_motion = None
             self.rest_phase = "idle"
+            self.wrist_recorder = None
+            self.wrist_sweep = None
             self.controller = None
             if reason:
                 self.error = reason
@@ -2582,12 +2708,23 @@ class RobotLab:
                         self.calibration_state["maxes"][joint] = max(
                             self.calibration_state["maxes"][joint], position
                         )
+                    if "wrist_roll" in raw:
+                        # Wrist roll is saved as a full turn; its real ends become its safe range.
+                        # After a resume the sweep starts again from wherever the wrist is.
+                        angle = full_turn_angle(raw["wrist_roll"])
+                        if self.wrist_sweep is None:
+                            self.wrist_sweep = RangeRecorder(angle)
+                        else:
+                            self.wrist_sweep.sample(angle)
                     self._checkpoint_calibration()
                 return
             positions = {
                 joint: normalized(joint, value, self.calibration) for joint, value in raw.items()
             }
             self.positions = positions
+            recorder = self.wrist_recorder
+            if recorder is not None and mode == "handguide" and "wrist_roll" in positions:
+                recorder.sample(positions["wrist_roll"])
             control = self.controller
             if generation != self.generation:
                 return
@@ -3107,6 +3244,13 @@ class Handler(BaseHTTPRequestHandler):
                 result = lab.rest_position(payload)
             elif path == "/v1/control/jog":
                 result = lab.jog(payload)
+            elif path.startswith("/v1/control/wrist-range/") and path.rsplit("/", 1)[-1] in (
+                "start",
+                "save",
+                "cancel",
+                "clear",
+            ):
+                result = lab.wrist_range_action(payload, path.rsplit("/", 1)[-1])
             elif path == "/v1/control/heartbeat":
                 result = lab.control_heartbeat(payload)
             elif path == "/v1/recording/start":
