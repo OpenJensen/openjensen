@@ -85,7 +85,8 @@ export function CameraRecordingStatus({ lab }: { lab: RobotLabState }) {
       </strong>
       {recording?.active && (
         <span>
-          {recording.dataset_id} · {recording.episodes} episodes saved · {recording.frames} frames
+          {recording.dataset_id} · {recording.episodes} episodes saved
+          {recording.saving_episodes ? ` · ${recording.saving_episodes} saving` : ''} · {recording.frames} frames
         </span>
       )}
       {collection && ['countdown', 'recording', 'reset'].includes(collection.phase) && (

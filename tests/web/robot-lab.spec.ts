@@ -148,6 +148,7 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin', 
     jogDelay: 0,
     jogStaleResponse: false,
     robotDatasetReads: 0,
+    backgroundSave: false,
     heartbeatFailures: 0,
     statusFailures: false,
     dropCalibrationReply: false,
@@ -674,7 +675,9 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin', 
         state.status.recording.frames = 10;
       } else if (action === '/recording/episode/save') {
         state.status.recording.episode_active = false;
-        state.status.recording.episodes++;
+        if (state.backgroundSave)
+          state.status.recording.saving_episodes = (state.status.recording.saving_episodes ?? 0) + 1;
+        else state.status.recording.episodes++;
         state.status.recording.frames = 0;
       } else if (action === '/recording/episode/discard') {
         state.status.recording.episode_active = false;
@@ -1217,6 +1220,57 @@ test('episode recording saves and finalizes before importing into the selected p
     window.scrollTo(0, 0);
   });
   await page.screenshot({ path: testInfo.outputPath('robot-lab-record.png'), fullPage: true });
+  expect(state.errors).toEqual([]);
+});
+
+test('Space starts and saves episodes by hand while earlier episodes save in the background', async ({
+  page,
+}, testInfo) => {
+  const state = await fixture(page, true);
+  state.backgroundSave = true;
+  await startManual(page);
+  await openTab(page, 'Record');
+  await page.getByLabel('Dataset name', { exact: true }).fill('space-demo');
+  await page.getByLabel('Task instruction', { exact: true }).fill('Place the block in the tray.');
+  await page.getByRole('button', { name: 'Create recording dataset', exact: true }).click();
+  const status = page.locator('.robot-lab-recording-status');
+  const start = page.getByRole('button', { name: 'Start episode', exact: true });
+  const save = page.getByRole('button', { name: 'Save episode', exact: true });
+  await expect(start).toBeEnabled();
+  await expect(start).toHaveAttribute('aria-keyshortcuts', 'Space');
+  // Focus stays on a clicked button; Space must record, never press that button.
+  await page.getByRole('button', { name: 'Discard episode', exact: true }).focus();
+  await page.keyboard.press('Space');
+  await expect.poll(() => writes(state, '/recording/episode/start').length).toBe(1);
+  await expect(status).toContainText('Recording an episode');
+  await expect(save).toBeEnabled();
+  await page.keyboard.press('Space');
+  await expect.poll(() => writes(state, '/recording/episode/save').length).toBe(1);
+  await expect(status).toContainText('Ready for the next episode · 0 saved · 1 saving');
+  // The next episode starts while the previous one is still being saved.
+  await expect(start).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Finish dataset', exact: true })).toBeEnabled();
+  const scroll = await page.evaluate(() => window.scrollY);
+  expect(await page.evaluate(() => document.documentElement.scrollHeight - innerHeight - scrollY)).toBeGreaterThan(200);
+  await page.keyboard.press('Space');
+  await expect.poll(() => writes(state, '/recording/episode/start').length).toBe(2);
+  await expect(status).toContainText('Recording an episode · 0 saved · 1 saving');
+  expect(writes(state, '/recording/episode/discard')).toEqual([]);
+  // Space does not also page down.
+  expect(await page.evaluate(() => window.scrollY)).toBe(scroll);
+  state.status.recording.saving_episodes = 0;
+  state.status.recording.episodes = 1;
+  await expect(status).toContainText('Recording an episode · 1 saved');
+  await expect(page.locator('.robot-lab-busy, [role="status"]').filter({ hasText: 'Working…' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Save episode', exact: true }).click();
+  await expect.poll(() => writes(state, '/recording/episode/save').length).toBe(2);
+  state.status.recording.save_error = 'An episode could not be saved: storage unavailable.';
+  await expect(page.getByText('An episode could not be saved: storage unavailable.', { exact: true })).toBeVisible();
+  await page.evaluate(() => {
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    window.scrollTo(0, 0);
+  });
+  await page.screenshot({ path: testInfo.outputPath('robot-lab-space-recording.png'), fullPage: true });
   expect(state.errors).toEqual([]);
 });
 

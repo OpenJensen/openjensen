@@ -227,6 +227,9 @@ export type RobotStatus = {
     dataset_id: string | null;
     episode_active: boolean;
     saving?: boolean;
+    /** Episodes handed to the background save that are not in the dataset yet. */
+    saving_episodes?: number;
+    save_error?: string | null;
     frames: number;
     episodes: number;
     fps: number;

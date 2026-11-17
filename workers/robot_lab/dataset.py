@@ -10,8 +10,12 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 import re
 import shutil
+import subprocess
+import sys
+import threading
 import time
 from collections import deque
 from pathlib import Path, PurePosixPath
@@ -20,6 +24,12 @@ from hardware import JOINTS
 from image_writer import AsyncImageWriter, image_worker_count
 
 SLUG = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$")
+FRONT_IMAGE = "observation.images.front"
+# A background save waits this long before Finish reports that episodes are
+# still saving. The app allows Finish 80 seconds.
+FINISH_WAIT_SECONDS = 70
+# Service shutdown gives queued saves this long to complete.
+CLOSE_WAIT_SECONDS = 15
 
 
 def safe_slug(value):
@@ -95,6 +105,120 @@ class CaptureCadenceError(ValueError):
     """Capture cannot sustain the immutable dataset timebase."""
 
 
+def pending_image_path(folder: Path, key, index):
+    base = folder if key == FRONT_IMAGE else folder / key
+    return base / f"{index:06d}.png"
+
+
+def episode_schema(features):
+    import pyarrow as pa
+
+    fields, hf = [], {}
+    for key, feature in features.items():
+        if feature["dtype"] == "image":
+            fields.append(pa.field(key, pa.struct([("bytes", pa.binary()), ("path", pa.string())])))
+            hf[key] = {"_type": "Image"}
+        elif key in ("observation.state", "action"):
+            fields.append(pa.field(key, pa.list_(pa.float32(), 6)))
+            hf[key] = {
+                "feature": {"dtype": "float32", "_type": "Value"},
+                "length": 6,
+                "_type": "Sequence",
+            }
+        else:
+            dtype = "float32" if key == "timestamp" else "int64"
+            fields.append(pa.field(key, pa.float32() if key == "timestamp" else pa.int64()))
+            hf[key] = {"dtype": dtype, "_type": "Value"}
+    return pa.schema(
+        fields, metadata={b"huggingface": json.dumps({"info": {"features": hf}}).encode()}
+    )
+
+
+def build_episode_file(source: Path, target: Path, features, episode_index, first_index):
+    """Write one recorded episode's frames and images as a LeRobot Parquet file.
+
+    Returns the episode statistics. Episode and dataset indices are assigned
+    here, when the episode's place in the dataset is known, so an episode can
+    be recorded while earlier ones are still being saved.
+    """
+    import numpy as np
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+    from PIL import Image
+
+    image_keys = [key for key, feature in features.items() if feature["dtype"] == "image"]
+    target.parent.mkdir(parents=True, exist_ok=True)
+    partial = target.with_suffix(".tmp")
+    collected = {key: [] for key in features}
+    schema = episode_schema(features)
+    with pq.ParquetWriter(partial, schema) as writer:
+        batch = []
+        with (source / "frames.jsonl").open() as stream:
+            for line in stream:
+                row = json.loads(line)
+                row["episode_index"] = episode_index
+                row["index"] = first_index + row["frame_index"]
+                for key in image_keys:
+                    image_path = pending_image_path(source, key, row["frame_index"])
+                    row[key] = {"bytes": image_path.read_bytes(), "path": None}
+                    with Image.open(image_path) as image:
+                        collected[key].append(
+                            np.asarray(image.resize((8, 8)), dtype=float).reshape(-1, 3) / 255
+                        )
+                for key in collected:
+                    if key not in image_keys:
+                        collected[key].append(row[key])
+                batch.append(row)
+                if len(batch) == 20:
+                    writer.write_table(pa.Table.from_pylist(batch, schema=schema))
+                    batch = []
+            if batch:
+                writer.write_table(pa.Table.from_pylist(batch, schema=schema))
+    partial.replace(target)
+    return {key: statistics(values, key in image_keys) for key, values in collected.items()}
+
+
+def build_episode_in_child(source: Path, target: Path, features, episode_index, first_index):
+    """Build an episode file in a separate low-priority process.
+
+    The recorder keeps capturing the next episode meanwhile; a separate process
+    keeps image decoding and Parquet writing off the recorder's interpreter.
+    """
+    spec = {
+        "source": str(source),
+        "target": str(target),
+        "features": features,
+        "episode_index": episode_index,
+        "first_index": first_index,
+    }
+    result = subprocess.run(
+        [sys.executable, str(Path(__file__).resolve()), "--build-episode", json.dumps(spec)],
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        text=True,
+        timeout=1800,
+        check=False,
+    )
+    if result.returncode:
+        lines = result.stderr.strip().splitlines()
+        raise ValueError(lines[-1] if lines else f"save process exited with {result.returncode}")
+    return json.loads(result.stdout)
+
+
+def remove_saved_take(folder: Path):
+    """Delete a saved episode's staging folder: only recorder-made files."""
+    for path in sorted(folder.rglob("*"), reverse=True):
+        if path.is_symlink():
+            continue
+        if path.is_dir() and path.parent == folder and path.name.startswith("observation.images."):
+            path.rmdir()
+        elif path.is_file() and (
+            path.name == "frames.jsonl" or re.fullmatch(r"\d{6}\.png(?:\.tmp)?", path.name)
+        ):
+            path.unlink()
+    folder.rmdir()
+
+
 class DatasetWriter:
     def __init__(self, root: Path, dataset_id: str, task: str, fps: int, image_shape=None):
         import numpy  # noqa: F401
@@ -160,6 +284,15 @@ class DatasetWriter:
         self.actual_fps = None
         self.episode_capture_fps = []
         self.episode_capture_timing = []
+        # Episodes saved in the background, oldest first. Each waits in its
+        # own folder under .saving; one thread commits them in recording order.
+        self.saving_root = self.root / ".saving"
+        self.save_lock = threading.Condition()
+        self.save_queue = deque()
+        self.save_thread = None
+        self.save_errors = []
+        self.next_take = 0
+        self.build_queued = build_episode_in_child
         self.pending = self.root / ".pending"
         self.pending.mkdir()
         self.write_metadata()
@@ -172,8 +305,25 @@ class DatasetWriter:
             )
 
     def _image_path(self, key, index):
-        folder = self.pending if key == "observation.images.front" else self.pending / key
-        return folder / f"{index:06d}.png"
+        return pending_image_path(self.pending, key, index)
+
+    def _ensure_pending(self):
+        self.pending.mkdir(exist_ok=True)
+        for key in self.image_shapes:
+            self._image_path(key, 0).parent.mkdir(exist_ok=True)
+
+    def saving_count(self):
+        with self.save_lock:
+            return len(self.save_queue)
+
+    def save_error(self):
+        with self.save_lock:
+            return self.save_errors[-1] if self.save_errors else None
+
+    def wait_for_saves(self, timeout=None):
+        with self.save_lock:
+            if not self.save_lock.wait_for(lambda: not self.save_queue, timeout):
+                raise ValueError("Episodes are still saving; try again in a moment")
 
     def summary(self):
         return {
@@ -267,6 +417,7 @@ class DatasetWriter:
             raise ValueError("This unsaved recording was closed; create a new dataset")
         if self.finalized or self.episode_active or self.frames:
             raise ValueError("Save or discard the pending episode before starting another")
+        self._ensure_pending()
         self.episode_active = True
         self.started_at = time.monotonic()
         self.last_frame_at = None
@@ -335,88 +486,25 @@ class DatasetWriter:
         self.frames += 1
         self.last_frame_at = now
 
-    def _schema(self):
-        import pyarrow as pa
+    def _timing(self):
+        return {
+            "elapsed_s": self.last_frame_at - self.first_frame_at,
+            "largest_gap_s": self.largest_gap,
+            "samples": self.frames,
+        }
 
-        fields, hf = [], {}
-        for key, feature in self.features.items():
-            if feature["dtype"] == "image":
-                fields.append(
-                    pa.field(key, pa.struct([("bytes", pa.binary()), ("path", pa.string())]))
-                )
-                hf[key] = {"_type": "Image"}
-            elif key in ("observation.state", "action"):
-                fields.append(pa.field(key, pa.list_(pa.float32(), 6)))
-                hf[key] = {
-                    "feature": {"dtype": "float32", "_type": "Value"},
-                    "length": 6,
-                    "_type": "Sequence",
-                }
-            else:
-                dtype = "float32" if key == "timestamp" else "int64"
-                fields.append(pa.field(key, pa.float32() if key == "timestamp" else pa.int64()))
-                hf[key] = {"dtype": dtype, "_type": "Value"}
-        return pa.schema(
-            fields, metadata={b"huggingface": json.dumps({"info": {"features": hf}}).encode()}
-        )
-
-    def save_episode(self):
-        if self.abandoned:
-            raise ValueError("This unsaved recording was closed; its files are preserved")
-        import numpy as np
-        import pyarrow as pa
-        import pyarrow.parquet as pq
-        from PIL import Image
-
-        self.episode_active = False
-        if self.image_writer:
-            self.image_writer.retry_failed()
-        if self.frames < 2:
-            raise ValueError("Record at least two frames before saving an episode")
-        if not len(self.episodes) < 1000:
-            raise ValueError("Dataset reached 1000 episodes; finalize and create another dataset")
+    def _commit_episode(self, source, frames, actual_fps, timing, build):
         index = len(self.episodes)
         target = self.root / f"data/chunk-000/file-{index:03d}.parquet"
-        target.parent.mkdir(parents=True, exist_ok=True)
-        partial = target.with_suffix(".tmp")
-        collected = {key: [] for key in self.features}
-        schema = self._schema()
-        with pq.ParquetWriter(partial, schema) as writer:
-            batch = []
-            with (self.pending / "frames.jsonl").open() as stream:
-                for line in stream:
-                    row = json.loads(line)
-                    for key in self.image_shapes:
-                        image_path = self._image_path(key, row["frame_index"])
-                        row[key] = {
-                            "bytes": image_path.read_bytes(),
-                            "path": None,
-                        }
-                        with Image.open(image_path) as image:
-                            collected[key].append(
-                                np.asarray(image.resize((8, 8)), dtype=float).reshape(-1, 3) / 255
-                            )
-                    for key in collected:
-                        if key not in self.image_shapes:
-                            collected[key].append(row[key])
-                    batch.append(row)
-                    if len(batch) == 20:
-                        writer.write_table(pa.Table.from_pylist(batch, schema=schema))
-                        batch = []
-                if batch:
-                    writer.write_table(pa.Table.from_pylist(batch, schema=schema))
-        partial.replace(target)
-        stats = {
-            key: statistics(values, key in self.image_shapes) for key, values in collected.items()
-        }
+        stats = build(source, target, self.features, index, self.total_frames)
         entry = {
             "episode_index": index,
             "tasks": [self.task],
-            "length": self.frames,
+            "length": frames,
             "data/chunk_index": 0,
             "data/file_index": index,
             "dataset_from_index": self.total_frames,
-            "dataset_to_index": self.total_frames + self.frames,
+            "dataset_to_index": self.total_frames + frames,
             "meta/episodes/chunk_index": 0,
             "meta/episodes/file_index": 0,
         }
@@ -424,16 +512,10 @@ class DatasetWriter:
             for key, value in values.items():
                 entry[f"stats/{feature}/{key}"] = value
         self.episodes.append(entry)
-        self.episode_capture_fps.append(self.actual_fps)
-        self.episode_capture_timing.append(
-            {
-                "elapsed_s": self.last_frame_at - self.first_frame_at,
-                "largest_gap_s": self.largest_gap,
-                "samples": self.frames,
-            }
-        )
+        self.episode_capture_fps.append(actual_fps)
+        self.episode_capture_timing.append(timing)
         self.all_stats.append(stats)
-        self.total_frames += self.frames
+        self.total_frames += frames
         try:
             self.write_metadata()
         except Exception:
@@ -441,9 +523,86 @@ class DatasetWriter:
             self.episode_capture_fps.pop()
             self.episode_capture_timing.pop()
             self.all_stats.pop()
-            self.total_frames -= self.frames
+            self.total_frames -= frames
             raise
+
+    def save_episode(self):
+        if self.abandoned:
+            raise ValueError("This unsaved recording was closed; its files are preserved")
+        self.episode_active = False
+        self.wait_for_saves()
+        if self.image_writer:
+            self.image_writer.retry_failed()
+        if self.frames < 2:
+            raise ValueError("Record at least two frames before saving an episode")
+        if not len(self.episodes) < 1000:
+            raise ValueError("Dataset reached 1000 episodes; finalize and create another dataset")
+        self._commit_episode(
+            self.pending, self.frames, self.actual_fps, self._timing(), build_episode_file
+        )
         self.discard_episode()
+
+    def queue_episode(self):
+        """Save the stopped episode in the background so the next one can start at once.
+
+        The episode's files move from .pending to their own folder under .saving
+        and a low-priority process builds its Parquet file. Episodes commit in
+        the order they were recorded. A failed save keeps its folder and is
+        reported by save_error().
+        """
+        if self.abandoned:
+            raise ValueError("This unsaved recording was closed; its files are preserved")
+        self.episode_active = False
+        if self.image_writer:
+            # Every image of this episode is on disk before its folder moves.
+            self.image_writer.retry_failed()
+        if self.frames < 2:
+            raise ValueError("Record at least two frames before saving an episode")
+        with self.save_lock:
+            if len(self.episodes) + len(self.save_queue) >= 1000:
+                raise ValueError(
+                    "Dataset reached 1000 episodes; finalize and create another dataset"
+                )
+            take = self.saving_root / f"{self.next_take:06d}"
+            self.next_take += 1
+        self.saving_root.mkdir(exist_ok=True)
+        self.pending.replace(take)
+        job = (take, self.frames, self.actual_fps, self._timing())
+        self.frames = 0
+        with self.save_lock:
+            self.save_queue.append(job)
+            if self.save_thread is None:
+                self.save_thread = threading.Thread(
+                    target=self._save_queued, name="robot-lab-episode-save", daemon=True
+                )
+                self.save_thread.start()
+        self._ensure_pending()
+
+    def _save_queued(self):
+        while True:
+            with self.save_lock:
+                if not self.save_queue:
+                    self.save_thread = None
+                    self.save_lock.notify_all()
+                    return
+                take, frames, actual_fps, timing = self.save_queue[0]
+            try:
+                self._commit_episode(take, frames, actual_fps, timing, self.build_queued)
+            except Exception as error:
+                with self.save_lock:
+                    self.save_errors.append(
+                        f"An episode could not be saved: {error}. Its {frames} frames are kept "
+                        f"on the robot computer in {self.id}/.saving/{take.name}."
+                    )
+            else:
+                try:
+                    remove_saved_take(take)
+                except OSError:
+                    pass  # The episode is saved; a leftover hidden folder is never imported.
+            finally:
+                with self.save_lock:
+                    self.save_queue.popleft()
+                    self.save_lock.notify_all()
 
     def discard_episode(self):
         if self.abandoned:
@@ -471,7 +630,13 @@ class DatasetWriter:
         Metadata is committed before the caller detaches this writer. If that
         write fails, collection stays paused and the action can be retried.
         """
-        if self.finalized or self.abandoned or self.episodes or self.total_frames:
+        if (
+            self.finalized
+            or self.abandoned
+            or self.episodes
+            or self.total_frames
+            or self.saving_count()
+        ):
             raise ValueError("Only a recording with no saved episodes can be closed this way")
         self.episode_active = False
         if self.image_writer:
@@ -489,6 +654,7 @@ class DatasetWriter:
             raise ValueError("A closed unsaved recording cannot be finalized or imported")
         if self.episode_active or self.frames:
             raise ValueError("Save or discard the current episode before finalizing")
+        self.wait_for_saves(FINISH_WAIT_SECONDS)
         if not self.episodes:
             raise ValueError("Save at least one episode before finalizing")
         if self.image_writer:
@@ -504,9 +670,13 @@ class DatasetWriter:
             self.finalized = False
             raise
         self.pending.rmdir()
+        if self.saving_root.is_dir() and not any(self.saving_root.iterdir()):
+            self.saving_root.rmdir()
         self.close()
 
     def close(self):
+        with self.save_lock:
+            self.save_lock.wait_for(lambda: not self.save_queue, CLOSE_WAIT_SECONDS)
         if self.image_writer:
             self.image_writer.stop()
 
@@ -594,3 +764,25 @@ def manifest(root, dataset_id):
         "files": files,
         "total_bytes": sum(entry["size"] for entry in files),
     }
+
+
+def _build_episode_command(spec):
+    try:
+        os.nice(10)  # Recording and teleoperation come first.
+    except AttributeError, OSError:
+        pass
+    spec = json.loads(spec)
+    stats = build_episode_file(
+        Path(spec["source"]),
+        Path(spec["target"]),
+        spec["features"],
+        spec["episode_index"],
+        spec["first_index"],
+    )
+    sys.stdout.write(json.dumps(stats, allow_nan=False))
+
+
+if __name__ == "__main__":
+    if len(sys.argv) != 3 or sys.argv[1] != "--build-episode":
+        raise SystemExit("usage: dataset.py --build-episode SPEC")
+    _build_episode_command(sys.argv[2])

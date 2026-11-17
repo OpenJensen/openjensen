@@ -861,6 +861,7 @@ class RobotLab:
                 "gripper_load_tolerance": True,
                 "lerobot_observation_ranges": True,
                 "background_recording_io": True,
+                "background_episode_save": True,
                 "guided_recording": True,
                 "multi_camera_recording": True,
                 "camera_mode_controls": platform.system() == "Linux",
@@ -937,6 +938,12 @@ class RobotLab:
                 "rate_status": self.recording_rate_status,
                 "rate_message": self.recording_rate_message,
                 "saving": self.recording_io,
+                "saving_episodes": writer.saving_count()
+                if writer and hasattr(writer, "saving_count")
+                else 0,
+                "save_error": writer.save_error()
+                if writer and hasattr(writer, "save_error")
+                else None,
                 "collection": collection,
             },
             "calibrations": calibrations,
@@ -2181,6 +2188,11 @@ class RobotLab:
                 return self.status()
             if action not in {"save", "discard", "finish"}:
                 raise RequestError("Unknown recording action")
+            # By hand, a saved episode finishes writing in the background and the
+            # next one can start at once. Timed collection keeps its own saving phase.
+            in_background = (
+                action == "save" and self.collection is None and hasattr(writer, "queue_episode")
+            )
             if self.collection:
                 self.collection.pause(time.monotonic())
             abandon_empty = payload.get("abandon_empty", False)
@@ -2195,7 +2207,9 @@ class RobotLab:
             writer.episode_active = False
         # Encoding and disk waits must never hold the motor loop's global lock.
         try:
-            if action == "save":
+            if in_background:
+                writer.queue_episode()
+            elif action == "save":
                 writer.save_episode()
             elif action == "discard":
                 writer.discard_episode()

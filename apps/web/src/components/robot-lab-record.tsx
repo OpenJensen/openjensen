@@ -54,6 +54,11 @@ export function RobotLabRecord({ lab }: { lab: RobotLabState }) {
   const [episodeCount, setEpisodeCount] = useState(10);
   const [countdownSeconds, setCountdownSeconds] = useState(3);
   const [voiceCues, setVoiceCues] = useState(true);
+  // Starting and saving an episode by hand never lock the page: the button
+  // shows the new state at once and the save finishes on the robot computer.
+  const [episodeRequest, setEpisodeRequest] = useState<'start' | 'save' | 'discard' | null>(null);
+  const spaceOwned = useRef(false);
+  const spaceAction = useRef<(() => void) | null>(null);
   const lastCue = useRef<string | null>(null);
   const audioContext = useRef<AudioContext | null>(null);
   const primeAudio = useCallback(() => {
@@ -110,6 +115,81 @@ export function RobotLabRecord({ lab }: { lab: RobotLabState }) {
   const rateFailed = recording?.rate_status === 'error';
   const rateReady = !recording?.rate_status || recording.rate_status === 'ready';
   const canCollect = canAct && controlling && ownsSession && !centering && !partialControl && rateReady;
+  const savingEpisodes = recording?.saving_episodes ?? 0;
+  const episodeActive = episodeRequest === 'start' || (episodeRequest === null && !!recording?.episode_active);
+  const pendingFrames = episodeRequest === null ? (recording?.frames ?? 0) : 0;
+  const byHand = !!recording?.active && !collection;
+  const canStart =
+    byHand &&
+    canAct &&
+    controlling &&
+    ownsSession &&
+    !centering &&
+    !partialControl &&
+    rateReady &&
+    !saving &&
+    !episodeActive &&
+    !pendingFrames &&
+    !episodeRequest;
+  const canSave = canAct && !saving && !collecting && !episodeRequest && pendingFrames > 0;
+  function episodeAction(kind: 'start' | 'save' | 'discard') {
+    setEpisodeRequest(kind);
+    void perform(
+      kind === 'start' ? 'Recording.' : kind === 'save' ? 'Episode saved.' : 'Episode discarded.',
+      kind === 'start' ? robotApi.startEpisode : kind === 'save' ? robotApi.saveEpisode : robotApi.discardEpisode,
+      undefined,
+      kind === 'discard',
+      undefined,
+      true,
+    ).finally(() => setEpisodeRequest(null));
+  }
+  useEffect(() => {
+    spaceOwned.current = byHand;
+    spaceAction.current = !byHand
+      ? null
+      : episodeActive || pendingFrames
+        ? canSave
+          ? () => episodeAction('save')
+          : null
+        : canStart
+          ? () => episodeAction('start')
+          : null;
+  });
+  useEffect(() => {
+    // Space starts an episode and Space saves it, so one hand stays free for the arm.
+    let handled = false;
+    const isSpace = (event: KeyboardEvent) => event.code === 'Space' || event.key === ' ';
+    const typing = (target: EventTarget | null) =>
+      target instanceof HTMLElement &&
+      (target.isContentEditable ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        (target instanceof HTMLInputElement &&
+          !['checkbox', 'radio', 'button', 'submit', 'reset', 'range'].includes(target.type)));
+    const down = (event: KeyboardEvent) => {
+      if (!spaceOwned.current || !isSpace(event) || event.ctrlKey || event.metaKey || event.altKey) return;
+      if (event.shiftKey || typing(event.target)) return;
+      const modal = event.target instanceof Element ? event.target.closest('[aria-modal="true"], dialog[open]') : null;
+      if (modal && !modal.classList.contains('robot-lab')) return;
+      // The page does not scroll and a focused button or box does not also react.
+      event.preventDefault();
+      event.stopPropagation();
+      handled = true;
+      if (!event.repeat) spaceAction.current?.();
+    };
+    const up = (event: KeyboardEvent) => {
+      if (!handled || !isSpace(event)) return;
+      handled = false;
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    window.addEventListener('keydown', down, true);
+    window.addEventListener('keyup', up, true);
+    return () => {
+      window.removeEventListener('keydown', down, true);
+      window.removeEventListener('keyup', up, true);
+    };
+  }, []);
   const validSchedule =
     Number.isInteger(episodeCount) &&
     episodeCount >= 1 &&
@@ -421,23 +501,26 @@ export function RobotLabRecord({ lab }: { lab: RobotLabState }) {
           </>
         ) : (
           <>
-            <div className={`robot-lab-recording-status${recording.episode_active ? ' recording' : ''}`}>
+            <div className={`robot-lab-recording-status${episodeActive ? ' recording' : ''}`}>
               <span className="robot-lab-recording-light" />
               <div>
                 <strong>{recording.dataset_id}</strong>
                 <small>
                   {measuring
                     ? 'Checking recording speed'
-                    : recording.episode_active
-                      ? 'Recording an episode'
-                      : recording.frames > 0
-                        ? 'Episode has pending frames'
-                        : 'Ready for the next episode'}{' '}
-                  · {recording.episodes} saved
+                    : saving
+                      ? 'Saving episode'
+                      : episodeActive
+                        ? 'Recording an episode'
+                        : pendingFrames > 0
+                          ? 'Episode has pending frames'
+                          : 'Ready for the next episode'}{' '}
+                  · {recording.episodes} saved{savingEpisodes > 0 ? ` · ${savingEpisodes} saving` : ''}
                 </small>
               </div>
-              <output>{recording.frames} frames</output>
+              <output>{pendingFrames} frames</output>
             </div>
+            {recording.save_error && <Notice kind="warning">{recording.save_error}</Notice>}
             {rateFailed && (
               <Notice kind="warning">
                 <strong>Capture rate could not be measured.</strong>
@@ -549,37 +632,41 @@ export function RobotLabRecord({ lab }: { lab: RobotLabState }) {
             {session?.mode === 'handguide' && <Notice>Action source: observed joint positions (hand guiding).</Notice>}
             {session?.mode === 'manual' && <Notice>Action source: commanded joint targets.</Notice>}
             <div className="robot-lab-actions">
-              {!collection && (
+              {byHand &&
+                (episodeActive || pendingFrames > 0 ? (
+                  <button
+                    className="primary-button robot-lab-episode-button"
+                    aria-keyshortcuts="Space"
+                    disabled={!canSave}
+                    onClick={() => episodeAction('save')}
+                  >
+                    Save episode<kbd aria-hidden="true">Space</kbd>
+                  </button>
+                ) : (
+                  <button
+                    className="primary-button robot-lab-episode-button"
+                    aria-keyshortcuts="Space"
+                    disabled={!canStart}
+                    onClick={() => episodeAction('start')}
+                  >
+                    <span aria-hidden="true">●</span>Start episode<kbd aria-hidden="true">Space</kbd>
+                  </button>
+                ))}
+              {collection && (
                 <button
-                  className="primary-button"
-                  disabled={
-                    !canAct ||
-                    !controlling ||
-                    !ownsSession ||
-                    centering ||
-                    partialControl ||
-                    recording.episode_active ||
-                    !!collection ||
-                    !rateReady ||
-                    saving ||
-                    recording.frames > 0
-                  }
-                  onClick={() => void perform('Episode recording started.', robotApi.startEpisode)}
+                  className="secondary-button"
+                  disabled={!canAct || saving || collecting || !recording.frames}
+                  onClick={() => void perform('Episode saved.', robotApi.saveEpisode)}
                 >
-                  <span aria-hidden="true">●</span>Start episode
+                  Save episode
                 </button>
               )}
               <button
                 className="secondary-button"
-                disabled={!canAct || saving || collecting || !recording.frames}
-                onClick={() => void perform('Episode saved.', robotApi.saveEpisode)}
-              >
-                Save episode
-              </button>
-              <button
-                className="secondary-button"
-                disabled={!canAct || saving || collecting || (!recording.episode_active && !recording.frames)}
-                onClick={() => void perform('Episode discarded.', robotApi.discardEpisode)}
+                disabled={!canAct || saving || collecting || !!episodeRequest || (!episodeActive && !pendingFrames)}
+                onClick={() =>
+                  collection ? void perform('Episode discarded.', robotApi.discardEpisode) : episodeAction('discard')
+                }
               >
                 Discard episode
               </button>
@@ -613,15 +700,16 @@ export function RobotLabRecord({ lab }: { lab: RobotLabState }) {
                   !canAct ||
                   collecting ||
                   saving ||
-                  recording.episode_active ||
-                  recording.frames > 0 ||
-                  recording.episodes === 0
+                  !!episodeRequest ||
+                  episodeActive ||
+                  pendingFrames > 0 ||
+                  recording.episodes + savingEpisodes === 0
                 }
                 onClick={() => void perform('Dataset finalized.', robotApi.finishRecording)}
               >
-                Finish dataset
+                {pending === 'Dataset finalized.' ? 'Finishing dataset…' : 'Finish dataset'}
               </button>
-              {recording.episodes === 0 && (
+              {recording.episodes === 0 && savingEpisodes === 0 && (
                 <button
                   className="text-button"
                   disabled={!canAct || collecting || saving}
@@ -636,7 +724,7 @@ export function RobotLabRecord({ lab }: { lab: RobotLabState }) {
                 </button>
               )}
             </div>
-            {recording.episodes === 0 && (
+            {recording.episodes === 0 && savingEpisodes === 0 && (
               <p className="robot-lab-subtle">
                 Closing retains unsaved files. Create a new dataset to change the frame rate.
               </p>

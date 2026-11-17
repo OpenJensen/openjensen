@@ -1436,6 +1436,45 @@ class SafetyTests(unittest.TestCase):
         self.assertTrue(writer.finalized)
 
     @unittest.skipUnless(DATASET_AVAILABLE, "Dataset dependencies required")
+    def test_saving_an_episode_by_hand_returns_at_once_and_the_next_can_start(self):
+        self.start(mode="handguide")
+        self.lab.recording_start(
+            {"dataset_id": "quick-save", "task": "Reach", "fps": 5, "camera_index": None}
+        )
+        writer = self.lab.writer
+        saving, release = threading.Event(), threading.Event()
+        build = writer.build_queued
+
+        def held(*args):
+            saving.set()
+            release.wait(10)
+            return build(*args)
+
+        writer.build_queued = held
+        try:
+            for episode in range(2):
+                status = self.lab.recording_action("start")["recording"]
+                self.assertTrue(status["episode_active"])
+                for index in range(2):
+                    writer.add_frame(
+                        dict.fromkeys(JOINTS, float(episode)), {}, captured_at=episode + index / 5
+                    )
+                status = self.lab.recording_action("save")["recording"]
+                self.assertTrue(saving.wait(5))
+                self.assertEqual(
+                    (status["episodes"], status["saving_episodes"], status["frames"]),
+                    (0, episode + 1, 0),
+                )
+                self.assertFalse(status["saving"])
+                self.assertFalse(status["episode_active"])
+        finally:
+            release.set()
+        status = self.lab.recording_action("finish")["recording"]
+        self.assertFalse(status["active"])
+        self.assertTrue(writer.finalized)
+        self.assertEqual([episode["length"] for episode in writer.episodes], [2, 2])
+
+    @unittest.skipUnless(DATASET_AVAILABLE, "Dataset dependencies required")
     def test_inflight_capture_cannot_append_after_unsaved_writer_is_detached(self):
         import numpy as np
 
