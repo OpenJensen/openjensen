@@ -53,14 +53,16 @@ def deployment(tmp_path):
     return root, config, path
 
 
-def upstream(relation="ahead", *, target=NEW, release=True):
+def upstream(relation="ahead", *, target=NEW, release=True, tag="v0.0.1"):
+    """GitHub as the update check sees it: the latest release, its commit, and a comparison."""
+
     def respond(request):
-        if request.url.path.endswith("/commits/main"):
+        if request.url.path.endswith("/releases/latest"):
+            return httpx.Response(200 if release else 503, json={"tag_name": tag})
+        if request.url.path.endswith(f"/commits/{tag}"):
             return httpx.Response(200, json={"sha": target})
         if "/compare/" in request.url.path:
             return httpx.Response(404 if relation == "missing" else 200, json={"status": relation})
-        if request.url.path.endswith("/releases/latest"):
-            return httpx.Response(200 if release else 503, json={"tag_name": "v0.0.1"})
         raise AssertionError(str(request.url))
 
     return httpx.AsyncClient(transport=httpx.MockTransport(respond))
@@ -97,13 +99,28 @@ def test_identical_commit_is_current_even_when_release_number_is_older(deploymen
     asyncio.run(check())
 
 
-def test_release_outage_does_not_hide_main_update(deployment):
+def test_updates_offer_the_latest_release_by_its_number(deployment):
     async def check():
         service = ApplicationUpdates(
-            config_path=deployment[2], client=upstream(release=False), commit=OLD
+            config_path=deployment[2], client=upstream(tag="v0.1.42"), commit=OLD
         )
         value = await service.check()
-        assert value.state == "available" and value.latest_release is None
+        assert value.state == "available"
+        assert value.message == "Version 0.1.42 is available."
+        assert (value.latest_release, value.upstream_commit) == ("v0.1.42", NEW)
+        await service.close()
+
+    asyncio.run(check())
+
+
+@pytest.mark.parametrize("problem", ["outage", "tag"])
+def test_release_outage_is_an_error_not_up_to_date(deployment, problem):
+    async def check():
+        client = upstream(release=False) if problem == "outage" else upstream(tag="main")
+        service = ApplicationUpdates(config_path=deployment[2], client=client, commit=OLD)
+        value = await service.check()
+        assert value.state == "error"
+        assert value.upstream_commit is None
         await service.close()
 
     asyncio.run(check())
@@ -484,10 +501,8 @@ def test_an_ordinary_installation_keeps_its_copies_beside_the_workspace(tmp_path
     assert (workspace / "workspace.sqlite3").read_bytes() == b"live projects"
 
 
-@pytest.mark.parametrize("invalid", ["remote", "moved", "diverged"])
-def test_runner_rechecks_canonical_remote_exact_tip_and_forward_ancestry(
-    deployment, monkeypatch, invalid
-):
+def release_remote(invalid=None):
+    """A canonical remote where NEW is tagged v0.1.42 (annotated) and is on main."""
     calls = []
 
     def git(_, *args):
@@ -498,16 +513,68 @@ def test_runner_rechecks_canonical_remote_exact_tip_and_forward_ancestry(
                 if invalid == "remote"
                 else "https://github.com/OpenJensen/openjensen.git"
             )
-        if args[0] == "rev-parse":
-            return LATER if invalid == "moved" else NEW
-        if args[0] == "merge-base" and invalid == "diverged":
+        if args[0] == "ls-remote":
+            tagged = LATER if invalid == "unreleased" else NEW
+            return (
+                f"{'a' * 40}\trefs/tags/v0.1.42\n{tagged}\trefs/tags/v0.1.42^{{}}\n"
+                f"{'b' * 40}\trefs/tags/nightly\n"
+            )
+        if args[0] == "merge-base" and (
+            (invalid == "off-main" and args[-1] == "refs/remotes/origin/main")
+            or (invalid == "backwards" and args[-1] == NEW)
+        ):
             raise subprocess.CalledProcessError(1, args)
         return ""
 
+    return git, calls
+
+
+@pytest.mark.parametrize("invalid", ["remote", "unreleased", "off-main", "backwards"])
+def test_runner_installs_only_a_release_on_main_that_moves_forward(
+    deployment, monkeypatch, invalid
+):
+    git, calls = release_remote(invalid)
     monkeypatch.setattr(runner, "git", git)
     with pytest.raises((ValueError, subprocess.CalledProcessError)):
         runner.verify_target(deployment[1], NEW, OLD)
     assert calls
+
+
+def test_release_commits_reads_real_annotated_and_lightweight_tags(tmp_path):
+    origin = tmp_path / "origin"
+    env = dict(
+        os.environ,
+        GIT_AUTHOR_NAME="Fixture",
+        GIT_AUTHOR_EMAIL="fixture@example.invalid",
+        GIT_COMMITTER_NAME="Fixture",
+        GIT_COMMITTER_EMAIL="fixture@example.invalid",
+    )
+
+    def git(*args, cwd=origin):
+        return subprocess.run(
+            ["git", *args], cwd=cwd, env=env, check=True, capture_output=True, text=True
+        ).stdout.strip()
+
+    git("init", "-q", str(origin), cwd=tmp_path)
+    commits = []
+    for name in ("first", "second", "third"):
+        git("commit", "-q", "--allow-empty", "-m", name)
+        commits.append(git("rev-parse", "HEAD"))
+    git("tag", "-a", "v0.1.2", commits[0], "-m", "Release 0.1.2")
+    git("tag", "v0.1.3", commits[1])
+    git("tag", "nightly", commits[2])
+    git("clone", "-q", "--bare", str(origin), str(tmp_path / "repository"), cwd=tmp_path)
+    found = runner.release_commits({"repository": str(tmp_path / "repository")})
+    assert found >= {commits[0], commits[1]}
+    assert commits[2] not in found
+
+
+def test_runner_accepts_the_commit_of_an_annotated_release_tag(deployment, monkeypatch):
+    git, calls = release_remote()
+    monkeypatch.setattr(runner, "git", git)
+    runner.verify_target(deployment[1], NEW, OLD)
+    assert ("merge-base", "--is-ancestor", NEW, "refs/remotes/origin/main") in calls
+    assert ("merge-base", "--is-ancestor", OLD, NEW) in calls
 
 
 def test_mismatched_workspace_cannot_enable_automatic_updates(deployment, tmp_path):

@@ -7261,10 +7261,10 @@ export interface components {
             automatic_update: boolean;
             /**
              * Channel
-             * @default main
-             * @constant
+             * @default release
+             * @enum {string}
              */
-            channel: "main";
+            channel: "release" | "main";
             /** Checked At */
             checked_at?: string | null;
             companion_update?: components["schemas"]["CompanionUpdateStatus"] | null;
