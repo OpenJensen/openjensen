@@ -64,3 +64,85 @@ def test_stock_module_signature_can_reuse_sources_across_kernel_updates(tmp_path
         assert driver["stock_cache"](tmp_path).name == signature
     monkeypatch.setattr(subprocess, "check_output", lambda *a, **kw: "\n")
     assert driver["stock_cache"](tmp_path) is None
+
+
+def test_camera_enrollment_carries_across_old_updater_and_skips_rollback(tmp_path, monkeypatch):
+    import asyncio
+    import json
+    from types import SimpleNamespace
+
+    from vla_platform import robot_companion_updates
+    from vla_platform.application_updates import ApplicationUpdates
+
+    operation = SimpleNamespace(id="a" * 32, target_commit="b" * 40, phase="restarting")
+    pairing = tmp_path / "pair"
+    pairing.write_text(json.dumps({"url": "local"}))
+    pairing.chmod(0o600)
+    launched = []
+
+    async def launch(*args):
+        launched.append(args)
+        return SimpleNamespace(wait=wait)
+
+    async def wait():
+        return 0
+
+    async def exercise(next_phase, idle=True):
+        states = iter([operation, SimpleNamespace(**{**vars(operation), "phase": next_phase})])
+        obj = SimpleNamespace(
+            installed=SimpleNamespace(commit="b" * 40), operation=lambda: next(states)
+        )
+        monkeypatch.setattr(robot_companion_updates, "idle", lambda _: idle)
+        await ApplicationUpdates.install_camera_driver(obj, pairing, tmp_path, operation)
+
+    async def advance(_):
+        return
+
+    monkeypatch.setattr(asyncio, "sleep", advance)
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", launch)
+    asyncio.run(exercise("rolled_back"))
+    asyncio.run(exercise("complete", idle=False))
+    assert not launched
+    asyncio.run(exercise("complete"))
+    assert len(launched) == 1 and launched[0][-3:] == (
+        "camera-driver-update",
+        str(tmp_path),
+        operation.id,
+    )
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux camera driver")
+def test_camera_update_prompts_once_per_update_and_only_for_matching_hardware(
+    tmp_path, monkeypatch
+):
+    import importlib.util
+    import json
+    from types import SimpleNamespace
+
+    spec = importlib.util.spec_from_file_location(
+        "installer_update", BUILD.parents[2] / "install_robot_lab.py"
+    )
+    installer = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(installer)
+    op = "c" * 32
+    calls = []
+    monkeypatch.setattr(installer, "camera_pair_on_usb2", lambda: False)
+    installer.camera_update(tmp_path, op)
+    assert not list(tmp_path.iterdir())
+    monkeypatch.setattr(installer, "camera_pair_on_usb2", lambda: True)
+    enrolled = iter([False, True])
+    monkeypatch.setattr(installer, "camera_driver_installed", lambda: next(enrolled))
+    monkeypatch.setattr(installer.os, "geteuid", lambda: 501)
+    monkeypatch.setenv("DISPLAY", ":1")
+    monkeypatch.setattr(installer.shutil, "which", lambda tool: "/usr/bin/" + tool)
+    monkeypatch.setattr(
+        installer.subprocess,
+        "run",
+        lambda args, **kwargs: calls.append(args) or SimpleNamespace(returncode=0),
+    )
+    installer.camera_update(tmp_path, op)
+    installer.camera_update(tmp_path, op)
+    assert len(calls) == 1 and calls[0][0] == "gnome-terminal"
+    assert calls[0][-1] == "--activate-if-unused"
+    result = json.loads((tmp_path / ("camera-driver-" + op + ".json")).read_text())
+    assert result["finished"] and "installed" in result["message"]

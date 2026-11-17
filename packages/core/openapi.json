@@ -9466,6 +9466,17 @@
             "title": "Automatic Update",
             "type": "boolean"
           },
+          "camera_driver_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Camera Driver Message"
+          },
           "channel": {
             "const": "main",
             "default": "main",

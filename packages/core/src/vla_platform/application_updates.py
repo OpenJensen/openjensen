@@ -74,6 +74,7 @@ class UpdateStatus(BaseModel):
     setup_message: str | None = None
     operation: UpdateOperation | None = None
     companion_update: CompanionUpdateStatus | None = None
+    camera_driver_message: str | None = None
 
 
 def installed_commit(root: Path = ROOT) -> str | None:
@@ -132,8 +133,13 @@ class ApplicationUpdates:
         self.value = {"state": "unchecked", "message": "Updates have not been checked."}
         self.companion_update = None
         self.pairing_path = None
+        self.camera_task = None
+        self.camera_receipt = None
 
     async def close(self):
+        if self.camera_task:
+            self.camera_task.cancel()
+            await asyncio.gather(self.camera_task, return_exceptions=True)
         await self.client.aclose()
 
     async def reconcile_companion(self, pairing_path):
@@ -144,7 +150,7 @@ class ApplicationUpdates:
             return
         self.pairing_path = pairing_path
         try:
-            self.configuration()
+            config = self.configuration()
             allowed = any(
                 (ROOT / name).is_file()
                 for name in (".openjensen-build.json", ".openjensen-release.json")
@@ -163,6 +169,62 @@ class ApplicationUpdates:
             # robot-service upgrade. The helper owns source rollback.
             value = robot_companion_updates.result("needs_update", robot_companion_updates.HELP)
         self.companion_update = CompanionUpdateStatus.model_validate(value) if value else None
+
+        if (
+            sys.platform == "linux"
+            and allowed
+            and self.companion_update
+            and self.companion_update.managed
+        ):
+            operation = self.operation()
+            if (
+                operation
+                and operation.phase in {"complete", "restarting"}
+                and operation.target_commit == self.installed.commit
+                and re.fullmatch("[0-9a-f]{32}", operation.id)
+            ):
+                run_dir = Path(config["root"]) / "run"
+                self.camera_receipt = run_dir / ("camera-driver-" + operation.id + ".json")
+                self.camera_task = asyncio.create_task(
+                    self.install_camera_driver(pairing_path, run_dir, operation)
+                )
+
+    async def install_camera_driver(self, pairing_path, run_dir, operation):
+        """The newly downloaded release owns this hook, even with an older updater."""
+        from vla_platform import robot_companion_updates
+
+        # A startup health check can still roll back the release. Wait for the
+        # old updater to finish committing it before requesting a system change.
+        for _ in range(120):
+            current = self.operation()
+            if (
+                not current
+                or current.id != operation.id
+                or current.target_commit != self.installed.commit
+            ):
+                return
+            if current.phase == "complete":
+                break
+            if current.phase != "restarting":
+                return
+            await asyncio.sleep(1)
+        else:
+            return
+        try:
+            pairing = json.loads(robot_companion_updates.private_bytes(pairing_path))
+            if not await asyncio.to_thread(robot_companion_updates.idle, pairing):
+                return
+            process = await asyncio.create_subprocess_exec(
+                sys.executable,
+                "-I",
+                str(ROOT / "deploy/install_robot_lab.py"),
+                "camera-driver-update",
+                str(run_dir),
+                operation.id,
+            )
+            await process.wait()
+        except OSError, ValueError, KeyError, subprocess.SubprocessError:
+            return
 
     async def observe_companion(self):
         """A service installed by hand can be replaced while the application runs: ask it again.
@@ -262,12 +324,19 @@ class ApplicationUpdates:
             supported, setup = True, None
         except UpdateError as exc:
             supported, setup = False, str(exc)
+        camera_message = None
+        if self.camera_receipt:
+            try:
+                camera_message = json.loads(self.camera_receipt.read_text())["message"]
+            except OSError, ValueError, KeyError, TypeError:
+                pass
         return UpdateStatus(
             installed=self.installed,
             automatic_update=supported,
             setup_message=setup,
             operation=self.operation(),
             companion_update=self.companion_update,
+            camera_driver_message=camera_message,
             **self.value,
         )
 

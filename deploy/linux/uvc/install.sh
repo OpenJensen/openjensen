@@ -10,9 +10,14 @@ if (( EUID != 0 )); then
     echo "Run this driver installer with sudo." >&2
     exit 1
 fi
-for tool in dkms depmod modinfo make python3; do
-    command -v "$tool" >/dev/null || { echo "Install $tool before setting up the camera driver." >&2; exit 1; }
-done
+# Different user workspaces can share one system driver.
+exec 9>/run/openjensen-uvc-install.lock
+flock 9
+activate=false
+if [[ ${1-} == --activate-if-unused ]]; then
+    activate=true
+    shift
+fi
 if [[ ${1-} == --offline ]]; then
     export OPENJENSEN_UVC_OFFLINE=1
     shift
@@ -25,6 +30,25 @@ if (( $# == 0 )); then
         [[ $next == "$1" ]] || set -- "$1" "$next"
     fi
 fi
+# Use distribution packages for the exact installed kernels on Ubuntu.
+# Offline enrollment never invokes a network package manager.
+if [[ ${OPENJENSEN_UVC_OFFLINE:-0} != 1 && -r /etc/os-release ]] &&
+    ( . /etc/os-release && [[ ${ID:-} == ubuntu ]] ); then
+    packages=()
+    for entry in dkms:dkms make:build-essential cc:build-essential git:git modinfo:kmod; do
+        command -v "${entry%:*}" >/dev/null || packages+=("${entry#*:}")
+    done
+    for kernel in "$@"; do
+        [[ $kernel =~ ^[a-zA-Z0-9][a-zA-Z0-9._+-]*$ ]] || exit 1
+        [[ -f /lib/modules/$kernel/build/Makefile ]] || packages+=("linux-headers-$kernel")
+    done
+    if (( ${#packages[@]} )); then
+        DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${packages[@]}"
+    fi
+fi
+for tool in dkms depmod modinfo make python3; do
+    command -v "$tool" >/dev/null || { echo "Install $tool before setting up the camera driver." >&2; exit 1; }
+done
 for kernel in "$@"; do
     [[ $kernel =~ ^[a-zA-Z0-9][a-zA-Z0-9._+-]*$ && -f /lib/modules/$kernel/build/Makefile ]] || {
         echo "Install matching kernel headers for $kernel." >&2; exit 1;
@@ -69,4 +93,16 @@ for kernel in "$@"; do
     modinfo -k "$kernel" -F parm uvcvideo | grep -q '^mjpeg_bandwidth_cap:'
 done
 trap - ERR
-echo "Camera driver installed. Reboot or close camera users and reload uvcvideo to activate it."
+if $activate && [[ ! -e /sys/module/uvcvideo/parameters/mjpeg_bandwidth_cap ]]; then
+    # A normal unload refuses if any program holds a UVC camera open.
+    # Keep a loaded stock driver available if the new module cannot load.
+    if [[ ! -d /sys/module/uvcvideo ]] || modprobe -r uvcvideo; then
+        if ! modprobe uvcvideo; then
+            dkms uninstall "$package/$version" -k "$(uname -r)"
+            modprobe uvcvideo
+            echo "Could not activate the new module. Check DKMS signing and Secure Boot." >&2
+            exit 1
+        fi
+    fi
+fi
+echo "Camera driver installed. If cameras were busy, restart Linux to activate it."

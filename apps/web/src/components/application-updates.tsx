@@ -263,6 +263,7 @@ export function ApplicationUpdates() {
                 ? 'Checking upstream main…'
                 : value?.message}
         </p>
+        {value?.camera_driver_message && <p role="status">{value.camera_driver_message}</p>}
         {value?.companion_update && (
           <p
             className={value.companion_update.state === 'needs_update' ? 'error-notice' : undefined}

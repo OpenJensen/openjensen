@@ -7220,6 +7220,8 @@ export interface components {
         UpdateStatus: {
             /** Automatic Update */
             automatic_update: boolean;
+            /** Camera Driver Message */
+            camera_driver_message?: string | null;
             /**
              * Channel
              * @default main
