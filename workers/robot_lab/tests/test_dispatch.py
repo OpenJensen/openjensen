@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from dispatch import MainThreadDispatcher
+from dispatch import MainThreadDispatcher, run_loop_pump
 
 
 class DispatcherTests(unittest.TestCase):
@@ -103,6 +103,40 @@ class DispatcherTests(unittest.TestCase):
         thread.join(1)
         self.assertEqual(errors, ["Camera permission denied"])
         dispatcher.close()
+
+    def test_every_pump_lets_the_main_run_loop_handle_camera_notifications(self):
+        """After a USB camera reset, reopening it returned no frames until the service
+        restarted: the main thread never ran the loop that tells AVFoundation the camera
+        came back."""
+        dispatcher = MainThreadDispatcher()
+        turns = []
+        dispatcher.run_loop = lambda: turns.append(1)
+        dispatcher.pump_once(timeout=0.01)
+        dispatcher.pump_once(timeout=0.01)
+        self.assertEqual(len(turns), 2)
+        # A queued camera open still runs, after the loop's turn.
+        result = []
+        worker = threading.Thread(target=lambda: result.append(dispatcher.call(lambda: "opened")))
+        worker.start()
+        dispatcher.pump_once(timeout=1)
+        worker.join(1)
+        self.assertEqual(result, ["opened"])
+        self.assertEqual(len(turns), 3)
+        dispatcher.close()
+
+    @unittest.skipUnless(sys.platform == "darwin", "the main run loop is a macOS facility")
+    def test_the_macos_run_loop_turn_returns_at_once(self):
+        turn = run_loop_pump()
+        self.assertIsNotNone(turn)
+        started = time.monotonic()
+        for _ in range(20):
+            turn()
+        self.assertLess(time.monotonic() - started, 0.5)
+
+    @unittest.skipIf(sys.platform == "darwin", "elsewhere there is no run loop to turn")
+    def test_other_systems_have_no_run_loop_turn(self):
+        self.assertIsNone(run_loop_pump())
+        self.assertIsNone(MainThreadDispatcher().run_loop)
 
 
 if __name__ == "__main__":
