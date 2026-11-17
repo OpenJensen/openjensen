@@ -379,6 +379,25 @@ class PolicyTests(unittest.TestCase):
         runner.run_deadline = time.monotonic() - 1
         self.assertTrue(runner.expired())
 
+    def test_a_request_to_open_past_a_held_object_opens_the_gripper_fully(self):
+        """The duck holds the jaw at 6% while the command says 0.5%; a 7% command lets go."""
+        runner = self.prepare()
+        with patch.object(runner, "_run"):
+            runner.start(self.run_payload())
+            runner.thread.join(timeout=1)
+        measured = dict(self.lab.positions, gripper=6.0)
+        runner.predicted = dict(measured, gripper=0.5)
+        start = time.monotonic()
+        for i in range(12):
+            runner.last_prediction = time.monotonic()
+            self.assertEqual(runner.apply(measured, start + i * 0.05)["gripper"], 0.5)
+        self.assertTrue(runner.snapshot()["holding"])
+        runner.predicted = dict(measured, gripper=7.0)
+        goals = runner.apply(measured, start + 0.65)
+        top = control_limits(self.lab.calibration)["gripper"]["max"]
+        self.assertEqual(goals["gripper"], min(30.0, top))
+        self.assertEqual(runner.snapshot()["releases"], 1)
+
     def test_targets_past_the_calibrated_range_are_held_at_its_edge(self):
         """A folded arm rests on its limit; a policy asking a little past it keeps running."""
         runner = self.prepare()
