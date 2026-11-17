@@ -210,10 +210,8 @@ svg {
   justify-content: space-between;
   padding: 0 12px;
   color: var(--muted);
-  font-size: 11px;
-  font-weight: 550;
-  text-transform: uppercase;
-  letter-spacing: 0.8px;
+  font-size: 14px;
+  font-weight: 600;
 }
 .sidebar-section-label h2 {
   font: inherit;
@@ -283,20 +281,6 @@ svg {
   margin-top: auto;
   padding: 20px 9px 0;
 }
-.sidebar-link {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  text-decoration: none;
-  font-size: 12px;
-  color: var(--muted);
-}
-.sidebar-link:hover {
-  color: var(--ink);
-}
-.sidebar-link > svg + svg {
-  margin-left: auto;
-}
 .main-shell {
   min-width: 0;
   margin: 8px 8px 8px 0;
@@ -320,7 +304,7 @@ svg {
   align-items: center;
   gap: 12px;
   min-width: 0;
-  font-size: 13px;
+  font-size: 15px;
 }
 .breadcrumb > svg {
   color: var(--muted);
@@ -337,7 +321,7 @@ svg {
   overflow: hidden;
   text-overflow: ellipsis;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 15px;
 }
 .theme-switcher {
   display: flex;
@@ -347,7 +331,7 @@ svg {
 }
 .theme-label {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 14px;
 }
 .theme-toggle {
   display: flex;
@@ -362,12 +346,13 @@ svg {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 4px 8px;
+  min-height: 32px;
+  padding: 5px 10px;
   border: 1px solid transparent;
-  border-radius: 4px;
+  border-radius: 5px;
   background: transparent;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 14px;
 }
 .theme-toggle button.selected {
   color: var(--ink);

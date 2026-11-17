@@ -41,6 +41,8 @@ class UpdateOperation(BaseModel):
     phase: str
     target_commit: str
     message: str
+    # How far along the update is, by stage (0-100). Older updaters leave it out.
+    progress: int | None = Field(default=None, ge=0, le=100)
 
 
 class ApplicationVersion(BaseModel):
@@ -371,6 +373,7 @@ class ApplicationUpdates:
                 phase="queued",
                 target_commit=payload.target_commit,
                 message="Preparing update…",
+                progress=0,
                 created=time.time(),
                 pid=None,
             )

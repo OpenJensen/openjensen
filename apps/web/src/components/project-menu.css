@@ -1,114 +1,155 @@
 .project-menu {
   min-width: 0;
-  margin-top: 10px;
 }
-.project-menu-trigger {
+/* The open project: its name large enough to read, and what a click does. */
+.project-card {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 12px;
   width: 100%;
-  min-height: 40px;
-  padding: 10px 12px;
+  min-height: 54px;
+  padding: 8px 12px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 12px;
   background: var(--surface);
   color: var(--ink);
   text-align: left;
-  font-size: 12px;
+  font: inherit;
+  cursor: pointer;
 }
-.project-menu-trigger > span {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.project-menu-trigger > svg {
-  flex-shrink: 0;
-  color: var(--muted);
-}
-.project-menu-trigger:hover:not(:disabled),
-.project-menu-trigger[aria-expanded='true'] {
+.project-card:hover:not(:disabled),
+.project-card[aria-expanded='true'] {
   border-color: var(--accent);
 }
-.project-menu-trigger:focus-visible {
+.project-card:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
-.project-menu-chevron {
-  transition: transform 0.15s ease;
+.project-card:disabled {
+  cursor: default;
 }
-.project-menu-trigger[aria-expanded='true'] .project-menu-chevron {
-  transform: rotate(180deg);
+.project-card-mark,
+.project-choice-mark {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  background: var(--selected);
+  color: var(--primary);
 }
-.project-menu-popover {
-  position: fixed;
-  z-index: 100;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding: 5px;
-  border: 1px solid var(--line-strong);
-  border-radius: 10px;
-  background: var(--surface);
-  color: var(--ink);
-  box-shadow: 0 10px 30px color-mix(in srgb, var(--ink) 14%, transparent);
+.project-card-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
 }
-.project-menu-item {
+.project-card-name {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.project-card-action {
+  color: var(--accent);
+  font-size: 14px;
+  line-height: 1.3;
+}
+
+/* Choosing a project: every project as a card, the open one checked. */
+.project-create-dialog.project-choose-dialog {
+  width: min(600px, calc(100vw - 32px));
+}
+.project-choose-body {
+  display: grid;
+  gap: 20px;
+  padding: 24px;
+}
+.project-choose-body header {
   display: flex;
   align-items: center;
   gap: 10px;
-  width: 100%;
-  min-height: 42px;
-  padding: 10px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--ink);
-  font-size: 12px;
-  line-height: 1.5;
-  text-align: left;
 }
-.project-menu-item > svg {
-  flex-shrink: 0;
+.project-choose-grid,
+.project-choose-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.project-choose-list {
+  grid-column: 1 / -1;
+}
+.project-choice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  min-height: 64px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.project-choice:hover {
+  border-color: var(--accent);
+  background: var(--subtle);
+}
+.project-choice:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.project-choice[aria-checked='true'] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--selected) 45%, var(--surface));
+}
+.project-choice[aria-checked='true'] .project-choice-mark {
+  background: var(--accent);
+  color: var(--surface);
+}
+.project-choice:not([aria-checked='true']) .project-choice-mark {
+  background: var(--subtle);
   color: var(--muted);
 }
-.project-menu-item > span:not(.project-menu-check) {
-  flex: 1;
+.project-choice-name {
   min-width: 0;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.35;
   overflow-wrap: anywhere;
 }
-.project-menu-item:hover,
-.project-menu-item:focus-visible {
-  outline: none;
-  background: var(--hover);
-}
-.project-menu-item[aria-checked='true'] {
-  background: var(--selected);
-  color: var(--accent);
-  font-weight: 600;
-}
-.project-menu-item:focus-visible {
-  box-shadow: inset 0 0 0 1px var(--accent);
-}
-.project-menu-check {
-  display: grid;
-  place-items: center;
-  width: 16px;
-  flex-shrink: 0;
-}
-.project-menu-divider {
-  height: 1px;
-  margin: 5px 8px;
-  background: var(--line);
-}
-.project-menu-create,
-.project-menu-create > svg {
+.project-choice-new {
+  border-style: dashed;
   color: var(--accent);
 }
-.project-menu-empty {
-  padding: 10px;
-  font-size: 12px;
+.project-choice-new .project-choice-mark {
+  background: transparent;
+  color: var(--accent);
+}
+.project-choose-empty {
+  margin: 0;
   color: var(--muted);
+  font-size: 15px;
+}
+.project-choose-body footer {
+  display: flex;
+  justify-content: flex-start;
+}
+.project-choose-manage {
+  font-size: 15px;
+}
+@media (max-width: 560px) {
+  .project-choose-grid,
+  .project-choose-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 .project-create-dialog {
   width: min(420px, calc(100vw - 32px));
@@ -169,7 +210,8 @@
 .project-create-dialog label {
   display: block;
   margin-bottom: 8px;
-  font-size: 13px;
+  font-size: 15px;
+  font-weight: 500;
 }
 .project-create-dialog input {
   width: 100%;
@@ -179,7 +221,7 @@
   border-radius: 8px;
   background: var(--surface);
   color: var(--ink);
-  font-size: 14px;
+  font-size: 15px;
 }
 .project-create-dialog footer {
   display: flex;
@@ -190,24 +232,15 @@
 .project-create-error {
   margin-top: 12px;
   color: var(--error);
-  font-size: 13px;
+  font-size: 14px;
   overflow-wrap: anywhere;
 }
 .project-create-note {
   margin-top: 12px;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
 }
 @media (max-width: 700px) {
-  .sidebar .projects-section {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .project-menu {
-    margin-top: 0;
-  }
-  .project-menu-trigger {
-    min-height: 44px;
-  }
   .project-create-dialog input {
     font-size: 16px;
   }
@@ -226,10 +259,10 @@
   gap: 10px;
 }
 .project-manage-body h3 {
-  margin: 0 0 8px;
-  font-size: 13px;
+  margin: 0 0 10px;
+  font-size: 16px;
   font-weight: 600;
-  color: var(--muted);
+  color: var(--ink);
 }
 .project-manage-list {
   display: grid;
@@ -252,12 +285,12 @@
 .project-manage-name {
   display: grid;
   min-width: 0;
-  font-size: 14px;
+  font-size: 15px;
   overflow-wrap: anywhere;
 }
 .project-manage-name small {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 14px;
 }
 .project-manage-actions {
   display: flex;
@@ -268,7 +301,7 @@
 }
 .project-manage-warning {
   color: var(--error);
-  font-size: 12px;
+  font-size: 14px;
 }
 .project-manage-workspace {
   display: grid;
@@ -280,12 +313,12 @@
 .project-manage-path {
   margin: 0;
   font-family: var(--mono, ui-monospace, monospace);
-  font-size: 12px;
+  font-size: 14px;
   color: var(--muted);
   overflow-wrap: anywhere;
 }
 .project-manage-note {
   margin: 0;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
 }

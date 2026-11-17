@@ -51,23 +51,31 @@
 .guide-navigation li > a {
   display: block;
   padding: 8px 12px;
-  border-radius: 7px;
+  border-radius: 9px;
   text-decoration: none;
-  color: var(--muted);
-  font-size: 13px;
+  color: var(--ink);
+  font-size: 15px;
 }
 .guide-navigation li > a:hover {
   background: var(--hover);
   color: var(--ink);
 }
-.guide-back {
+.guide-back,
+.guide-api {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   padding: 8px 12px;
   color: var(--ink);
-  font-size: 12px;
+  font-size: 15px;
+  font-weight: 500;
   text-decoration: none;
+}
+.guide-api {
+  margin-top: 12px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  width: 100%;
 }
 .guide-back svg {
   transform: rotate(180deg);
@@ -80,8 +88,8 @@
     margin-top: 10px;
   }
   .guide-navigation li > a {
-    padding: 7px 9px;
-    font-size: 12px;
+    padding: 8px 12px;
+    font-size: 14px;
     background: var(--surface);
     border: 1px solid var(--line);
   }
