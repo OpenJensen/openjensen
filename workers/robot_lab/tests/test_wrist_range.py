@@ -55,9 +55,7 @@ class WristRangeTests(unittest.TestCase):
 
     def act(self, action, confirm=None):
         word = {"start": "RECORD", "save": "SAVE", "cancel": "CANCEL", "clear": "CLEAR"}[action]
-        return self.lab.wrist_range_action(
-            {"confirm": confirm or f"{word} WRIST RANGE"}, action
-        )
+        return self.lab.wrist_range_action({"confirm": confirm or f"{word} WRIST RANGE"}, action)
 
     def turn(self, bus, angles):
         for angle in angles:
@@ -142,6 +140,84 @@ class WristRangeTests(unittest.TestCase):
         self.act("start")
         self.lab.stop()
         self.assertIsNone(self.lab.wrist_recorder)
+
+
+def path(*stops, step=10):
+    """Angles a wrist passes through when turned by hand from stop to stop."""
+    angles = [stops[0]]
+    for target in stops[1:]:
+        while angles[-1] != target:
+            delta = target - angles[-1]
+            angles.append(angles[-1] + max(-step, min(step, delta)))
+    return angles
+
+
+class CalibrationSweepTests(unittest.TestCase):
+    """Calibration's own range sweep records the follower's wrist range automatically."""
+
+    setUp = fixtures.SafetyTests.setUp
+    tearDown = fixtures.SafetyTests.tearDown
+
+    def calibrate(self, angles, role="follower"):
+        self.lab.calibration_start(
+            {
+                "port": "/dev/cu.fake",
+                "robot_id": "test",
+                "role": role,
+                "confirm": "START CALIBRATION",
+            }
+        )
+        self.lab.calibration_center({})
+        bus = self.lab.bus
+        for angle in angles:
+            # Raw ticks as the full-turn wrist reads them, wrapping past the half turn.
+            bus.raw["wrist_roll"] = round(angle * 4095 / 360 + 4095 / 2) % 4096
+            self.lab._tick()
+        live = self.lab.status()["calibration"]["wrist_sweep"]
+        self.lab.calibration_state["mins"] = dict.fromkeys(JOINTS, 100)
+        self.lab.calibration_state["maxes"] = dict.fromkeys(JOINTS, 4000)
+        result = self.lab.calibration_finish({"confirm": "SAVE CALIBRATION"})
+        saved = json.loads(self.lab.calibration_path("test", role).read_text())
+        return result, saved, live
+
+    def test_sweeping_the_wrist_during_calibration_saves_its_range(self):
+        result, saved, live = self.calibrate(path(0, -120, 0, 90, 0))
+        self.assertEqual((live["low"], live["high"]), (-120, 90))
+        wrist = result["calibration"]["wrist_range"]
+        self.assertAlmostEqual(wrist["min"], -120 + MARGIN, delta=0.2)
+        self.assertAlmostEqual(wrist["max"], 90 - MARGIN, delta=0.2)
+        # The calibration itself keeps wrist roll a full turn, as LeRobot expects.
+        self.assertEqual(
+            (saved["wrist_roll"]["range_min"], saved["wrist_roll"]["range_max"]), (0, 4095)
+        )
+        # The next session with this calibration enforces the range.
+        persisted = fixtures.FakeBus()
+        persisted.calibration = saved
+        self.lab.bus_factory = lambda *args: persisted
+        status = self.lab.control_start(
+            {
+                "port": "/dev/cu.fake",
+                "robot_id": "test",
+                "mode": "manual",
+                "confirm": "ENABLE MOTION",
+            }
+        )
+        self.assertEqual(status["session"]["wrist_range"]["saved"], wrist)
+        self.assertIn("wrist_roll", self.lab.controller.bridge.safe_ranges)
+
+    def test_a_sweep_across_the_half_turn_stops_short_of_it(self):
+        result, _, _ = self.calibrate(path(0, 200, 0, -60, 0))
+        wrist = result["calibration"]["wrist_range"]
+        self.assertAlmostEqual(wrist["min"], -60 + MARGIN, delta=0.2)
+        self.assertEqual(wrist["max"], 180 - MARGIN)
+
+    def test_no_range_without_a_wrist_sweep_or_for_a_leader(self):
+        result, saved, _ = self.calibrate(path(0, 10, 0))
+        self.assertIsNone(result["calibration"]["wrist_range"])
+        self.assertIsNone(WristRanges(self.lab.data_dir).load("test", saved))
+        result, saved, _ = self.calibrate(path(0, -120, 0, 90, 0), role="leader")
+        self.assertIsNone(result["calibration"]["wrist_range"])
+        self.assertIsNone(WristRanges(self.lab.data_dir).load("test", saved))
 
 
 if __name__ == "__main__":

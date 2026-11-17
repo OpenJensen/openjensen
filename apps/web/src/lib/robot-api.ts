@@ -225,6 +225,9 @@ export type RobotStatus = {
     maxes: JointValues;
     offsets: JointValues;
     path: string | null;
+    // A follower's wrist roll ends, followed through the range sweep; saved as its safe range.
+    wrist_sweep?: { now: number; low: number; high: number; span: number } | null;
+    wrist_range?: { min: number; max: number } | null;
   };
   recording?: {
     active: boolean;

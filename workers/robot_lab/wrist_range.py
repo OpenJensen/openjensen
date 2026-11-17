@@ -25,6 +25,11 @@ def wrapped(angle):
     return 180.0 if angle == -180.0 else angle
 
 
+def full_turn_angle(raw):
+    """Degrees of a wrist roll reading, as calibration (a full turn, 0-4095) will read it."""
+    return (raw - 4095 / 2) * 360 / 4095
+
+
 def calibration_digest(calibration):
     return hashlib.sha256(json.dumps(calibration, sort_keys=True).encode()).hexdigest()
 
@@ -101,7 +106,7 @@ class WristRanges:
             if saved["calibration"] != calibration_digest(calibration):
                 return None
             low, high = float(saved["min"]), float(saved["max"])
-        except (OSError, ValueError, KeyError, TypeError):
+        except OSError, ValueError, KeyError, TypeError:
             return None
         if not -180.0 <= low < high <= 180.0 or high - low < MIN_SPAN - 2 * MARGIN:
             return None

@@ -74,7 +74,7 @@ from verification import (
     latest_saved_mapping,
     saved_mapping,
 )
-from wrist_range import RangeRecorder, WristRanges
+from wrist_range import RangeRecorder, WristRanges, full_turn_angle
 
 # The code this process started from; a later edit on disk does not change what runs.
 SOURCE_FILES = source_files()
@@ -265,6 +265,9 @@ class RobotLab:
         self.wrist_ranges = WristRanges(self.data_dir)
         self.wrist_recorder = None
         self.wrist_range = None
+        # The wrist's ends, followed through the calibration sweep, and the range saved from them.
+        self.wrist_sweep = None
+        self.calibration_wrist = None
         self.rest_targets = None
         self.rest_motion = None
         self.rest_phase = "idle"
@@ -931,7 +934,11 @@ class RobotLab:
                 else (10.0 if self.mode in {"setup", "verification"} else 2.0),
                 "error": self.error,
             },
-            "calibration": json.loads(json.dumps(self.calibration_state)),
+            "calibration": {
+                **json.loads(json.dumps(self.calibration_state)),
+                "wrist_sweep": self.wrist_sweep.snapshot() if self.wrist_sweep else None,
+                "wrist_range": self.calibration_wrist,
+            },
             "assembled": assembled,
             "verification": copy_verification,
             "mapping_checks": self.mapping_checks.snapshot(assembled.get("port")),
@@ -1342,6 +1349,7 @@ class RobotLab:
     def _calibration_resume(self):
         with self.lock:
             self._idle()
+            self.wrist_sweep = None
             draft = self.calibration_draft.read()
             if draft is None:
                 raise RequestError("No captured calibration to resume")
@@ -1538,6 +1546,12 @@ class RobotLab:
                 self.calibration_state.update(
                     phase="ranges", offsets=offsets, mins=dict(raw), maxes=dict(raw)
                 )
+                self.wrist_sweep = (
+                    RangeRecorder(full_turn_angle(raw["wrist_roll"]))
+                    if "wrist_roll" in raw
+                    else None
+                )
+                self.calibration_wrist = None
                 self._checkpoint_calibration(force=True)
                 self.heartbeat = time.monotonic()
         return self.status()
@@ -1594,6 +1608,7 @@ class RobotLab:
                     atomic_json(path, calibration)
                     path.chmod(0o600)
                     self._archive_calibration(self.robot_id, self.role, path, "manual calibration")
+                    self.calibration_wrist = self._save_swept_wrist(calibration)
                     self.calibration_revisions.acknowledge(
                         self.port, self.robot_id, self.role, path
                     )
@@ -1857,6 +1872,26 @@ class RobotLab:
                         self.error = None
         return self.status()
 
+    def _save_swept_wrist(self, calibration):
+        """A follower's wrist ends from the calibration sweep become its range for this calibration.
+
+        A sweep that missed the wrist's ends saves no range; the calibration still saves, and
+        the range can be recorded by hand afterwards.
+        """
+        sweep, self.wrist_sweep = self.wrist_sweep, None
+        if self.role != "follower" or sweep is None:
+            return None
+        try:
+            low, high = sweep.result()
+        except ValueError:
+            return None
+        self.wrist_ranges.save(self.robot_id, low, high, calibration)
+        self.diagnostics.emit(
+            "wrist_range_saved",
+            context={"min": low, "max": high, "robot": self.robot_id, "source": "calibration"},
+        )
+        return {"min": low, "max": high}
+
     @staticmethod
     def _wrist_bounds(wrist_range, calibration):
         """The recorded wrist range as raw goal bounds for the motor bridge."""
@@ -2024,6 +2059,7 @@ class RobotLab:
             self.rest_motion = None
             self.rest_phase = "idle"
             self.wrist_recorder = None
+            self.wrist_sweep = None
             self.controller = None
             if reason:
                 self.error = reason
@@ -2662,6 +2698,14 @@ class RobotLab:
                         self.calibration_state["maxes"][joint] = max(
                             self.calibration_state["maxes"][joint], position
                         )
+                    if "wrist_roll" in raw:
+                        # Wrist roll is saved as a full turn; its real ends become its safe range.
+                        # After a resume the sweep starts again from wherever the wrist is.
+                        angle = full_turn_angle(raw["wrist_roll"])
+                        if self.wrist_sweep is None:
+                            self.wrist_sweep = RangeRecorder(angle)
+                        else:
+                            self.wrist_sweep.sample(angle)
                     self._checkpoint_calibration()
                 return
             positions = {

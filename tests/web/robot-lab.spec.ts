@@ -1108,6 +1108,14 @@ test('calibration center and range save are explicit and use the official compan
   await expect(page.getByRole('group', { name: 'Measured encoder values', exact: true })).toContainText('2048');
   await page.getByRole('button', { name: 'Record middle position', exact: true }).click();
   await expect(page.getByRole('columnheader', { name: 'Range', exact: true })).toBeVisible();
+  // A follower's wrist ends are followed through the sweep and become its safe range.
+  state.status.calibration = {
+    ...state.status.calibration,
+    role: 'follower',
+    wrist_sweep: { now: 10, low: -120, high: 90, span: 210 },
+  };
+  await expect(page.getByText(/Turn the wrist to both of its ends too/)).toBeVisible();
+  await expect(page.getByText(/wrist -120° to \+90°/)).toBeVisible();
   await page.getByRole('button', { name: 'Save calibration', exact: true }).click();
   await expect(page.getByLabel('Selected arm calibration')).toContainText('my-so101 · follower');
   expect(writes(state, '/calibration/start')[0].body).toEqual({
