@@ -9467,8 +9467,11 @@
             "type": "boolean"
           },
           "channel": {
-            "const": "main",
-            "default": "main",
+            "default": "release",
+            "enum": [
+              "release",
+              "main"
+            ],
             "title": "Channel",
             "type": "string"
           },
@@ -10126,7 +10129,7 @@
   },
   "info": {
     "title": "OPEN JENSEN local VLA application",
-    "version": "0.1.42"
+    "version": "0.1.45"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -17136,6 +17139,82 @@
           }
         },
         "summary": "Robot Lab Post Control Stop",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/control/wrist-range/cancel": {
+      "post": {
+        "operationId": "robot_lab_post_control_wrist-range_cancel",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Control Wrist-Range Cancel",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/control/wrist-range/clear": {
+      "post": {
+        "operationId": "robot_lab_post_control_wrist-range_clear",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Control Wrist-Range Clear",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/control/wrist-range/save": {
+      "post": {
+        "operationId": "robot_lab_post_control_wrist-range_save",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Control Wrist-Range Save",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/control/wrist-range/start": {
+      "post": {
+        "operationId": "robot_lab_post_control_wrist-range_start",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Control Wrist-Range Start",
         "tags": [
           "Robot Lab"
         ]

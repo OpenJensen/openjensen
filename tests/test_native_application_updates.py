@@ -189,7 +189,7 @@ def test_native_launch_configuration_matches_running_process_and_workspace(
         native_launch.configuration(path, workspace, source)
 
 
-def test_source_archive_can_install_canonical_main_without_an_old_commit(tmp_path, monkeypatch):
+def test_source_archive_can_install_the_latest_release_without_an_old_commit(tmp_path, monkeypatch):
     repository = tmp_path / "repository"
     repository.mkdir()
     calls = []
@@ -198,12 +198,16 @@ def test_source_archive_can_install_canonical_main_without_an_old_commit(tmp_pat
         calls.append(args)
         if args[0] == "remote":
             return "https://github.com/OpenJensen/openjensen.git"
-        if args[0] == "rev-parse":
-            return NEW
+        if args[0] == "ls-remote":
+            return f"{NEW}\trefs/tags/v0.1.4"
+        return ""
 
     monkeypatch.setattr(update_runner, "git", git)
     update_runner.verify_target({"kind": "native", "repository": str(repository)}, NEW, "")
-    assert not any(args[0] == "merge-base" for args in calls)
+    # With no installed commit there is nothing to move forward from; the release is on main.
+    assert [args for args in calls if args[0] == "merge-base"] == [
+        ("merge-base", "--is-ancestor", NEW, "refs/remotes/origin/main")
+    ]
     with pytest.raises(ValueError, match="Invalid commit"):
         update_runner.verify_target({"repository": str(repository)}, NEW, "")
 
@@ -252,7 +256,7 @@ def test_archive_discovery_and_apply_use_the_automatic_launcher(ordinary_install
     monkeypatch.setattr(subprocess, "Popen", lambda *args, **kwargs: calls.append((args, kwargs)))
 
     def respond(request):
-        if request.url.path.endswith("/commits/main"):
+        if request.url.path.endswith("/commits/v0.1.4"):
             return httpx.Response(200, json={"sha": NEW})
         return httpx.Response(200, json={"tag_name": "v0.1.4"})
 
