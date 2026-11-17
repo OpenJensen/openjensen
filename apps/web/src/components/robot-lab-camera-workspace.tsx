@@ -68,8 +68,17 @@ export function CameraRecordingStatus({ lab }: { lab: RobotLabState }) {
     paused: 'Collection paused',
     complete: 'Collection complete',
   };
+  const tone = recording?.error
+    ? 'attention'
+    : recording?.saving || collection?.phase === 'saving'
+      ? 'saving'
+      : recording?.episode_active
+        ? 'recording'
+        : recording?.active
+          ? 'ready'
+          : 'preview';
   return (
-    <div className="robot-lab-camera-recording-status" aria-label="Camera view recording status">
+    <div className="robot-lab-camera-recording-status" data-tone={tone} aria-label="Camera view recording status">
       <strong>
         {recording?.error
           ? 'Recording needs attention'

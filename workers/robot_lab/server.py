@@ -944,6 +944,8 @@ class RobotLab:
                 "save_error": writer.save_error()
                 if writer and hasattr(writer, "save_error")
                 else None,
+                "stats": writer.stats() if writer and hasattr(writer, "stats") else None,
+                "task": getattr(writer, "task", None) if writer else None,
                 "collection": collection,
             },
             "calibrations": calibrations,

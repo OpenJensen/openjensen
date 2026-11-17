@@ -441,6 +441,44 @@ class DatasetTests(unittest.TestCase):
             ]
         )
 
+    def test_stats_count_every_try_by_outcome_with_its_length(self):
+        writer = DatasetWriter(self.root, "tries", "Reach", 5, (4, 6, 3))
+        build = writer.build_queued
+
+        def fail_third(source, *args):
+            if source.name == "000001":
+                raise OSError("storage unavailable")
+            return build(source, *args)
+
+        writer.build_queued = fail_third
+        self.record_episode(writer, 0)
+        writer.save_episode()
+        self.record_episode(writer, 1, frames=3)
+        writer.discard_episode()
+        writer.start_episode()
+        writer.discard_episode()  # Nothing recorded yet: not a try.
+        self.record_episode(writer, 2, frames=10)
+        writer.queue_episode()
+        self.record_episode(writer, 3)
+        writer.queue_episode()
+        writer.wait_for_saves(30)
+        stats = writer.stats()
+        self.assertEqual(
+            stats["recent"],
+            [
+                {"outcome": "saved", "seconds": 1.0},
+                {"outcome": "discarded", "seconds": 0.6},
+                {"outcome": "saved", "seconds": 2.0},
+                {"outcome": "failed", "seconds": 1.0},
+            ],
+        )
+        self.assertEqual((stats["tries"], stats["discarded"], stats["failed"]), (4, 1, 1))
+        self.assertEqual(stats["saved_seconds"], 3.0)
+        self.assertEqual(stats["bytes_per_second"], (4 * 6 * 3 + 64) * 5)
+        self.assertGreater(stats["disk_free_bytes"], 0)
+        self.assertEqual(len(writer.stats(recent=2)["recent"]), 2)
+        writer.finalize()
+
     def test_finalize_metadata_failure_does_not_publish_a_false_finalized_state(self):
         writer = DatasetWriter(self.root, "retry-finish", "Reach", 5)
         writer.start_episode()

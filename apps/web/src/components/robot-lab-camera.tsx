@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, type CSSProperties } from 'react';
 import { RobotLabCameraFrame } from './robot-lab-camera-frame';
 import { viewName } from '@/lib/policy-cameras';
 import { CameraIcon } from './robot-lab-shared';
@@ -68,14 +68,16 @@ export function RobotLabCamera({ lab }: { lab: RobotLabState }) {
   return (
     <aside className="robot-lab-side">
       <section className="robot-lab-card robot-lab-cameras" aria-label="Camera preview">
-        <div className="robot-lab-card-header">
-          <h3>{large ? 'Camera view' : 'Cameras'}</h3>
-          {large && expandedCamera !== null && (
-            <button className="secondary-button" onClick={() => setExpandedCamera(null)}>
-              Show all cameras
-            </button>
-          )}
-        </div>
+        {(!large || expandedCamera !== null) && (
+          <div className="robot-lab-card-header">
+            <h3>{large ? 'Camera view' : 'Cameras'}</h3>
+            {large && expandedCamera !== null && (
+              <button className="secondary-button" onClick={() => setExpandedCamera(null)}>
+                Show all cameras
+              </button>
+            )}
+          </div>
+        )}
         {!large && (
           <div className="robot-lab-camera-actions">
             <button
@@ -119,10 +121,18 @@ export function RobotLabCamera({ lab }: { lab: RobotLabState }) {
         <div
           className="robot-lab-camera-views"
           data-single={cards.length === 1 || (expandedCamera !== null && indices.includes(expandedCamera))}
+          data-count={Math.min(4, cards.length)}
+          data-recording={!!recording?.episode_active}
         >
           {cards.map((index) => {
             const on = indices.includes(index);
             const name = lab.cameraName(index);
+            const size = availableCameras.find((camera) => camera.index === index);
+            // In the large view each picture keeps its own shape, so no black bands.
+            const shape =
+              large && size?.width && size.height
+                ? ({ '--camera-ratio': `${size.width} / ${size.height}` } as CSSProperties)
+                : undefined;
             return (
               <div
                 key={index}
@@ -131,54 +141,35 @@ export function RobotLabCamera({ lab }: { lab: RobotLabState }) {
                   large && expandedCamera !== null && indices.includes(expandedCamera) && expandedCamera !== index
                 }
               >
-                <div className="robot-lab-camera-tile-heading">
-                  <strong>
-                    {viewOf(index) ? `${viewName(viewOf(index)!)} · ` : ''}
-                    {name}
-                  </strong>
-                  {switchable && !large && availableCameras.length > 1 && (
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={on}
-                      aria-label={`Use ${name}`}
-                      className="robot-lab-camera-switch"
-                      disabled={
-                        !online ||
-                        !!recording?.active ||
-                        (on && indices.length === 1) ||
-                        (!on && multipleAvailable && indices.length >= 4)
-                      }
-                      onClick={() => switchCamera(index, !on)}
-                    >
-                      <span aria-hidden="true" />
-                      {on ? 'On' : 'Off'}
-                    </button>
-                  )}
-                  {large && indices.length > 1 && expandedCamera !== index && (
-                    <button
-                      className="text-button"
-                      aria-label={`Enlarge camera ${index}`}
-                      onClick={() => setExpandedCamera(index)}
-                    >
-                      Enlarge
-                    </button>
-                  )}
-                </div>
-                {large && lab.step === 4 && (
-                  <label className="robot-lab-camera-record-toggle">
-                    <input
-                      type="checkbox"
-                      aria-label={`Record view from camera ${index}`}
-                      checked={lab.recordingCameraIndices.includes(index)}
-                      disabled={lab.busy || !!recording?.active || !online}
-                      onChange={(event) => lab.toggleRecordingCamera(index, event.target.checked)}
-                    />
-                    {lab.recordingCameraIndices.includes(index) ? 'Included in dataset' : 'Preview only'}
-                  </label>
+                {!large && (
+                  <div className="robot-lab-camera-tile-heading">
+                    <strong>
+                      {viewOf(index) ? `${viewName(viewOf(index)!)} · ` : ''}
+                      {name}
+                    </strong>
+                    {switchable && !large && availableCameras.length > 1 && (
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={on}
+                        aria-label={`Use ${name}`}
+                        className="robot-lab-camera-switch"
+                        disabled={
+                          !online ||
+                          !!recording?.active ||
+                          (on && indices.length === 1) ||
+                          (!on && multipleAvailable && indices.length >= 4)
+                        }
+                        onClick={() => switchCamera(index, !on)}
+                      >
+                        <span aria-hidden="true" />
+                        {on ? 'On' : 'Off'}
+                      </button>
+                    )}
+                  </div>
                 )}
                 {on && (
-                  <div className="robot-lab-camera">
+                  <div className="robot-lab-camera" style={shape}>
                     {preview && online && !failed(index) ? (
                       <RobotLabCameraFrame
                         key={`${index}/${previewStamp}/${indices.join(',')}`}
@@ -210,6 +201,35 @@ export function RobotLabCamera({ lab }: { lab: RobotLabState }) {
                           <span>Preview paused</span>
                         )}
                       </div>
+                    )}
+                    {large && (
+                      <>
+                        <strong className="robot-lab-camera-name">
+                          {viewOf(index) ? `${viewName(viewOf(index)!)} · ` : ''}
+                          {name}
+                        </strong>
+                        {indices.length > 1 && expandedCamera !== index && (
+                          <button
+                            className="robot-lab-camera-enlarge"
+                            aria-label={`Enlarge camera ${index}`}
+                            onClick={() => setExpandedCamera(index)}
+                          >
+                            Enlarge
+                          </button>
+                        )}
+                        {lab.step === 4 && !recording?.active && (
+                          <label className="robot-lab-camera-record-toggle">
+                            <input
+                              type="checkbox"
+                              aria-label={`Record view from camera ${index}`}
+                              checked={lab.recordingCameraIndices.includes(index)}
+                              disabled={lab.busy || !online}
+                              onChange={(event) => lab.toggleRecordingCamera(index, event.target.checked)}
+                            />
+                            {lab.recordingCameraIndices.includes(index) ? 'Included in dataset' : 'Preview only'}
+                          </label>
+                        )}
+                      </>
                     )}
                   </div>
                 )}

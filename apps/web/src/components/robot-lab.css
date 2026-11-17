@@ -1602,9 +1602,22 @@
   padding: 14px;
   overflow-y: auto;
 }
+/* Large camera view: a dark stage where each picture keeps its own shape and is
+   as large as its share of the space allows. */
+.robot-lab-camera-workspace .robot-lab-cameras {
+  container: camera-stage / size;
+  padding: 12px;
+  border-color: #0c131b;
+  background: #0c131b;
+  color: #e6edf6;
+}
+.robot-lab-camera-workspace .robot-lab-cameras .robot-lab-card-header h3 {
+  color: #e6edf6;
+}
 .robot-lab-camera-workspace .robot-lab-camera-views {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: minmax(0, 1fr);
   gap: 12px;
   flex: 1;
   min-height: 220px;
@@ -1612,14 +1625,18 @@
 .robot-lab-camera-workspace .robot-lab-camera-views[data-single='true'] {
   grid-template-columns: minmax(0, 1fr);
 }
-.robot-lab-camera-workspace .robot-lab-camera-tile {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 0;
+/* Two cameras on a stage that is not much wider than tall are larger one above the other. */
+@container camera-stage (aspect-ratio < 3 / 2) {
+  .robot-lab-camera-views[data-count='2'] {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 .robot-lab-camera-workspace .robot-lab-cameras .robot-lab-camera-tile {
-  gap: 8px;
+  container-type: size;
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  min-height: 0;
   padding: 0;
   border: 0;
   background: transparent;
@@ -1628,30 +1645,135 @@
   display: none;
 }
 .robot-lab-camera-workspace .robot-lab-camera {
-  flex: 1;
-  min-height: 0;
-  aspect-ratio: auto;
+  --camera-ratio: 4 / 3;
+  width: min(100cqw, calc(100cqh * var(--camera-ratio)));
+  aspect-ratio: var(--camera-ratio);
   margin: 0;
-  background: #111820;
+  border: 1px solid #243242;
+  border-radius: 12px;
+  background: #05090d;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 35%);
+  transition: box-shadow 0.2s ease;
 }
 .robot-lab-camera-workspace .robot-lab-camera img {
   position: absolute;
   inset: 0;
   object-fit: contain;
 }
+.robot-lab-camera-workspace .robot-lab-camera-empty,
+.robot-lab-camera-workspace .robot-lab-camera-empty strong {
+  color: #c4d0de;
+}
+/* While an episode records, every recorded picture is framed in red. */
+.robot-lab-camera-views[data-recording='true'] .robot-lab-camera {
+  border-color: #e5484d;
+  box-shadow:
+    0 0 0 3px #e5484d,
+    0 10px 30px rgb(229 72 77 / 25%);
+}
+.robot-lab-camera-name,
+.robot-lab-camera-enlarge,
+.robot-lab .robot-lab-camera label.robot-lab-camera-record-toggle {
+  position: absolute;
+  z-index: 1;
+  margin: 0;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 999px;
+  background: rgb(8 14 20 / 72%);
+  color: #fff;
+  font-size: 14px;
+  line-height: 1.3;
+}
+.robot-lab-camera-name {
+  left: 10px;
+  bottom: 10px;
+  max-width: calc(100% - 20px);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.robot-lab-camera-enlarge {
+  top: 10px;
+  right: 10px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.robot-lab-camera-enlarge:hover {
+  background: rgb(8 14 20 / 90%);
+}
+.robot-lab .robot-lab-camera label.robot-lab-camera-record-toggle {
+  right: 10px;
+  bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+.robot-lab-camera-workspace .robot-lab-camera:has(.robot-lab-camera-record-toggle) .robot-lab-camera-name {
+  max-width: calc(50% - 20px);
+}
+.robot-lab-camera-workspace .robot-lab-camera-live,
+.robot-lab-camera-workspace .robot-lab-camera-delayed {
+  top: 10px;
+  left: 10px;
+  font-size: 13px;
+}
+.robot-lab-camera-workspace .robot-lab-camera-delayed {
+  right: 10px;
+}
 .robot-lab-camera-workspace .robot-lab-card-header {
   flex-shrink: 0;
+  margin-bottom: 10px;
 }
 .robot-lab-camera-workspace .robot-lab-fields {
   grid-template-columns: 1fr;
 }
 .robot-lab-camera-recording-status {
   display: grid;
-  gap: 3px;
-  font-size: 13px;
+  gap: 2px;
+  padding: 6px 14px 6px 34px;
+  position: relative;
+  border-radius: 10px;
+  font-size: 15px;
+}
+.robot-lab-camera-recording-status::before {
+  content: '';
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  margin-top: -5px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+.robot-lab-camera-recording-status[data-tone='recording'] {
+  background: var(--error-bg);
+}
+.robot-lab-camera-recording-status[data-tone='recording']::before {
+  background: #e5484d;
+  box-shadow: 0 0 0 4px rgb(229 72 77 / 20%);
+  animation: robot-lab-rec 1.4s ease-in-out infinite;
+}
+.robot-lab-camera-recording-status[data-tone='ready'] {
+  background: var(--success-bg);
+}
+.robot-lab-camera-recording-status[data-tone='ready']::before {
+  background: var(--success);
+}
+.robot-lab-camera-recording-status[data-tone='saving']::before {
+  background: var(--accent);
+}
+.robot-lab-camera-recording-status[data-tone='attention'] {
+  background: var(--warning-bg);
+}
+.robot-lab-camera-recording-status[data-tone='attention']::before {
+  background: var(--warning);
 }
 .robot-lab-camera-recording-status span {
-  font-size: 11px;
+  font-size: 14px;
   color: var(--muted);
 }
 .robot-lab-camera-recording-status output {
@@ -1659,10 +1781,204 @@
   font-weight: 700;
   line-height: 1;
 }
+@keyframes robot-lab-rec {
+  50% {
+    opacity: 0.45;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .robot-lab-camera-recording-status[data-tone='recording']::before {
+    animation: none;
+  }
+}
+
+/* The recording console beside the large camera view. */
+.robot-lab-console {
+  display: grid;
+  gap: 14px;
+}
+.robot-lab-console-state {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--subtle);
+}
+.robot-lab-console-state strong {
+  display: block;
+  font-size: 17px;
+  font-weight: 650;
+}
+.robot-lab-console-state small {
+  display: block;
+  font-size: 14px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.robot-lab-console-state output {
+  margin-left: auto;
+  font:
+    700 28px ui-monospace,
+    monospace;
+  font-variant-numeric: tabular-nums;
+}
+.robot-lab-console-state.recording {
+  border-color: #e5484d;
+  background: var(--error-bg);
+}
+.robot-lab-console-state.recording .robot-lab-recording-light {
+  border-color: #e5484d;
+  background: #e5484d;
+  animation: robot-lab-rec 1.4s ease-in-out infinite;
+}
+.robot-lab-console-state.ready {
+  border-color: var(--success);
+  background: var(--success-bg);
+}
+.robot-lab-console-state.ready .robot-lab-recording-light {
+  border-color: var(--success);
+  background: var(--success);
+}
+.robot-lab-console-state.paused {
+  border-color: var(--warning);
+  background: var(--warning-bg);
+}
+.robot-lab-console-task {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.45;
+}
+.robot-lab-console > .robot-lab-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+.robot-lab-console .robot-lab-episode-button {
+  min-height: 60px;
+  font-size: 17px;
+}
+.robot-lab-console .robot-lab-actions .secondary-button {
+  min-height: 44px;
+  font-size: 15px;
+}
+.robot-lab-console .robot-lab-check {
+  font-size: 15px;
+}
+
+/* Recording progress: coloured counts and one bar per try. */
+.robot-lab-stats {
+  display: grid;
+  gap: 12px;
+}
+.robot-lab-stats-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+.robot-lab-stat {
+  --stat: var(--line-strong);
+  position: relative;
+  padding: 10px 12px 10px 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  overflow: hidden;
+}
+.robot-lab-stat::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 5px;
+  background: var(--stat);
+}
+.robot-lab-stat dt {
+  font-size: 14px;
+  color: var(--muted);
+}
+.robot-lab-stat dd {
+  margin: 2px 0 0;
+  font-size: 22px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.robot-lab-stat.saved {
+  --stat: var(--success);
+  grid-column: span 2;
+  background: var(--success-bg);
+}
+.robot-lab-stat.saved dd {
+  font-size: 34px;
+  line-height: 1.1;
+  color: var(--success);
+}
+.robot-lab-stat-saving {
+  margin-left: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--accent);
+}
+.robot-lab-console .robot-lab-stats-tiles {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.robot-lab-console .robot-lab-subtle {
+  font-size: 14px;
+}
+.robot-lab-stat.discarded {
+  --stat: #d39b2a;
+}
+.robot-lab-stat.failed {
+  --stat: #e5484d;
+}
+.robot-lab-stats-tries {
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: 3px;
+  height: 64px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--subtle);
+  overflow: hidden;
+}
+.robot-lab-stats-tries > span {
+  flex: 0 1 16px;
+  min-width: 3px;
+  min-height: 5px;
+  border-radius: 3px 3px 1px 1px;
+  background: var(--line-strong);
+}
+.robot-lab-stats-tries > .saved {
+  background: var(--success);
+}
+.robot-lab-stats-tries > .saving {
+  background: var(--accent);
+}
+.robot-lab-stats-tries > .discarded {
+  background: #d39b2a;
+}
+.robot-lab-stats-tries > .failed {
+  background: #e5484d;
+}
+.robot-lab-stats-tries > .live {
+  background: repeating-linear-gradient(135deg, #e5484d 0 4px, #f08a8d 4px 8px);
+}
+.robot-lab-stats-disk {
+  margin: 0;
+  font-size: 14px;
+  color: var(--muted);
+}
+.robot-lab-stats-disk.low {
+  color: var(--error);
+  font-weight: 600;
+}
 @media (max-width: 900px) {
   .robot-lab-camera-workspace > .robot-lab-grid {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(240px, 50vh) auto;
+    grid-template-rows: max-content auto;
     align-content: start;
     overflow-y: auto;
   }
@@ -1689,9 +2005,20 @@
   .robot-lab-camera-workspace .robot-lab-main-tabs button {
     padding: 10px 12px;
   }
-  .robot-lab-camera-workspace .robot-lab-camera-views {
+  /* On a narrow screen cameras stack at full width and the console follows. */
+  .robot-lab-camera-workspace .robot-lab-cameras,
+  .robot-lab-camera-workspace .robot-lab-cameras .robot-lab-camera-tile {
+    container-type: normal;
+  }
+  .robot-lab-camera-workspace .robot-lab-camera-views,
+  .robot-lab-camera-workspace .robot-lab-camera-views[data-count='2'] {
+    grid-template-columns: minmax(0, 1fr);
+    grid-auto-rows: auto;
     min-height: 140px;
-    gap: 6px;
+    gap: 8px;
+  }
+  .robot-lab-camera-workspace .robot-lab-camera {
+    width: 100%;
   }
   .robot-lab-camera-workspace .robot-lab-camera-tile-heading {
     align-items: flex-start;
@@ -1750,13 +2077,6 @@
 .robot-lab-recording-camera-details > summary {
   padding: 10px 0;
   cursor: pointer;
-}
-.robot-lab label.robot-lab-camera-record-toggle {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  font-size: 12px;
-  margin-bottom: 8px;
 }
 
 /* Arms, cameras and policies are picked from cards, not dropdowns. */

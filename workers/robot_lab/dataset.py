@@ -292,6 +292,9 @@ class DatasetWriter:
         self.save_thread = None
         self.save_errors = []
         self.next_take = 0
+        # Every finished attempt in this recording, oldest first: saved, saving,
+        # discarded or failed, with its frame count.
+        self.takes = []
         self.build_queued = build_episode_in_child
         self.pending = self.root / ".pending"
         self.pending.mkdir()
@@ -324,6 +327,35 @@ class DatasetWriter:
         with self.save_lock:
             if not self.save_lock.wait_for(lambda: not self.save_queue, timeout):
                 raise ValueError("Episodes are still saving; try again in a moment")
+
+    def _record_take(self, outcome, frames):
+        with self.save_lock:
+            self.takes.append({"outcome": outcome, "frames": frames})
+            return len(self.takes) - 1
+
+    def stats(self, recent=120):
+        """What an operator watches while collecting: tries, outcomes, lengths, space."""
+        with self.save_lock:
+            takes = [dict(take) for take in self.takes]
+        saved_frames = sum(episode["length"] for episode in list(self.episodes))
+        try:
+            free = shutil.disk_usage(self.root).free
+        except OSError:
+            free = None
+        return {
+            "tries": len(takes),
+            "discarded": sum(take["outcome"] == "discarded" for take in takes),
+            "failed": sum(take["outcome"] == "failed" for take in takes),
+            "saved_seconds": round(saved_frames / self.fps, 2),
+            "recent": [
+                {"outcome": take["outcome"], "seconds": round(take["frames"] / self.fps, 2)}
+                for take in takes[-recent:]
+            ],
+            "disk_free_bytes": free,
+            # Lossless images dominate: each frame keeps every camera's raw pixels.
+            "bytes_per_second": (sum(math.prod(shape) for shape in self.image_shapes.values()) + 64)
+            * self.fps,
+        }
 
     def summary(self):
         return {
@@ -537,10 +569,12 @@ class DatasetWriter:
             raise ValueError("Record at least two frames before saving an episode")
         if not len(self.episodes) < 1000:
             raise ValueError("Dataset reached 1000 episodes; finalize and create another dataset")
+        frames = self.frames
         self._commit_episode(
             self.pending, self.frames, self.actual_fps, self._timing(), build_episode_file
         )
-        self.discard_episode()
+        self._clear_pending()
+        self._record_take("saved", frames)
 
     def queue_episode(self):
         """Save the stopped episode in the background so the next one can start at once.
@@ -567,9 +601,11 @@ class DatasetWriter:
             self.next_take += 1
         self.saving_root.mkdir(exist_ok=True)
         self.pending.replace(take)
-        job = (take, self.frames, self.actual_fps, self._timing())
+        job = (take, self.frames, self.actual_fps, self._timing(), None)
         self.frames = 0
         with self.save_lock:
+            self.takes.append({"outcome": "saving", "frames": job[1]})
+            job = job[:4] + (len(self.takes) - 1,)
             self.save_queue.append(job)
             if self.save_thread is None:
                 self.save_thread = threading.Thread(
@@ -585,11 +621,14 @@ class DatasetWriter:
                     self.save_thread = None
                     self.save_lock.notify_all()
                     return
-                take, frames, actual_fps, timing = self.save_queue[0]
+                take, frames, actual_fps, timing, attempt = self.save_queue[0]
             try:
                 self._commit_episode(take, frames, actual_fps, timing, self.build_queued)
+                with self.save_lock:
+                    self.takes[attempt]["outcome"] = "saved"
             except Exception as error:
                 with self.save_lock:
+                    self.takes[attempt]["outcome"] = "failed"
                     self.save_errors.append(
                         f"An episode could not be saved: {error}. Its {frames} frames are kept "
                         f"on the robot computer in {self.id}/.saving/{take.name}."
@@ -607,6 +646,12 @@ class DatasetWriter:
     def discard_episode(self):
         if self.abandoned:
             raise ValueError("This unsaved recording was closed; its files are preserved")
+        frames = self.frames
+        self._clear_pending()
+        if frames:
+            self._record_take("discarded", frames)
+
+    def _clear_pending(self):
         self.episode_active = False
         if self.image_writer:
             self.image_writer.wait_until_done(ignore_error=True)

@@ -635,6 +635,7 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin', 
         state.status.recording = {
           active: true,
           dataset_id: body.dataset_id,
+          task: body.task,
           camera_indices: body.camera_indices ?? (body.camera_index == null ? [] : [body.camera_index]),
           episode_active: false,
           frames: 0,
@@ -3761,8 +3762,8 @@ test('large camera view expands either feed and preserves the session and form',
     second = await side.boundingBox();
   expect(first).not.toBeNull();
   expect(second).not.toBeNull();
-  expect(Math.abs(first!.y - second!.y)).toBeLessThan(2);
-  expect(second!.x).toBeGreaterThan(first!.x);
+  // Both pictures show at once, side by side or one above the other, never overlapping.
+  expect(second!.x >= first!.x + first!.width - 1 || second!.y >= first!.y + first!.height - 1).toBe(true);
   const stop = view.getByRole('button', { name: 'Stop arm and disable torque', exact: true });
   await expect(stop).toBeInViewport();
   await expect(view.getByRole('button', { name: 'Exit large view', exact: true })).toBeInViewport();
@@ -3788,6 +3789,93 @@ test('large camera view expands either feed and preserves the session and form',
   expect(state.errors).toEqual([]);
 });
 
+test('large camera view is a recording console with coloured progress for every try', async ({ page }, testInfo) => {
+  const state = await fixture(page, true);
+  state.backgroundSave = true;
+  state.status.capabilities.multi_camera_recording = true;
+  state.cameras = [
+    { index: 0, name: 'Front USB', width: 1280, height: 720 },
+    { index: 4, name: 'Gripper USB', width: 640, height: 480 },
+  ];
+  await page.reload();
+  await startManual(page);
+  await openTab(page, 'Record');
+  await page.getByRole('checkbox', { name: 'Record Gripper USB', exact: true }).check();
+  await page.getByLabel('Dataset name', { exact: true }).fill('duck-console');
+  await page.getByLabel('Task instruction', { exact: true }).fill('Put the duck in the box.');
+  await page.getByRole('button', { name: 'Create recording dataset', exact: true }).click();
+  state.status.recording.stats = {
+    tries: 0,
+    discarded: 0,
+    failed: 0,
+    saved_seconds: 0,
+    recent: [],
+    disk_free_bytes: 42 * 1024 ** 3,
+    bytes_per_second: 2_900_000,
+  };
+  await page.getByRole('button', { name: 'Large camera view', exact: true }).click();
+  const view = page.getByRole('dialog', { name: 'Large camera view' });
+  const panel = view.getByRole('region', { name: 'Recording console' });
+  await expect(panel).toContainText('Ready for the next episode');
+  await expect(panel).toContainText('Put the duck in the box.');
+  await expect(page.getByLabel('Camera view recording status', { exact: true })).toHaveAttribute('data-tone', 'ready');
+  // Setup controls stay in the normal view; the console has only what collecting needs.
+  await expect(view.getByRole('slider')).toHaveCount(0);
+  await expect(view.getByText('Datasets on the robot computer', { exact: true })).toHaveCount(0);
+  // Each picture keeps its camera's shape instead of sitting between black bands.
+  const pictures = view.locator('.robot-lab-camera');
+  await expect(pictures).toHaveCount(2);
+  for (const [position, ratio] of [
+    [0, 16 / 9],
+    [1, 4 / 3],
+  ] as const) {
+    const box = (await pictures.nth(position).boundingBox())!;
+    expect(Math.abs(box.width / box.height - ratio)).toBeLessThan(0.03);
+  }
+  await expect(view.locator('.robot-lab-camera-name')).toHaveText(['Front USB', 'Gripper USB']);
+  await page.keyboard.press('Space');
+  await expect.poll(() => writes(state, '/recording/episode/start').length).toBe(1);
+  await expect(panel.locator('.robot-lab-console-state')).toContainText('Recording');
+  await expect(panel.getByLabel('Episode time', { exact: true })).toHaveText(/^0:\d\d\.\d$/);
+  await expect(view.locator('.robot-lab-camera-views')).toHaveAttribute('data-recording', 'true');
+  await expect(page.getByLabel('Camera view recording status', { exact: true })).toHaveAttribute(
+    'data-tone',
+    'recording',
+  );
+  await page.screenshot({ path: testInfo.outputPath('large-view-recording.png') });
+  state.status.recording.episodes = 5;
+  state.status.recording.stats = {
+    ...state.status.recording.stats,
+    tries: 7,
+    discarded: 2,
+    saved_seconds: 61.5,
+    recent: [12.5, 3.1, 14, 11.2, 8, 12, 11.8].map((seconds, index) => ({
+      outcome: index === 1 || index === 4 ? 'discarded' : 'saved',
+      seconds,
+    })),
+  };
+  await page.keyboard.press('Space');
+  await expect.poll(() => writes(state, '/recording/episode/save').length).toBe(1);
+  const progress = panel.getByRole('region', { name: 'Recording progress' });
+  await expect(progress.locator('.robot-lab-stat.saved dd')).toHaveText(/^5/);
+  await expect(progress.locator('.robot-lab-stat.saved dd')).toContainText('+1 saving');
+  await expect(progress.locator('.robot-lab-stat.discarded dd')).toHaveText('2');
+  await expect(progress.locator('.robot-lab-stat').filter({ hasText: 'Tries' }).locator('dd')).toHaveText('7');
+  await expect(progress.locator('.robot-lab-stat').filter({ hasText: 'Average length' }).locator('dd')).toHaveText(
+    '12.3 s',
+  );
+  await expect(progress.locator('.robot-lab-stat').filter({ hasText: 'Saved time' }).locator('dd')).toHaveText(
+    '1m 01s',
+  );
+  await expect(progress.getByRole('img')).toHaveAttribute('aria-label', 'Tries 1 to 7: 5 saved, 2 discarded');
+  await expect(progress.locator('.robot-lab-stats-tries > span')).toHaveCount(7);
+  await expect(progress).toContainText('42.0 GB free on the robot computer · room for about 4 hours');
+  await expect(panel.locator('.robot-lab-console-state')).toContainText('Ready for the next episode');
+  await page.screenshot({ path: testInfo.outputPath('large-view-progress.png') });
+  expect(writes(state, '/recording/episode/discard')).toEqual([]);
+  expect(state.errors).toEqual([]);
+});
+
 test('large camera view keeps collection countdown and pause controls available', async ({ page }) => {
   const state = await fixture(page, true);
   state.status.capabilities.auto_recording_fps = true;
@@ -3802,7 +3890,8 @@ test('large camera view keeps collection countdown and pause controls available'
   const summary = page.getByLabel('Camera view recording status', { exact: true });
   await expect(summary).toContainText('Get ready');
   await expect(page.getByLabel('Camera view time remaining', { exact: true })).toBeVisible();
-  await expect(page.getByRole('checkbox', { name: 'Record view from camera 0', exact: true })).toBeDisabled();
+  // Cameras cannot change while a dataset records, so the choice is not shown.
+  await expect(page.getByRole('checkbox', { name: 'Record view from camera 0', exact: true })).toHaveCount(0);
   state.status.recording.collection.phase = 'recording';
   state.status.recording.collection.remaining_s = 17;
   state.status.recording.episode_active = true;

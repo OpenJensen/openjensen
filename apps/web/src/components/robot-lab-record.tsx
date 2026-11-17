@@ -7,8 +7,11 @@ import { Icon } from '@/components/icon';
 import { datasetLibrary } from '@/lib/dataset-library';
 import { importRobotDataset, robotApi, robotJoints } from '@/lib/robot-api';
 import { Heading, Notice, JointControl, DatasetRow } from './robot-lab-shared';
+import { RecordingStats, formatClock } from './robot-lab-recording-stats';
 import type { RobotLabState } from './robot-lab-state';
 import { Segmented } from './ui/choice';
+
+type ActiveRecording = NonNullable<RobotLabState['recording']>;
 
 export function RobotLabRecord({ lab }: { lab: RobotLabState }) {
   const {
@@ -58,6 +61,10 @@ export function RobotLabRecord({ lab }: { lab: RobotLabState }) {
   // shows the new state at once and the save finishes on the robot computer.
   const [episodeRequest, setEpisodeRequest] = useState<'start' | 'save' | 'discard' | null>(null);
   const spaceOwned = useRef(false);
+  // The episode clock runs from the moment Start was pressed here; an episode
+  // started elsewhere (or by the timer) counts its recorded frames instead.
+  const [startedAt, setStartedAt] = useState<number | null>(null);
+  const [now, setNow] = useState(0);
   const spaceAction = useRef<(() => void) | null>(null);
   const lastCue = useRef<string | null>(null);
   const audioContext = useRef<AudioContext | null>(null);
@@ -132,7 +139,19 @@ export function RobotLabRecord({ lab }: { lab: RobotLabState }) {
     !pendingFrames &&
     !episodeRequest;
   const canSave = canAct && !saving && !collecting && !episodeRequest && pendingFrames > 0;
+  useEffect(() => {
+    if (!episodeActive) return;
+    const timer = setInterval(() => setNow(Date.now()), 100);
+    return () => clearInterval(timer);
+  }, [episodeActive]);
+  const recordedSeconds = (recording?.frames ?? 0) / (recording?.fps || 10);
+  const liveSeconds = !episodeActive
+    ? null
+    : startedAt !== null && now >= startedAt
+      ? Math.min((now - startedAt) / 1000, recordedSeconds + 2)
+      : recordedSeconds;
   function episodeAction(kind: 'start' | 'save' | 'discard') {
+    setStartedAt(kind === 'start' ? Date.now() : null);
     setEpisodeRequest(kind);
     void perform(
       kind === 'start' ? 'Recording.' : kind === 'save' ? 'Episode saved.' : 'Episode discarded.',
@@ -269,6 +288,254 @@ export function RobotLabRecord({ lab }: { lab: RobotLabState }) {
     paused: 'Collection paused',
     complete: 'Collection complete',
   };
+  const rateNotices = (active: ActiveRecording) => (
+    <>
+      {rateFailed && (
+        <Notice kind="warning">
+          <strong>Capture rate could not be measured.</strong>
+          {active.rate_message || active.error || 'Check the camera connection and teleoperation session.'}
+          <p>Close this unsaved recording and create a new dataset to retry. Existing files are retained.</p>
+        </Notice>
+      )}
+      {active.rate_status && !rateFailed && (
+        <p className="robot-lab-subtle" role="status">
+          {measuring
+            ? 'Measuring sustainable capture rate…'
+            : `${active.fps} fps · ${active.fps_mode === 'auto' ? 'selected automatically' : 'manual'}`}{' '}
+          {active.rate_message}
+        </p>
+      )}
+      {active.frames > 1 && active.actual_fps != null && (
+        <p className="robot-lab-subtle" role="status">
+          Measured capture: {active.actual_fps.toFixed(1)} fps · Dataset target: {active.fps} fps
+        </p>
+      )}
+    </>
+  );
+  const collectionSection = (active: ActiveRecording) => (
+    <>
+      {collection && (
+        <section className="robot-lab-collection robot-lab-form" aria-label="Guided collection">
+          <div className="robot-lab-mapping-heading">
+            <h3>{saving ? 'Saving episode' : collectionLabels[collection.phase]}</h3>
+            <span>
+              {collection.completed}/{collection.num_episodes} episodes collected
+            </span>
+          </div>
+          <progress aria-label="Collection progress" value={collection.completed} max={collection.num_episodes} />
+          {['countdown', 'recording', 'reset'].includes(collection.phase) && !saving && (
+            <output className="robot-lab-collection-countdown" aria-label="Time remaining">
+              {Math.max(0, Math.ceil(collection.remaining_s))}s
+            </output>
+          )}
+          <p role="status">
+            {collection.cue ||
+              (collection.phase === 'reset'
+                ? 'Return the object and arm to the starting scene using teleoperation.'
+                : 'The robot computer manages episode timing.')}
+          </p>
+          {collection.phase === 'paused' && active.frames > 0 && (
+            <Notice>
+              These frames are preserved. Save or discard this partial episode before resuming, or choose Re-record
+              episode to try it again. Partial episodes do not count toward the timed collection.
+            </Notice>
+          )}
+          <div className="robot-lab-actions">
+            {collection.phase === 'idle' && (
+              <button
+                className="primary-button"
+                disabled={!canCollect || saving || active.frames > 0}
+                onClick={() => {
+                  primeAudio();
+                  void perform('Collection started.', () => robotApi.collectionAction('start'));
+                }}
+              >
+                Start collection
+              </button>
+            )}
+            {collecting && (
+              <button
+                className="secondary-button"
+                disabled={!canAct}
+                onClick={() => void perform('Collection paused.', () => robotApi.collectionAction('pause'))}
+              >
+                Pause collection
+              </button>
+            )}
+            {collection.phase === 'paused' && (
+              <button
+                className="primary-button"
+                disabled={!canCollect || saving || active.frames > 0}
+                onClick={() => {
+                  primeAudio();
+                  void perform('Collection resumed.', () => robotApi.collectionAction('resume'));
+                }}
+              >
+                Resume collection
+              </button>
+            )}
+            {collection.phase === 'reset' && (
+              <button
+                className="secondary-button"
+                disabled={!canCollect || saving}
+                onClick={() =>
+                  void perform('Reset finished. Preparing next episode.', () => robotApi.collectionAction('next'))
+                }
+              >
+                Ready for next episode
+              </button>
+            )}
+            {['recording', 'paused'].includes(collection.phase) && (active.episode_active || active.frames > 0) && (
+              <button
+                className="secondary-button"
+                disabled={!canCollect || saving}
+                onClick={() =>
+                  void perform('Current attempt discarded. Preparing to re-record.', () =>
+                    robotApi.collectionAction('rerecord'),
+                  )
+                }
+              >
+                Re-record episode
+              </button>
+            )}
+          </div>
+        </section>
+      )}
+    </>
+  );
+  const episodeControls = (active: ActiveRecording) => (
+    <>
+      <div className="robot-lab-actions">
+        {byHand &&
+          (episodeActive || pendingFrames > 0 ? (
+            <button
+              className="primary-button robot-lab-episode-button"
+              aria-keyshortcuts="Space"
+              disabled={!canSave}
+              onClick={() => episodeAction('save')}
+            >
+              Save episode<kbd aria-hidden="true">Space</kbd>
+            </button>
+          ) : (
+            <button
+              className="primary-button robot-lab-episode-button"
+              aria-keyshortcuts="Space"
+              disabled={!canStart}
+              onClick={() => episodeAction('start')}
+            >
+              <span aria-hidden="true">●</span>Start episode<kbd aria-hidden="true">Space</kbd>
+            </button>
+          ))}
+        {collection && (
+          <button
+            className="secondary-button"
+            disabled={!canAct || saving || collecting || !active.frames}
+            onClick={() => void perform('Episode saved.', robotApi.saveEpisode)}
+          >
+            Save episode
+          </button>
+        )}
+        <button
+          className="secondary-button"
+          disabled={!canAct || saving || collecting || !!episodeRequest || (!episodeActive && !pendingFrames)}
+          onClick={() =>
+            collection ? void perform('Episode discarded.', robotApi.discardEpisode) : episodeAction('discard')
+          }
+        >
+          Discard episode
+        </button>
+      </div>
+    </>
+  );
+  const finishControls = (active: ActiveRecording) => (
+    <>
+      <div className="robot-lab-actions">
+        <button
+          className="secondary-button"
+          disabled={
+            !canAct ||
+            collecting ||
+            saving ||
+            !!episodeRequest ||
+            episodeActive ||
+            pendingFrames > 0 ||
+            active.episodes + savingEpisodes === 0
+          }
+          onClick={() => void perform('Dataset finalized.', robotApi.finishRecording)}
+        >
+          {pending === 'Dataset finalized.' ? 'Finishing dataset…' : 'Finish dataset'}
+        </button>
+        {active.episodes === 0 && savingEpisodes === 0 && (
+          <button
+            className="text-button"
+            disabled={!canAct || collecting || saving}
+            onClick={() =>
+              void perform('Unsaved recording closed; files retained on the robot computer.', robotApi.abandonRecording)
+            }
+          >
+            Close unsaved recording
+          </button>
+        )}
+      </div>
+      {active.episodes === 0 && savingEpisodes === 0 && (
+        <p className="robot-lab-subtle">
+          Closing retains unsaved files. Create a new dataset to change the frame rate.
+        </p>
+      )}
+    </>
+  );
+  const consoleState = measuring
+    ? 'checking'
+    : saving
+      ? 'saving'
+      : episodeActive
+        ? 'recording'
+        : pendingFrames > 0
+          ? 'paused'
+          : 'ready';
+  const consoleLabels = {
+    checking: 'Checking recording speed',
+    saving: 'Saving episode',
+    recording: 'Recording',
+    paused: 'Episode stopped: save or discard it',
+    ready: 'Ready for the next episode',
+  };
+  // The large camera view keeps only what is needed while collecting: state,
+  // clock, the one next action, progress and Finish.
+  if (lab.cameraWorkspace && recording?.active)
+    return (
+      <section className="robot-lab-console" aria-label="Recording console">
+        <div className={`robot-lab-console-state ${consoleState}`}>
+          <span className="robot-lab-recording-light" />
+          <div>
+            <strong>{collection && !saving ? collectionLabels[collection.phase] : consoleLabels[consoleState]}</strong>
+            <small>{recording.dataset_id}</small>
+          </div>
+          {liveSeconds !== null && <output aria-label="Episode time">{formatClock(liveSeconds)}</output>}
+        </div>
+        {recording.task && <p className="robot-lab-console-task">{recording.task}</p>}
+        {partialControl && <Notice>Dataset recording requires all six joints.</Notice>}
+        {recording.save_error && <Notice kind="warning">{recording.save_error}</Notice>}
+        {rateNotices(recording)}
+        {collectionSection(recording)}
+        {episodeControls(recording)}
+        <RecordingStats recording={recording} liveSeconds={liveSeconds} />
+        {collection && guidedAvailable && (
+          <label className="robot-lab-check">
+            <input
+              type="checkbox"
+              checked={voiceCues}
+              onChange={(event) => {
+                setVoiceCues(event.target.checked);
+                if (!event.target.checked && 'speechSynthesis' in window) window.speechSynthesis.cancel();
+              }}
+            />
+            Voice cues
+          </label>
+        )}
+        {finishControls(recording)}
+      </section>
+    );
   return (
     <>
       <Heading title="Recording" />
@@ -521,156 +788,12 @@ export function RobotLabRecord({ lab }: { lab: RobotLabState }) {
               <output>{pendingFrames} frames</output>
             </div>
             {recording.save_error && <Notice kind="warning">{recording.save_error}</Notice>}
-            {rateFailed && (
-              <Notice kind="warning">
-                <strong>Capture rate could not be measured.</strong>
-                {recording.rate_message || recording.error || 'Check the camera connection and teleoperation session.'}
-                <p>Close this unsaved recording and create a new dataset to retry. Existing files are retained.</p>
-              </Notice>
-            )}
-            {recording.rate_status && !rateFailed && (
-              <p className="robot-lab-subtle" role="status">
-                {measuring
-                  ? 'Measuring sustainable capture rate…'
-                  : `${recording.fps} fps · ${recording.fps_mode === 'auto' ? 'selected automatically' : 'manual'}`}{' '}
-                {recording.rate_message}
-              </p>
-            )}
-            {recording.frames > 1 && recording.actual_fps != null && (
-              <p className="robot-lab-subtle" role="status">
-                Measured capture: {recording.actual_fps.toFixed(1)} fps · Dataset target: {recording.fps} fps
-              </p>
-            )}
-            {collection && (
-              <section className="robot-lab-collection robot-lab-form" aria-label="Guided collection">
-                <div className="robot-lab-mapping-heading">
-                  <h3>{saving ? 'Saving episode' : collectionLabels[collection.phase]}</h3>
-                  <span>
-                    {collection.completed}/{collection.num_episodes} episodes collected
-                  </span>
-                </div>
-                <progress aria-label="Collection progress" value={collection.completed} max={collection.num_episodes} />
-                {['countdown', 'recording', 'reset'].includes(collection.phase) && !saving && (
-                  <output className="robot-lab-collection-countdown" aria-label="Time remaining">
-                    {Math.max(0, Math.ceil(collection.remaining_s))}s
-                  </output>
-                )}
-                <p role="status">
-                  {collection.cue ||
-                    (collection.phase === 'reset'
-                      ? 'Return the object and arm to the starting scene using teleoperation.'
-                      : 'The robot computer manages episode timing.')}
-                </p>
-                {collection.phase === 'paused' && recording.frames > 0 && (
-                  <Notice>
-                    These frames are preserved. Save or discard this partial episode before resuming, or choose
-                    Re-record episode to try it again. Partial episodes do not count toward the timed collection.
-                  </Notice>
-                )}
-                <div className="robot-lab-actions">
-                  {collection.phase === 'idle' && (
-                    <button
-                      className="primary-button"
-                      disabled={!canCollect || saving || recording.frames > 0}
-                      onClick={() => {
-                        primeAudio();
-                        void perform('Collection started.', () => robotApi.collectionAction('start'));
-                      }}
-                    >
-                      Start collection
-                    </button>
-                  )}
-                  {collecting && (
-                    <button
-                      className="secondary-button"
-                      disabled={!canAct}
-                      onClick={() => void perform('Collection paused.', () => robotApi.collectionAction('pause'))}
-                    >
-                      Pause collection
-                    </button>
-                  )}
-                  {collection.phase === 'paused' && (
-                    <button
-                      className="primary-button"
-                      disabled={!canCollect || saving || recording.frames > 0}
-                      onClick={() => {
-                        primeAudio();
-                        void perform('Collection resumed.', () => robotApi.collectionAction('resume'));
-                      }}
-                    >
-                      Resume collection
-                    </button>
-                  )}
-                  {collection.phase === 'reset' && (
-                    <button
-                      className="secondary-button"
-                      disabled={!canCollect || saving}
-                      onClick={() =>
-                        void perform('Reset finished. Preparing next episode.', () => robotApi.collectionAction('next'))
-                      }
-                    >
-                      Ready for next episode
-                    </button>
-                  )}
-                  {['recording', 'paused'].includes(collection.phase) &&
-                    (recording.episode_active || recording.frames > 0) && (
-                      <button
-                        className="secondary-button"
-                        disabled={!canCollect || saving}
-                        onClick={() =>
-                          void perform('Current attempt discarded. Preparing to re-record.', () =>
-                            robotApi.collectionAction('rerecord'),
-                          )
-                        }
-                      >
-                        Re-record episode
-                      </button>
-                    )}
-                </div>
-              </section>
-            )}
+            <RecordingStats recording={recording} liveSeconds={liveSeconds} />
+            {rateNotices(recording)}
+            {collectionSection(recording)}
             {session?.mode === 'handguide' && <Notice>Action source: observed joint positions (hand guiding).</Notice>}
             {session?.mode === 'manual' && <Notice>Action source: commanded joint targets.</Notice>}
-            <div className="robot-lab-actions">
-              {byHand &&
-                (episodeActive || pendingFrames > 0 ? (
-                  <button
-                    className="primary-button robot-lab-episode-button"
-                    aria-keyshortcuts="Space"
-                    disabled={!canSave}
-                    onClick={() => episodeAction('save')}
-                  >
-                    Save episode<kbd aria-hidden="true">Space</kbd>
-                  </button>
-                ) : (
-                  <button
-                    className="primary-button robot-lab-episode-button"
-                    aria-keyshortcuts="Space"
-                    disabled={!canStart}
-                    onClick={() => episodeAction('start')}
-                  >
-                    <span aria-hidden="true">●</span>Start episode<kbd aria-hidden="true">Space</kbd>
-                  </button>
-                ))}
-              {collection && (
-                <button
-                  className="secondary-button"
-                  disabled={!canAct || saving || collecting || !recording.frames}
-                  onClick={() => void perform('Episode saved.', robotApi.saveEpisode)}
-                >
-                  Save episode
-                </button>
-              )}
-              <button
-                className="secondary-button"
-                disabled={!canAct || saving || collecting || !!episodeRequest || (!episodeActive && !pendingFrames)}
-                onClick={() =>
-                  collection ? void perform('Episode discarded.', robotApi.discardEpisode) : episodeAction('discard')
-                }
-              >
-                Discard episode
-              </button>
-            </div>
+            {episodeControls(recording)}
             {session?.mode === 'manual' && (
               <div className="robot-lab-joints" aria-busy={jogging}>
                 {robotJoints
@@ -693,42 +816,7 @@ export function RobotLabRecord({ lab }: { lab: RobotLabState }) {
                   ))}
               </div>
             )}
-            <div className="robot-lab-actions">
-              <button
-                className="secondary-button"
-                disabled={
-                  !canAct ||
-                  collecting ||
-                  saving ||
-                  !!episodeRequest ||
-                  episodeActive ||
-                  pendingFrames > 0 ||
-                  recording.episodes + savingEpisodes === 0
-                }
-                onClick={() => void perform('Dataset finalized.', robotApi.finishRecording)}
-              >
-                {pending === 'Dataset finalized.' ? 'Finishing dataset…' : 'Finish dataset'}
-              </button>
-              {recording.episodes === 0 && savingEpisodes === 0 && (
-                <button
-                  className="text-button"
-                  disabled={!canAct || collecting || saving}
-                  onClick={() =>
-                    void perform(
-                      'Unsaved recording closed; files retained on the robot computer.',
-                      robotApi.abandonRecording,
-                    )
-                  }
-                >
-                  Close unsaved recording
-                </button>
-              )}
-            </div>
-            {recording.episodes === 0 && savingEpisodes === 0 && (
-              <p className="robot-lab-subtle">
-                Closing retains unsaved files. Create a new dataset to change the frame rate.
-              </p>
-            )}
+            {finishControls(recording)}
           </>
         )}
         <hr className="robot-lab-divider" />
