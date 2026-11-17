@@ -6,14 +6,17 @@ import { viewName } from '@/lib/policy-cameras';
 import { CameraIcon } from './robot-lab-shared';
 import { RobotLabCameraSettings } from './robot-lab-camera-settings';
 import type { RobotLabState } from './robot-lab-state';
-import { Segmented } from './ui/choice';
 
+/**
+ * The cameras beside every Robot Lab step. Each camera is one card: its name, an
+ * On/Off switch, and its live picture while it is on. Cameras that are on are the
+ * ones shown here and saved with a recording.
+ */
 export function RobotLabCamera({ lab }: { lab: RobotLabState }) {
   const {
     availableCameras,
     cameraError,
     cameraIndex,
-    additionalCameraIndices,
     selectedCameraIndices,
     setAdditionalCameraIndices,
     online,
@@ -42,179 +45,42 @@ export function RobotLabCamera({ lab }: { lab: RobotLabState }) {
           : [cameraIndex]
       : [cameraIndex];
   const viewOf = (index: number) => policyViews.find((item) => item.index === index)?.view;
-  const primaryIndex = recording?.active ? (indices[0] ?? cameraIndex) : cameraIndex;
+  // Record chooses its cameras in "Cameras for this dataset" and Run policy uses the
+  // policy's views; every other step switches cameras here.
+  const switchable = lab.step !== 4 && !policyViews.length;
+  const cards = switchable && !large ? availableCameras.map((camera) => camera.index) : indices;
+  const canPreview = online && availableCameras.length > 0 && !!state?.capabilities?.camera;
+  const failed = (index: number) => cameraError && (failedCameras.includes(index) || !failedCameras.length);
+
   function resetErrors() {
     setCameraError(false);
     setFailedCameras([]);
   }
+  function switchCamera(index: number, on: boolean) {
+    // Without multi-camera support one camera is on at a time.
+    const next = !multipleAvailable ? [index] : on ? [...indices, index] : indices.filter((item) => item !== index);
+    if (!next.length || next.length > 4) return;
+    setCameraIndex(next[0]);
+    setAdditionalCameraIndices(next.slice(1));
+    resetErrors();
+  }
+
   return (
     <aside className="robot-lab-side">
-      <section className="robot-lab-card" aria-label="Camera preview">
+      <section className="robot-lab-card robot-lab-cameras" aria-label="Camera preview">
         <div className="robot-lab-card-header">
-          <h3>{large ? 'Camera view' : 'Camera preview'}</h3>
-          {(lab.step === 3 || lab.step === 4) && !large && (
-            <button
-              className="secondary-button"
-              disabled={!online || !availableCameras.length || !state?.capabilities?.camera}
-              onClick={() => {
-                resetErrors();
-                if (!preview || cameraError || failedCameras.length) setPreviewStamp(Date.now());
-                setPreview(true);
-                lab.setCameraWorkspace(true);
-              }}
-            >
-              Large camera view
-            </button>
-          )}
+          <h3>{large ? 'Camera view' : 'Cameras'}</h3>
           {large && expandedCamera !== null && (
             <button className="secondary-button" onClick={() => setExpandedCamera(null)}>
               Show all cameras
             </button>
           )}
         </div>
-        <div
-          className="robot-lab-camera-views"
-          data-single={indices.length === 1 || (expandedCamera !== null && indices.includes(expandedCamera))}
-        >
-          {indices.map((index, ordinal) => (
-            <div
-              key={index}
-              className="robot-lab-camera-tile"
-              hidden={large && expandedCamera !== null && indices.includes(expandedCamera) && expandedCamera !== index}
-            >
-              {(indices.length > 1 || large || policyViews.length > 0) && (
-                <div className="robot-lab-camera-tile-heading">
-                  <strong>
-                    {viewOf(index) ? `${viewName(viewOf(index)!)} · ` : ''}
-                    {lab.cameraName(index)}
-                  </strong>
-                  {large && indices.length > 1 && expandedCamera !== index && (
-                    <button
-                      className="text-button"
-                      aria-label={`Enlarge camera ${index}`}
-                      onClick={() => setExpandedCamera(index)}
-                    >
-                      Enlarge
-                    </button>
-                  )}
-                </div>
-              )}
-              {large && lab.step === 4 && (
-                <label className="robot-lab-camera-record-toggle">
-                  <input
-                    type="checkbox"
-                    aria-label={`Record view from camera ${index}`}
-                    checked={lab.recordingCameraIndices.includes(index)}
-                    disabled={lab.busy || !!recording?.active || !online}
-                    onChange={(event) => lab.toggleRecordingCamera(index, event.target.checked)}
-                  />
-                  {lab.recordingCameraIndices.includes(index) ? 'Included in dataset' : 'Preview only'}
-                </label>
-              )}
-              <div className="robot-lab-camera">
-                {preview && online && !(cameraError && (failedCameras.includes(index) || !failedCameras.length)) ? (
-                  <RobotLabCameraFrame
-                    key={`${index}/${previewStamp}/${indices.join(',')}`}
-                    index={index}
-                    indices={indices}
-                    stamp={previewStamp}
-                    large={large && (expandedCamera === null || expandedCamera === index)}
-                    alt={ordinal === 0 ? 'Live view from the selected robot camera' : `Live view from camera ${index}`}
-                    onError={() => {
-                      setFailedCameras((failed) => (failed.includes(index) ? failed : [...failed, index]));
-                      setCameraError(true);
-                    }}
-                  />
-                ) : (
-                  <div className="robot-lab-camera-empty">
-                    <CameraIcon size={27} />
-                    <span>
-                      {cameraError && (failedCameras.includes(index) || !failedCameras.length)
-                        ? indices.length === 1
-                          ? 'Camera could not open. Check camera permissions on the robot computer or close another app using it.'
-                          : `Camera ${index} could not open. Check camera permissions or close another app using it. Shared USB hubs may need cameras on separate ports.`
-                        : 'Preview stopped'}
-                    </span>
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-        <details className="robot-lab-camera-options" open={!large}>
-          <summary>Camera selection and settings</summary>
-          {online && state?.capabilities?.camera_mode_controls && availableCameras.length > 0 && (
-            <RobotLabCameraSettings
-              indices={indices}
-              locked={state.session?.mode !== 'idle' || !!recording?.active}
-              preview={preview}
-              setPreview={setPreview}
-              onApplied={() => {
-                resetErrors();
-                setPreviewStamp(Date.now());
-              }}
-            />
-          )}
-          <div className="robot-lab-camera-controls">
-            {lab.step !== 4 && !policyViews.length && (
-              <div className="robot-lab-field">
-                <span className="robot-lab-field-label">Camera</span>
-                {availableCameras.length ? (
-                  <Segmented
-                    label="Preview camera"
-                    value={primaryIndex}
-                    disabled={!online || !!recording?.active}
-                    onChange={(index) => {
-                      setCameraIndex(index);
-                      resetErrors();
-                    }}
-                    options={availableCameras.map((camera) => ({
-                      value: camera.index,
-                      label: lab.cameraName(camera.index),
-                    }))}
-                  />
-                ) : (
-                  <span className="robot-lab-subtle">No camera available</span>
-                )}
-              </div>
-            )}
-            {lab.step !== 4 && !policyViews.length && multipleAvailable && availableCameras.length > 1 && (
-              <fieldset className="robot-lab-form">
-                <legend>Also preview and record</legend>
-                {availableCameras
-                  .filter((camera) => camera.index !== primaryIndex)
-                  .map((camera) => (
-                    <label className="robot-lab-check" key={camera.index}>
-                      <input
-                        type="checkbox"
-                        aria-label={`Also use ${camera.name}`}
-                        checked={indices.includes(camera.index)}
-                        disabled={
-                          !online ||
-                          !!recording?.active ||
-                          (!additionalCameraIndices.includes(camera.index) && indices.length >= 4)
-                        }
-                        onChange={(event) => {
-                          setAdditionalCameraIndices(
-                            event.target.checked
-                              ? [...additionalCameraIndices.filter((index) => index !== cameraIndex), camera.index]
-                              : additionalCameraIndices.filter((index) => index !== camera.index),
-                          );
-                          resetErrors();
-                        }}
-                      />
-                      {lab.cameraName(camera.index)}
-                    </label>
-                  ))}
-                <small>Selected views are saved together when Record camera is enabled.</small>
-              </fieldset>
-            )}
-            {lab.step === 4 && (
-              <p className="robot-lab-subtle">Choose which cameras to save in “Cameras for this dataset”.</p>
-            )}
+        {!large && (
+          <div className="robot-lab-camera-actions">
             <button
               className="secondary-button"
-              disabled={!online || !availableCameras.length || !state?.capabilities?.camera}
+              disabled={!canPreview}
               onClick={() => {
                 if (cameraError) {
                   resetErrors();
@@ -231,8 +97,142 @@ export function RobotLabCamera({ lab }: { lab: RobotLabState }) {
                   ? 'Pause preview'
                   : 'Start preview'}
             </button>
+            {(lab.step === 3 || lab.step === 4) && (
+              <button
+                className="secondary-button"
+                disabled={!canPreview}
+                onClick={() => {
+                  resetErrors();
+                  if (!preview || cameraError || failedCameras.length) setPreviewStamp(Date.now());
+                  setPreview(true);
+                  lab.setCameraWorkspace(true);
+                }}
+              >
+                Large camera view
+              </button>
+            )}
           </div>
-        </details>
+        )}
+        {!availableCameras.length && !policyViews.length && (
+          <p className="robot-lab-camera-none">No camera found. Plug one in and press Restart devices.</p>
+        )}
+        <div
+          className="robot-lab-camera-views"
+          data-single={cards.length === 1 || (expandedCamera !== null && indices.includes(expandedCamera))}
+        >
+          {cards.map((index) => {
+            const on = indices.includes(index);
+            const name = lab.cameraName(index);
+            return (
+              <div
+                key={index}
+                className={`robot-lab-camera-tile${on ? '' : ' off'}`}
+                hidden={
+                  large && expandedCamera !== null && indices.includes(expandedCamera) && expandedCamera !== index
+                }
+              >
+                <div className="robot-lab-camera-tile-heading">
+                  <strong>
+                    {viewOf(index) ? `${viewName(viewOf(index)!)} · ` : ''}
+                    {name}
+                  </strong>
+                  {switchable && !large && availableCameras.length > 1 && (
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={on}
+                      aria-label={`Use ${name}`}
+                      className="robot-lab-camera-switch"
+                      disabled={
+                        !online ||
+                        !!recording?.active ||
+                        (on && indices.length === 1) ||
+                        (!on && multipleAvailable && indices.length >= 4)
+                      }
+                      onClick={() => switchCamera(index, !on)}
+                    >
+                      <span aria-hidden="true" />
+                      {on ? 'On' : 'Off'}
+                    </button>
+                  )}
+                  {large && indices.length > 1 && expandedCamera !== index && (
+                    <button
+                      className="text-button"
+                      aria-label={`Enlarge camera ${index}`}
+                      onClick={() => setExpandedCamera(index)}
+                    >
+                      Enlarge
+                    </button>
+                  )}
+                </div>
+                {large && lab.step === 4 && (
+                  <label className="robot-lab-camera-record-toggle">
+                    <input
+                      type="checkbox"
+                      aria-label={`Record view from camera ${index}`}
+                      checked={lab.recordingCameraIndices.includes(index)}
+                      disabled={lab.busy || !!recording?.active || !online}
+                      onChange={(event) => lab.toggleRecordingCamera(index, event.target.checked)}
+                    />
+                    {lab.recordingCameraIndices.includes(index) ? 'Included in dataset' : 'Preview only'}
+                  </label>
+                )}
+                {on && (
+                  <div className="robot-lab-camera">
+                    {preview && online && !failed(index) ? (
+                      <RobotLabCameraFrame
+                        key={`${index}/${previewStamp}/${indices.join(',')}`}
+                        index={index}
+                        indices={indices}
+                        stamp={previewStamp}
+                        large={large && (expandedCamera === null || expandedCamera === index)}
+                        alt={
+                          index === indices[0]
+                            ? 'Live view from the selected robot camera'
+                            : `Live view from camera ${index}`
+                        }
+                        onError={() => {
+                          setFailedCameras((current) => (current.includes(index) ? current : [...current, index]));
+                          setCameraError(true);
+                        }}
+                      />
+                    ) : (
+                      <div className="robot-lab-camera-empty">
+                        <CameraIcon size={28} />
+                        {failed(index) ? (
+                          <span>
+                            <strong>This camera won’t open.</strong>
+                            {indices.length === 1
+                              ? 'Close other apps using it and check camera permission on the robot computer.'
+                              : 'Close other apps using it. Cameras on one USB hub may need separate ports.'}
+                          </span>
+                        ) : (
+                          <span>Preview paused</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        {lab.step === 4 && !large && (
+          <p className="robot-lab-camera-note">Choose the cameras to save in “Cameras for this dataset”.</p>
+        )}
+        {!large && online && state?.capabilities?.camera_mode_controls && availableCameras.length > 0 && (
+          <RobotLabCameraSettings
+            indices={indices}
+            name={lab.cameraName}
+            locked={state.session?.mode !== 'idle' || !!recording?.active}
+            preview={preview}
+            setPreview={setPreview}
+            onApplied={() => {
+              resetErrors();
+              setPreviewStamp(Date.now());
+            }}
+          />
+        )}
       </section>
     </aside>
   );
