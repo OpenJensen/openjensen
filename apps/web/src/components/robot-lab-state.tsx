@@ -355,11 +355,18 @@ export function useRobotLab() {
       : motorDefinition;
   const availableCameras = devices.data?.cameras ?? [];
   // Two cameras of one model report the same name; number them so they can be told apart.
+  // Linux reports "USB Camera: USB Camera · /dev/video2"; people read "USB Camera".
+  // Cameras that then share a name are numbered in device order.
+  const plainCameraName = (name: string) => {
+    const base = name.replace(/\s*·\s*\/dev\/\S+$/, '').trim();
+    return base.match(/^(.+?):\s*\1$/)?.[1] ?? base;
+  };
   const cameraName = (index: number) => {
     const camera = availableCameras.find((item) => item.index === index);
     if (!camera) return `Camera ${index}`;
-    const twins = availableCameras.filter((item) => item.name === camera.name);
-    return twins.length > 1 ? `${camera.name} ${twins.indexOf(camera) + 1}` : camera.name || `Camera ${index}`;
+    const name = plainCameraName(camera.name);
+    const twins = availableCameras.filter((item) => plainCameraName(item.name) === name);
+    return !name ? `Camera ${index}` : twins.length > 1 ? `${name} ${twins.indexOf(camera) + 1}` : name;
   };
   const selectedCameraIndices = Array.from(new Set([cameraIndex, ...additionalCameraIndices])).filter((index) =>
     availableCameras.some((camera) => camera.index === index),
