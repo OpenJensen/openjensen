@@ -69,6 +69,7 @@ class Execution:
         self.scene_explorer = None
         self.scene_slots = asyncio.Semaphore(1)
         self._scene_admission_lock = asyncio.Lock()
+        self._switch_admission_lock = asyncio.Lock()
         self.slots = asyncio.Semaphore(2)  # Metadata jobs only; not a GPU admission policy.
         self._submission_locks = [asyncio.Lock() for _ in range(64)]
         self._accepting: set[asyncio.Task] = set()
@@ -129,6 +130,11 @@ class Execution:
     async def submit(
         self, project_id: str, request: SubmissionRequest, *, idempotency_key: str | None = None
     ) -> Job:
+        if isinstance(request, PolicyRequest) and request.switch_from_job_id:
+            async with self._switch_admission_lock:
+                return await self._submit_registered(
+                    project_id, request, idempotency_key=idempotency_key
+                )
         if isinstance(request, SceneRequest):
             # Scene artifact identities are global. Serialize admission across
             # client keys and projects before reserving that identity durably.
@@ -222,6 +228,14 @@ class Execution:
             await self.teaching.validate(project_id, request)
         elif isinstance(request, PolicyRequest):
             compute_target = await self.lifecycle.validate(project_id, request)
+            if request.switch_from_job_id:
+                for prior in await self.list(project_id):
+                    if (
+                        isinstance(prior.request, PolicyRequest)
+                        and prior.request.switch_from_job_id == request.switch_from_job_id
+                        and prior.status not in {"failed", "cancelled", "interrupted"}
+                    ):
+                        raise ValueError("This run already has a GPU switch; open its continuation")
         elif isinstance(request, AugmentationRequest):
             await self.augmentation.validate(project_id, request)
         elif request.recordings is not None:
@@ -762,6 +776,12 @@ class Execution:
         it decided to keep the machine, so the run only has to give them back.
         """
         try:
+            if not reattach and job.request.switch_from_job_id:
+                current = await self.get(job.id)
+                if current.status in TERMINAL:
+                    return
+                # Release the old run before waiting for its occupied compute slot.
+                await self.lifecycle.stop_switch_source(current)
             async with AsyncExitStack() as occupied:
                 if reattach:
                     for slot in held:

@@ -5883,6 +5883,18 @@
             ],
             "title": "Source Id"
           },
+          "switch_from_job_id": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Switch From Job Id"
+          },
           "timeout_seconds": {
             "default": 7200,
             "maximum": 86400.0,

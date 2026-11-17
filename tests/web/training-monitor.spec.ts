@@ -3457,3 +3457,30 @@ test('ACT can explicitly select this Mac and submit its bounded local recipe', a
     training: { batch_size: 1, gradient_accumulation_steps: 1, prediction_horizon: 32, execution_horizon: 8 },
   });
 });
+
+test('switch GPU keeps the saved checkpoint and submits one bounded continuation', async ({ page }) => {
+  const { monitor, submitted, unexpected, job, artifacts } = await workspace(
+    page,
+    'running',
+    true,
+    undefined,
+    'supported',
+    true,
+  );
+  artifacts[0].metadata.step = 20;
+  await monitor.getByRole('button', { name: 'Switch GPU', exact: true }).click();
+  await expect(page.getByText(/Steps after this checkpoint will be repeated/)).toBeVisible();
+  await page.getByLabel('Maximum time on the new GPU (minutes)').fill('90');
+  await page.getByRole('radio', { name: 'A100', exact: true }).filter({ hasText: '80 GB' }).click();
+  await page.getByRole('button', { name: 'Switch GPU and continue', exact: true }).click();
+  await expect.poll(() => submitted.length).toBe(1);
+  expect(submitted[0]).toMatchObject({
+    operation: 'policy.finetune',
+    switch_from_job_id: job.id,
+    artifact_id: 'checkpoint-artifact',
+    runtime_id: 'skypilot-gcp-A100-80GB',
+    training: null,
+    timeout_seconds: 5400,
+  });
+  expect(unexpected).toEqual([]);
+});

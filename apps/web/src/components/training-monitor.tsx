@@ -153,6 +153,7 @@ export function TrainingMonitor({
   artifacts,
   preferredCheckpointId,
   onCancel,
+  onSwitchGpu,
   cancelling,
   cancelError,
   onResume,
@@ -171,6 +172,7 @@ export function TrainingMonitor({
   artifacts: PolicyArtifact[];
   preferredCheckpointId?: string;
   onCancel: () => void;
+  onSwitchGpu?: () => void;
   cancelling: boolean;
   cancelError?: Error | null;
   onResume?: (checkpointId?: string) => void;
@@ -288,6 +290,11 @@ export function TrainingMonitor({
         </div>
         <div className="training-monitor-actions">
           <JobStatus status={status} />
+          {running && onSwitchGpu && (
+            <button type="button" className="secondary-button" disabled={cancelling} onClick={onSwitchGpu}>
+              Switch GPU
+            </button>
+          )}
           {running && (
             <button type="button" className="secondary-button" disabled={cancelling} onClick={onCancel}>
               {cancelling ? 'Cancelling…' : 'Cancel run'}
