@@ -2,7 +2,7 @@
 
 import { RobotLabControlDevices } from './robot-lab-devices';
 import { Icon } from '@/components/icon';
-import { robotApi, robotJoints } from '@/lib/robot-api';
+import { robotApi, robotJoints, type RobotStatus } from '@/lib/robot-api';
 import { Heading, Notice, RangeTable, JointControl } from './robot-lab-shared';
 import type { RobotLabState } from './robot-lab-state';
 import { Segmented } from './ui/choice';
@@ -308,6 +308,14 @@ export function RobotLabTeleoperate({ lab }: { lab: RobotLabState }) {
                 <p className="robot-lab-subtle">Update the robot companion to save and return to a rest position.</p>
               )
             )}
+            {state?.capabilities?.wrist_range && !partialControl && (
+              <WristRange
+                range={session?.wrist_range}
+                handGuiding={session?.mode === 'handguide'}
+                disabled={!canAct || !ownsSession || jogging || centering || !!recording?.episode_active}
+                perform={perform}
+              />
+            )}
             <div className="robot-lab-actions">
               <button className="danger-button robot-lab-stop" onClick={stop}>
                 <span />
@@ -326,5 +334,78 @@ export function RobotLabTeleoperate({ lab }: { lab: RobotLabState }) {
         )}
       </div>
     </>
+  );
+}
+
+const degrees = (value: number) => `${value > 0 ? '+' : ''}${Math.round(value)}°`;
+
+function WristRange({
+  range,
+  handGuiding,
+  disabled,
+  perform,
+}: {
+  range: NonNullable<RobotStatus['session']>['wrist_range'];
+  handGuiding: boolean;
+  disabled: boolean;
+  perform: (label: string, action: () => Promise<RobotStatus>) => Promise<unknown>;
+}) {
+  const recording = range?.recording;
+  const saved = range?.saved;
+  return (
+    <section aria-label="Wrist range" className="robot-lab-form">
+      <h3>Wrist range</h3>
+      {recording ? (
+        <>
+          <p className="robot-lab-subtle">
+            Turn the follower&apos;s wrist slowly to each end. Now {degrees(recording.now)} · recorded{' '}
+            {degrees(recording.low)} to {degrees(recording.high)}
+          </p>
+          <div className="robot-lab-actions">
+            <button
+              className="primary-button"
+              disabled={disabled}
+              onClick={() => void perform('Wrist range saved. The follower stays inside it.', robotApi.saveWristRange)}
+            >
+              Save wrist range
+            </button>
+            <button
+              className="secondary-button"
+              disabled={disabled}
+              onClick={() => void perform('Wrist range recording cancelled.', robotApi.cancelWristRange)}
+            >
+              Cancel
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <p className="robot-lab-subtle">
+            {saved
+              ? `The follower's wrist stays between ${degrees(saved.min)} and ${degrees(saved.max)}.`
+              : 'No limit yet: the wrist can be turned a full circle.'}
+            {!handGuiding && ' Start hand guiding to record it.'}
+          </p>
+          <div className="robot-lab-actions">
+            <button
+              className={saved ? 'secondary-button' : 'primary-button'}
+              disabled={disabled || !handGuiding}
+              onClick={() => void perform('Turn the wrist to each end, then save.', robotApi.recordWristRange)}
+            >
+              {saved ? 'Record again' : 'Record wrist range'}
+            </button>
+            {saved && (
+              <button
+                className="secondary-button"
+                disabled={disabled}
+                onClick={() => void perform('Wrist limit removed.', robotApi.clearWristRange)}
+              >
+                Remove limit
+              </button>
+            )}
+          </div>
+        </>
+      )}
+    </section>
   );
 }
