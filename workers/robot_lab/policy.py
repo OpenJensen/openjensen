@@ -27,6 +27,7 @@ from policy_contract import (
     validate_smolvla_assets,
     validate_tokenizer_artifact,
 )
+from release_assist import ReleaseAssist
 
 UNITS = ["degrees"] * 5 + ["percent"]
 MAX_RUN_SECONDS = 600
@@ -264,6 +265,7 @@ class PolicyRunner:
         self.last_health = 0.0
         self.commanded = {}
         self.steps = 0
+        self.release = ReleaseAssist()
         self.inference_ms = None
         self.started = None
         self.generation = None
@@ -346,6 +348,8 @@ class PolicyRunner:
                 "error": self.error,
                 "fps": self.model["fps"] if self.model else None,
                 "steps": self.steps,
+                "releases": self.release.releases,
+                "holding": self.release.holding,
                 "preflight": preflight,
                 "preview": self.preview,
                 "policy_type": self.model["policy_type"] if self.model else None,
@@ -843,6 +847,7 @@ class PolicyRunner:
             }
             self.last_apply = time.monotonic()
             self.steps = 0
+            self.release.reset()
             self.generation = self.lab.generation
             self.task = task
             self.planning_pause = pause
@@ -932,6 +937,9 @@ class PolicyRunner:
                 target = self.predicted[j]
                 if not math.isfinite(target):
                     raise HardwareError(f"Policy predicted a non-finite target for {j}")
+                if j == "gripper":
+                    # A command to open past an object the jaws are holding opens fully.
+                    target = self.release.gripper(target, measured.get("gripper"), now)
                 # The policy is followed at the speed it was trained on, as LeRobot does:
                 # its target goes straight to the motors. A target past the calibrated
                 # range is held at the range's edge, as the motors' own limits would.
