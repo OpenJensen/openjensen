@@ -591,3 +591,14 @@ def test_videos_that_are_slow_to_read_are_reported_before_training(tmp_path):
     )
     value = create_snapshot(tmp_path, quick, tmp_path / "snapshots")
     assert not any("slow" in warning for warning in value["warnings"])
+
+
+def test_compacted_recording_snapshot_keeps_profiles_and_receipt(dataset, tmp_path):
+    extra = dataset / "openjensen"
+    extra.mkdir()
+    for name in ("calibration-profiles", "compaction"):
+        (extra / (name + ".json")).write_text(json.dumps({"format": name, "version": 1}))
+    value = make(dataset, tmp_path)
+    root = resolve_snapshot(tmp_path / "snapshots", value)
+    for source in extra.iterdir():
+        assert (root / "openjensen" / source.name).read_bytes() == source.read_bytes()
