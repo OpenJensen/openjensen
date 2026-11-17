@@ -32,6 +32,7 @@ SOURCE_MODULES = (
     "policy_contract.py",
     "policy_install.py",
     "policy_inference.py",
+    "release_assist.py",
     "hardware.py",
     "lerobot_control.py",
     "motion.py",
