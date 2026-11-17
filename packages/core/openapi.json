@@ -9478,8 +9478,11 @@
             "title": "Camera Driver Message"
           },
           "channel": {
-            "const": "main",
-            "default": "main",
+            "default": "release",
+            "enum": [
+              "release",
+              "main"
+            ],
             "title": "Channel",
             "type": "string"
           },

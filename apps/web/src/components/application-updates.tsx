@@ -200,34 +200,32 @@ export function ApplicationUpdates() {
             <dd>{value?.installed.host}</dd>
           </div>
           <div>
-            <dt>Upstream main</dt>
-            <dd>
-              {value?.upstream_commit ? (
-                <a
-                  href={`https://github.com/OpenJensen/openjensen/commit/${value.upstream_commit}`}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  {short(value.upstream_commit)}
-                </a>
-              ) : (
-                'Not checked'
-              )}
-            </dd>
-          </div>
-          <div>
-            <dt>Published release</dt>
+            <dt>Latest release</dt>
             <dd>
               {value?.latest_release ? (
-                <a
-                  href={`https://github.com/OpenJensen/openjensen/releases/tag/${value.latest_release}`}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  {value.latest_release}
-                </a>
+                <>
+                  <a
+                    href={`https://github.com/OpenJensen/openjensen/releases/tag/${value.latest_release}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {value.latest_release}
+                  </a>
+                  {value.upstream_commit && (
+                    <>
+                      {' · '}
+                      <a
+                        href={`https://github.com/OpenJensen/openjensen/commit/${value.upstream_commit}`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        {short(value.upstream_commit)}
+                      </a>
+                    </>
+                  )}
+                </>
               ) : (
-                'Unknown'
+                'Not checked'
               )}
             </dd>
           </div>
@@ -260,7 +258,7 @@ export function ApplicationUpdates() {
             : operation && (busy || ['failed', 'rolled_back', 'recovery_required'].includes(operation.phase))
               ? operation.message
               : check.isFetching || refreshing
-                ? 'Checking upstream main…'
+                ? 'Checking for a new release…'
                 : value?.message}
         </p>
         {value?.camera_driver_message && <p role="status">{value.camera_driver_message}</p>}
