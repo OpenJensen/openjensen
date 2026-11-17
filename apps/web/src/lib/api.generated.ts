@@ -7199,6 +7199,8 @@ export interface components {
             message: string;
             /** Phase */
             phase: string;
+            /** Progress */
+            progress?: number | null;
             /** Target Commit */
             target_commit: string;
         };
