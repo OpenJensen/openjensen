@@ -2920,8 +2920,8 @@ class RobotLab:
             if self.agent.expired():
                 reason = "AI operator or execution lease expired; torque disabled"
         elif mode == "policy":
-            if self.policy.expired():
-                reason = "Policy operator heartbeat or run duration expired; torque disabled"
+            if why := self.policy.expiry():
+                reason = f"{why}; torque disabled"
         elif mode not in {"idle", "calibration"} and heartbeat_age > (
             10 if mode in {"setup", "verification"} else 2
         ):
