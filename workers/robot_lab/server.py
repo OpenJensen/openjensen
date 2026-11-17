@@ -611,6 +611,26 @@ class RobotLab:
                 )
             return self.status()
 
+    def calibration_bundle(self):
+        """Read all saved profiles without contacting or changing the motors."""
+        with self.lock:
+            profiles = [
+                {
+                    "key": entry["key"],
+                    "saved_at": entry["saved_at"],
+                    "document": {
+                        "format": "openjensen.so101.calibration",
+                        "version": 1,
+                        "robot_id": entry["robot_id"],
+                        "role": role,
+                        "calibration": entry["calibration"],
+                    },
+                }
+                for role in ("follower", "leader")
+                for entry in self.calibration_profiles.entries(self.calibration_root, role)
+            ]
+            return {"format": "openjensen.calibration.bundle", "version": 1, "profiles": profiles}
+
     def calibration_export(self, robot_id, role):
         with self.lock:
             info = self.profile_info(robot_id, role)
@@ -2873,6 +2893,10 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/v1/source":
                 # Lets an application tell whether this service runs the code it ships.
                 return self._send(200, {"files": SOURCE_FILES})
+            if path == "/v1/calibration/bundle":
+                if query:
+                    raise RequestError("Calibration bundle does not accept query fields")
+                return self._send(200, lab.calibration_bundle())
             if path == "/v1/calibration/profiles":
                 if (
                     not {"robot_id", "role"} <= set(query)

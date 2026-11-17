@@ -44,8 +44,8 @@ def inventory(root):
         if not path.is_file():
             raise ValueError("Only regular dataset files are supported")
         total += path.stat().st_size
-        if total > MAX_BYTES or len(files) >= MAX_FILES:
-            raise ValueError("Dataset exceeds 2 GiB or 4096 files")
+        if len(files) >= MAX_FILES:
+            raise ValueError("Dataset exceeds 4096 files")
         digest = hashlib.sha256()
         with path.open("rb") as handle:
             for chunk in iter(lambda: handle.read(1024 * 1024), b""):
@@ -1188,16 +1188,29 @@ def demo(root, episodes=2):
 
 
 def main():
+    request = json.loads(sys.stdin.buffer.read(1024**2))
     if sys.platform != "win32":
         import resource
 
         resource.setrlimit(resource.RLIMIT_NOFILE, (128, 128))
-        resource.setrlimit(resource.RLIMIT_CPU, (300, 300))
-        resource.setrlimit(resource.RLIMIT_FSIZE, (MAX_BYTES, MAX_BYTES))
+        seconds = 1800 if request["operation"] == "compact" else 300
+        resource.setrlimit(resource.RLIMIT_CPU, (seconds, seconds))
+        if request["operation"] != "compact":
+            resource.setrlimit(resource.RLIMIT_FSIZE, (MAX_BYTES, MAX_BYTES))
         if sys.platform == "linux":
             resource.setrlimit(resource.RLIMIT_AS, (3 * 1024**3, 3 * 1024**3))
-    request = json.loads(sys.stdin.buffer.read(1024**2))
     op = request["operation"]
+    if op == "compact":
+        import runpy
+
+        module = runpy.run_path(str(Path(__file__).with_name("compact.py")))
+        root, output = Path(request["root"]), Path(request["output"])
+        inventory(root)
+        receipt = module["compact"](
+            root, output, progress=output.parent / "compaction-progress.json"
+        )
+        print(json.dumps({"detection": detect(output), "compaction": receipt}, allow_nan=False))
+        return
     if op == "merge":
         print(
             json.dumps(

@@ -513,7 +513,7 @@ export function LocalDatasetImport({
       <div className="local-upload-zone">
         <Icon name="folder" size={29} />
         <strong>Choose files from your computer</strong>
-        <p>Folder, ZIP or HDF5 · up to 2 GB</p>
+        <p>Folder, ZIP or HDF5 · ZIP contents up to 2 GiB</p>
         <div className="local-upload-buttons">
           <button
             type="button"
@@ -674,7 +674,13 @@ export function LocalDatasetImport({
   );
 }
 
-export function DatasetLabeling({ entry }: { entry: LibraryDataset }) {
+export function DatasetLabeling({
+  entry,
+  onOpen,
+}: {
+  entry: LibraryDataset;
+  onOpen?: (entry: LibraryDataset) => void;
+}) {
   const client = useQueryClient();
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
@@ -687,6 +693,13 @@ export function DatasetLabeling({ entry }: { entry: LibraryDataset }) {
     refetchInterval: (query) => (query.state.data?.status === 'converting' ? 1000 : false),
   });
   const current = saved.data ?? entry;
+  const compact = useMutation({
+    mutationFn: () => datasetLibrary.compact(current.id),
+    onSuccess: (value) => {
+      void client.invalidateQueries({ queryKey: ['datasets'] });
+      onOpen?.(value);
+    },
+  });
   const samples = useQuery({
     queryKey: ['dataset-samples', entry.id],
     queryFn: ({ signal }) => datasetLibrary.samples(entry.id, signal),
@@ -796,6 +809,31 @@ export function DatasetLabeling({ entry }: { entry: LibraryDataset }) {
           </a>
         )}
       </div>
+      {current.status === 'ready' && current.can_compact && (
+        <div className="robot-lab-actions">
+          <button
+            className="secondary-button"
+            disabled={dirty || save.isPending || compact.isPending}
+            onClick={() => compact.mutate()}
+          >
+            {compact.isPending ? 'Starting compaction…' : 'Compact dataset'}
+          </button>
+          <span className="field-help">
+            Save a smaller video copy. Keep every frame, camera, robot sample and the original.
+          </span>
+        </div>
+      )}
+      {compact.error && (
+        <p className="error-notice" role="alert">
+          {compact.error.message}
+        </p>
+      )}
+      {current.compaction && (
+        <p role="status">
+          Compacted: {(current.compaction.source_bytes / 1024 ** 2).toFixed(1)} MiB →{' '}
+          {(current.compaction.output_bytes / 1024 ** 2).toFixed(1)} MiB. Original preserved.
+        </p>
+      )}
       {current.status === 'ready' && (
         <PublishToHuggingFace
           projectId={entry.project_id}
@@ -804,7 +842,13 @@ export function DatasetLabeling({ entry }: { entry: LibraryDataset }) {
           blocked={dirty || save.isPending ? 'Save your labels before publishing.' : undefined}
         />
       )}
-      {current.status === 'converting' && <p role="status">Preparing camera views…</p>}
+      {current.status === 'converting' && (
+        <p role="status">
+          {current.compacted_from
+            ? `Compacting dataset${current.compaction_progress ? `: ${current.compaction_progress.completed} of ${current.compaction_progress.total} data files` : '…'}. You can leave this page.`
+            : 'Preparing camera views…'}
+        </p>
+      )}
       {current.error && (
         <p className="error-notice" role="alert">
           {current.error}

@@ -582,12 +582,13 @@ export const robotApi = {
 export async function importRobotDataset(
   projectId: string,
   datasetId: string,
+  compact = false,
 ): Promise<{ id: string; project_id: string }> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 300_000);
   try {
     const response = await fetch(
-      `${apiOrigin}/api/v1/projects/${encodeURIComponent(projectId)}/robot-lab/datasets/${encodeURIComponent(datasetId)}/import`,
+      `${apiOrigin}/api/v1/projects/${encodeURIComponent(projectId)}/robot-lab/datasets/${encodeURIComponent(datasetId)}/import${compact ? '?compact=true' : ''}`,
       {
         method: 'POST',
         cache: 'no-store',

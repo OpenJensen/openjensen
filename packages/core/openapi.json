@@ -12209,6 +12209,46 @@
         ]
       }
     },
+    "/api/v1/datasets/{ident}/compact": {
+      "post": {
+        "operationId": "compact_dataset_api_v1_datasets__ident__compact_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ident",
+            "required": true,
+            "schema": {
+              "title": "Ident",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Compact Dataset",
+        "tags": [
+          "Dataset library"
+        ]
+      }
+    },
     "/api/v1/datasets/{ident}/convert": {
       "post": {
         "operationId": "convert_dataset_api_v1_datasets__ident__convert_post",
@@ -15089,6 +15129,16 @@
             "schema": {
               "title": "Dataset Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "compact",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Compact",
+              "type": "boolean"
             }
           }
         ],

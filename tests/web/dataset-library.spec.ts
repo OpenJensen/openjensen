@@ -1189,3 +1189,50 @@ test('recorded local frames play and seek in inspection and training without Hub
   expect(unexpected).toEqual([]);
   await page.screenshot({ path: testInfo.outputPath('local-recorded-playback.png'), fullPage: true });
 });
+
+test('compact an embedded recording into a separate video copy', async ({ page }, testInfo) => {
+  const project = await ownProject(page, 'Compact recording');
+  const folder = testInfo.outputPath('embedded-recording');
+  const generated = spawnSync(
+    resolve('.venv/bin/python'),
+    [
+      '-c',
+      'import sys; from pathlib import Path; sys.path.insert(0,"tests"); from test_dataset_compaction import embedded_recording; embedded_recording(Path(sys.argv[1]))',
+      folder,
+    ],
+    { encoding: 'utf8' },
+  );
+  expect(generated.status, generated.stderr).toBe(0);
+  const started = await page.request.post('/api/v1/projects/' + project.id + '/dataset-uploads', {
+    data: { name: 'Embedded recording' },
+  });
+  expect(started.status()).toBe(201);
+  const original = await started.json();
+  async function upload(directory: string, prefix = '') {
+    for (const item of await readdir(directory, { withFileTypes: true })) {
+      const name = prefix + item.name;
+      const path = resolve(directory, item.name);
+      if (item.isDirectory()) await upload(path, name + '/');
+      else {
+        const response = await page.request.put(
+          '/api/v1/dataset-uploads/' + original.id + '/file?path=' + encodeURIComponent(name),
+          { data: await readFile(path), headers: { 'Content-Type': 'application/octet-stream' } },
+        );
+        expect(response.ok()).toBeTruthy();
+      }
+    }
+  }
+  await upload(folder);
+  expect((await page.request.post('/api/v1/dataset-uploads/' + original.id + '/finish')).ok()).toBeTruthy();
+  await page.reload();
+  await page.getByRole('button', { name: 'Open dataset Embedded recording', exact: true }).click();
+  await page.getByRole('button', { name: 'Compact dataset', exact: true }).click();
+  const labels = page.getByRole('region', { name: 'Dataset labeling' });
+  await expect(labels.getByRole('heading', { name: 'Embedded recording compact', exact: true })).toBeVisible();
+  await expect(labels.getByText(/Compacted:.*Original preserved/)).toBeVisible({ timeout: 30000 });
+  await expect(labels.getByRole('link', { name: 'Export dataset', exact: true })).toBeVisible();
+  await expect(labels.getByRole('button', { name: 'Compact dataset', exact: true })).toHaveCount(0);
+  const preserved = await (await page.request.get('/api/v1/datasets/' + original.id)).json();
+  expect(preserved.can_compact).toBe(true);
+  expect(preserved.status).toBe('ready');
+});

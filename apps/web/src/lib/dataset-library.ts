@@ -34,6 +34,10 @@ export type LibraryDataset = {
   uploaded_files?: number;
   total_bytes?: number;
   can_discard?: boolean;
+  can_compact?: boolean;
+  compacted_from?: string;
+  compaction?: { source_bytes: number; output_bytes: number; frames: number; episodes: number };
+  compaction_progress?: { completed: number; total: number; frames: number };
   /** The saved datasets this one was combined from. */
   combined_from?: { id: string; name: string }[];
 };
@@ -42,9 +46,9 @@ export type LibraryDataset = {
  * once it has been prepared, or Needs attention. Pages used to call the prepared state
  * "Training copy saved", "Training copy ready", "snapshot" and "inspected" in turn.
  */
-export function datasetStateLabel(entry: Pick<LibraryDataset, 'status' | 'training_copy'>): string {
+export function datasetStateLabel(entry: Pick<LibraryDataset, 'status' | 'training_copy' | 'compacted_from'>): string {
   if (entry.status === 'uploading') return 'Upload unfinished';
-  if (entry.status === 'converting') return 'Converting…';
+  if (entry.status === 'converting') return entry.compacted_from ? 'Compacting…' : 'Converting…';
   if (entry.status === 'failed' || entry.status === 'unavailable') return 'Needs attention';
   if (entry.training_copy) return 'Ready to train';
   return entry.status === 'ready' ? 'Imported' : 'Needs converting';
@@ -133,6 +137,8 @@ export const datasetLibrary = {
     ),
   get: (id: string, signal?: AbortSignal) =>
     datasetRequest<LibraryDataset>(`/datasets/${encodeURIComponent(id)}`, { signal }),
+  compact: (id: string) =>
+    datasetRequest<LibraryDataset>(`/datasets/${encodeURIComponent(id)}/compact`, { method: 'POST' }),
   samples: (id: string, signal?: AbortSignal) =>
     datasetRequest<DatasetSample[]>(`/datasets/${encodeURIComponent(id)}/samples`, { signal }),
   convert: (
@@ -168,8 +174,7 @@ export const datasetLibrary = {
     onStarted?: (entry: LibraryDataset) => void,
   ) {
     if (!files.length) throw new Error('Choose dataset files first.');
-    if (files.length > 4096 || files.reduce((sum, file) => sum + file.size, 0) > 2 * 1024 ** 3)
-      throw new Error('Choose up to 4096 files and 2 GB.');
+    if (files.length > 4096) throw new Error('Choose up to 4096 files.');
     let uploadId: string | null = null;
     try {
       const folder = (files[0].webkitRelativePath ?? '').split('/')[0];

@@ -51,6 +51,21 @@ class CalibrationTransferTests(unittest.TestCase):
             **changes,
         }
 
+    def test_bundle_includes_saved_leader_follower_and_history_without_hardware(self):
+        self.lab.calibration_profiles.save("historic", "follower", CALIBRATION, "saved")
+        leader = self.lab.calibration_path("leader", "leader")
+        leader.parent.mkdir(parents=True, exist_ok=True)
+        leader.write_text(json.dumps(CALIBRATION))
+        bundle = self.lab.calibration_bundle()
+        self.assertEqual(bundle["format"], "openjensen.calibration.bundle")
+        documents = [entry["document"] for entry in bundle["profiles"]]
+        self.assertEqual(
+            {item["robot_id"] for item in documents}, {"original", "historic", "leader"}
+        )
+        self.assertTrue(all(item["calibration"] == CALIBRATION for item in documents))
+        self.assertNotIn(str(self.root), json.dumps(bundle))
+        self.assertEqual(self.buses, [])
+
     def test_export_round_trips_under_another_profile_name_without_hardware(self):
         exported = self.lab.calibration_export("original", "follower")
         self.assertEqual(exported["calibration"], CALIBRATION)

@@ -528,14 +528,19 @@ async def agent_execution(command_id: str, request: Request):
 
 
 @router.post("/projects/{project_id}/robot-lab/datasets/{dataset_id}/import", status_code=201)
-async def import_recording(project_id: str, dataset_id: str, request: Request):
+async def import_recording(
+    project_id: str, dataset_id: str, request: Request, compact: bool = False
+):
     if await request.app.state.projects.get(project_id) is None:
         raise HTTPException(404, "Project not found")
     try:
         safe_id(dataset_id)
-        return await request.app.state.robot_lab.import_dataset(
-            project_id, dataset_id, request.app.state.dataset_library
+        dataset = await request.app.state.robot_lab.import_dataset(
+            project_id, dataset_id, request.app.state.dataset_library, include_profiles=compact
         )
+        if compact:
+            return await request.app.state.dataset_library.start_compaction(dataset["id"])
+        return dataset
     except RobotLabError as exc:
         raise HTTPException(exc.status, str(exc)) from None
 
