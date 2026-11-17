@@ -12,7 +12,7 @@ A version number is not an identity. Release automation writes the next patch nu
 - Put the build label of every machine involved in each bug report, verification note and handoff. "Works on 0.1.31" is not evidence.
 - Never edit a version by hand. Ten files carry it and `.github/scripts/version_files.py` owns all of them; `python3 .github/scripts/version_files.py check` confirms they agree.
 - Start every task from current main: `git fetch origin`, then branch from `origin/main`. Do not branch from another unmerged branch. If the work needs an open pull request, get that one merged first: a stack of unmerged branches leaves `main` behind and puts every device on a different build.
-- Robots and shared machines run `main`, installed through **Settings → Updates** or a checkout of `main`. If a branch has to be tried on a device, record its build label in the task record and return the device to `main` when the trial ends.
+- Robots and shared machines run the latest release of `main`, installed through **Settings → Updates** (which offers published releases only) or a checkout of `main`. If a branch has to be tried on a device, record its build label in the task record and return the device to `main` when the trial ends.
 - One checkout per task, created and retired through the workspace tools. Do not copy the repository into sibling folders or link one checkout's `.venv` or `node_modules` into another: the linked checkout silently runs the other one's dependencies.
 
 ## Checks before committing
