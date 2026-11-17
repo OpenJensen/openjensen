@@ -1225,7 +1225,10 @@ test('compact an embedded recording into a separate video copy', async ({ page }
   await upload(folder);
   expect((await page.request.post('/api/v1/dataset-uploads/' + original.id + '/finish')).ok()).toBeTruthy();
   await page.reload();
-  await page.getByRole('button', { name: 'Open dataset Embedded recording', exact: true }).click();
+  const originalCard = page.getByRole('button', { name: 'Open dataset Embedded recording', exact: true });
+  await expect(originalCard.getByRole('img')).toBeVisible();
+  await expect(originalCard.getByText('Preview unavailable', { exact: true })).toHaveCount(0);
+  await originalCard.click();
   await page.getByRole('button', { name: 'Compact dataset', exact: true }).click();
   const labels = page.getByRole('region', { name: 'Dataset labeling' });
   await expect(labels.getByRole('heading', { name: 'Embedded recording compact', exact: true })).toBeVisible();
@@ -1235,4 +1238,15 @@ test('compact an embedded recording into a separate video copy', async ({ page }
   const preserved = await (await page.request.get('/api/v1/datasets/' + original.id)).json();
   expect(preserved.can_compact).toBe(true);
   expect(preserved.status).toBe('ready');
+  await page.getByRole('button', { name: '← Back to datasets', exact: true }).click();
+  const compactCard = page.getByRole('button', { name: 'Open dataset Embedded recording compact', exact: true });
+  await expect(compactCard.getByRole('img')).toBeVisible();
+  await expect(compactCard.getByText('Preview unavailable', { exact: true })).toHaveCount(0);
+  await expect(compactCard.getByRole('heading', { name: 'Embedded recording compact', exact: true })).toBeVisible();
+  const image = await compactCard.getByRole('img').boundingBox();
+  const title = await compactCard.getByRole('heading').boundingBox();
+  expect(image).not.toBeNull();
+  expect(title).not.toBeNull();
+  expect(image!.y + image!.height).toBeLessThanOrEqual(title!.y);
+  await page.screenshot({ path: testInfo.outputPath('recording-preview-cards.png'), fullPage: true });
 });

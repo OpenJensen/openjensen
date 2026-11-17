@@ -127,8 +127,7 @@ async def compact_dataset(ident: str, library: LibraryDep):
 
 @router.get("/datasets/{ident}/samples")
 async def samples(ident: str, library: LibraryDep):
-    library.get(ident)
-    return library.samples(ident)
+    return await library.ensure_samples(ident)
 
 
 @router.get("/datasets/{ident}/preview/{name}")

@@ -171,11 +171,14 @@ export function DatasetLibrary({
 }
 
 function DatasetCover({ entry, active }: { entry: LibraryDataset; active: boolean }) {
-  const local = !entry.id.startsWith('inspection:') && entry.status === 'ready';
+  const sampleId = entry.status === 'converting' && entry.compacted_from ? entry.compacted_from : entry.id;
+  const local =
+    !sampleId.startsWith('inspection:') &&
+    (entry.status === 'ready' || (entry.status === 'converting' && !!entry.compacted_from));
   const hub = entry.source === 'huggingface' && !!entry.job_id && entry.status === 'ready';
   const samples = useQuery({
-    queryKey: ['dataset-samples', entry.id],
-    queryFn: ({ signal }) => datasetLibrary.samples(entry.id, signal),
+    queryKey: ['dataset-samples', sampleId],
+    queryFn: ({ signal }) => datasetLibrary.samples(sampleId, signal),
     enabled: active && local,
     retry: false,
   });
@@ -259,7 +262,7 @@ function DatasetCover({ entry, active }: { entry: LibraryDataset; active: boolea
     >
       {sample && !failed && (
         <img
-          src={sampleImage(entry.id, sample.path)}
+          src={sampleImage(sampleId, sample.path)}
           alt={`${entry.name} · ${sample.camera}`}
           onLoad={() => setLoaded(true)}
           onError={() => setFailed(true)}
@@ -294,9 +297,11 @@ function DatasetCover({ entry, active }: { entry: LibraryDataset; active: boolea
               ? 'Upload unfinished'
               : entry.status === 'unavailable'
                 ? 'Dataset unavailable'
-                : loading
-                  ? 'Loading preview…'
-                  : 'Preview unavailable'}
+                : entry.status === 'converting' && !local
+                  ? 'Preparing preview…'
+                  : loading
+                    ? 'Loading preview…'
+                    : 'Preview unavailable'}
           </small>
         </div>
       ) : null}
@@ -323,7 +328,7 @@ function DatasetCard({ entry, onOpen, active }: { entry: LibraryDataset; onOpen:
     : stats?.cameras?.length;
   return (
     <button type="button" className="dataset-library-card" aria-label={`Open dataset ${entry.name}`} onClick={onOpen}>
-      <DatasetCover entry={entry} active={active} />
+      <DatasetCover key={`${entry.id}:${entry.status}`} entry={entry} active={active} />
       <div className="dataset-library-copy">
         <h3>{entry.name}</h3>
         <p>{formatName(entry.profile?.format ?? stats?.format)}</p>

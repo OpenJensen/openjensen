@@ -115,6 +115,7 @@ class DatasetLibrary:
         self.root = (data_dir / "dataset-library").resolve()
         self.root.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.tasks = {}
+        self.preview_tasks = {}
         self.lock = asyncio.Lock()
         self.worker_limit = asyncio.Semaphore(1)
         for value in self.records():
@@ -929,6 +930,51 @@ class DatasetLibrary:
             raise LibraryError("Convert the dataset before inspecting or training")
         return contained(self.directory(ident), value["normalized"])
 
+    async def ensure_samples(self, ident):
+        """Repair missing thumbnail caches for saved recordings when they are viewed."""
+        value = self.get(ident)
+        try:
+            cached = self.samples(ident)
+            if cached and all(
+                contained(self.directory(ident) / "previews", sample["path"]).is_file()
+                for sample in cached
+            ):
+                return cached
+        except OSError, ValueError, KeyError, TypeError:
+            pass
+        if (
+            value["status"] != "ready"
+            or (value.get("detection") or {}).get("format") != "lerobot_v3"
+            or not (value.get("detection") or {}).get("cameras")
+        ):
+            return []
+        if self._closing:
+            raise LibraryError("Dataset previews are stopping", 503)
+        if ident not in self.preview_tasks:
+
+            async def render():
+                await self.worker(
+                    {
+                        "operation": "preview",
+                        "root": str(self.resolve(ident, value["project_id"])),
+                        "output": str(self.directory(ident) / "previews"),
+                        "cover_only": True,
+                    },
+                    20,
+                )
+                return self.samples(ident)
+
+            task = asyncio.create_task(render())
+            self.preview_tasks[ident] = task
+
+            def finished(task):
+                self.preview_tasks.pop(ident, None)
+                if not task.cancelled():
+                    task.exception()
+
+            task.add_done_callback(finished)
+        return await asyncio.shield(self.preview_tasks[ident])
+
     def samples(self, ident):
         path = self.directory(ident) / "samples.json"
         return json.loads(path.read_text()) if path.is_file() else []
@@ -1084,6 +1130,10 @@ class DatasetLibrary:
 
     async def close(self):
         self._closing = True
+        previews = list(self.preview_tasks.values())
+        for task in previews:
+            task.cancel()
+        await asyncio.gather(*previews, return_exceptions=True)
         owned = dict(self.tasks)
         for task in owned.values():
             task.cancel()

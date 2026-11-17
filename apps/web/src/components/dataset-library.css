@@ -37,6 +37,7 @@
 }
 .dataset-library-cover {
   height: 200px;
+  overflow: hidden;
   position: relative;
   display: grid;
   place-items: center;
@@ -44,6 +45,8 @@
   color: var(--muted);
 }
 .dataset-library-cover img {
+  position: absolute;
+  inset: 0;
   height: 100%;
   width: 100%;
   object-fit: cover;
