@@ -156,6 +156,7 @@ export type RobotStatus = {
     device_removal?: boolean;
     partial_control?: boolean;
     rest_position?: boolean;
+    wrist_range?: boolean;
     move_to_middle?: boolean;
     middle_tolerance?: boolean;
     assembled_setup?: boolean;
@@ -189,6 +190,10 @@ export type RobotStatus = {
       progress: number;
       targets: JointValues;
     };
+    wrist_range?: {
+      saved: { min: number; max: number } | null;
+      recording: { now: number; low: number; high: number; span: number } | null;
+    };
     centering?: { active: boolean; progress: number; tolerance?: number };
     watchdog_seconds: number | null;
     error: string | null;
@@ -220,6 +225,9 @@ export type RobotStatus = {
     maxes: JointValues;
     offsets: JointValues;
     path: string | null;
+    // A follower's wrist roll ends, followed through the range sweep; saved as its safe range.
+    wrist_sweep?: { now: number; low: number; high: number; span: number } | null;
+    wrist_range?: { min: number; max: number } | null;
   };
   recording?: {
     active: boolean;
@@ -526,6 +534,10 @@ export const robotApi = {
   }) => request<RobotStatus>('/control/start', { ...input, confirm: 'ENABLE MOTION' }, { timeoutMs: 45_000 }),
   saveRestPosition: () => request<RobotStatus>('/control/rest/save', { confirm: 'SAVE REST POSITION' }),
   returnToRest: () => request<RobotStatus>('/control/rest/return', { confirm: 'RETURN TO REST' }),
+  recordWristRange: () => request<RobotStatus>('/control/wrist-range/start', { confirm: 'RECORD WRIST RANGE' }),
+  saveWristRange: () => request<RobotStatus>('/control/wrist-range/save', { confirm: 'SAVE WRIST RANGE' }),
+  cancelWristRange: () => request<RobotStatus>('/control/wrist-range/cancel', { confirm: 'CANCEL WRIST RANGE' }),
+  clearWristRange: () => request<RobotStatus>('/control/wrist-range/clear', { confirm: 'CLEAR WRIST RANGE' }),
   heartbeat: (expectedGeneration?: number) =>
     request<RobotStatus>(
       '/control/heartbeat',
