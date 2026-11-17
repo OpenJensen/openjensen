@@ -30,6 +30,7 @@ function initialStatus(calibrated = false): any {
     },
     capabilities: {
       rest_position: true,
+      wrist_range: true,
       lerobot_position_control: true,
       large_joint_steps: true,
       arm_readiness: true,
@@ -596,6 +597,7 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin', 
             ]),
           ),
           torque_enabled: body.mode !== 'handguide',
+          wrist_range: { saved: state.wristSaved ?? null, recording: null },
           centering: {
             active: !!body.move_to_middle && state.middleInProgress,
             progress: 0.25,
@@ -604,6 +606,16 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin', 
         };
       } else if (action === '/control/rest/save') {
         state.status.session.rest_position = { saved: true, phase: 'idle', progress: 0, targets: values(0) };
+      } else if (action === '/control/wrist-range/start') {
+        state.status.session.wrist_range.recording = { now: 0, low: 0, high: 0, span: 0 };
+      } else if (action === '/control/wrist-range/save') {
+        state.wristSaved = { min: -117, max: 87 };
+        state.status.session.wrist_range = { saved: state.wristSaved, recording: null };
+      } else if (action === '/control/wrist-range/cancel') {
+        state.status.session.wrist_range.recording = null;
+      } else if (action === '/control/wrist-range/clear') {
+        state.wristSaved = null;
+        state.status.session.wrist_range.saved = null;
       } else if (action === '/control/rest/return') {
         state.status.session.mode = 'manual';
         state.status.session.rest_position.phase = 'returning';
@@ -1096,6 +1108,14 @@ test('calibration center and range save are explicit and use the official compan
   await expect(page.getByRole('group', { name: 'Measured encoder values', exact: true })).toContainText('2048');
   await page.getByRole('button', { name: 'Record middle position', exact: true }).click();
   await expect(page.getByRole('columnheader', { name: 'Range', exact: true })).toBeVisible();
+  // A follower's wrist ends are followed through the sweep and become its safe range.
+  state.status.calibration = {
+    ...state.status.calibration,
+    role: 'follower',
+    wrist_sweep: { now: 10, low: -120, high: 90, span: 210 },
+  };
+  await expect(page.getByText(/Turn the wrist to both of its ends too/)).toBeVisible();
+  await expect(page.getByText(/wrist -120° to \+90°/)).toBeVisible();
   await page.getByRole('button', { name: 'Save calibration', exact: true }).click();
   await expect(page.getByLabel('Selected arm calibration')).toContainText('my-so101 · follower');
   expect(writes(state, '/calibration/start')[0].body).toEqual({
@@ -1298,6 +1318,33 @@ test('hand guiding is an explicit torque-off session and leader mode needs a sec
   await expect(page.locator('.robot-lab').getByRole('alert')).toContainText(state.stopError);
   await expect(page.getByText('Arm stopped.', { exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Start hand guiding', exact: true })).toBeVisible();
+});
+
+test('the wrist range is recorded by hand while hand guiding and then shown as the limit', async ({ page }) => {
+  const state = await fixture(page, true);
+  await openTab(page, 'Teleoperate');
+  await page.getByRole('button', { name: 'Hand guiding', exact: false }).click();
+  await page.getByRole('checkbox', { name: /Arm supported/ }).check();
+  await page.getByRole('button', { name: 'Start hand guiding', exact: true }).click();
+  const section = page.getByRole('region', { name: 'Wrist range' });
+  await expect(section).toContainText('No limit yet: the wrist can be turned a full circle.');
+  await section.getByRole('button', { name: 'Record wrist range', exact: true }).click();
+  expect(writes(state, '/control/wrist-range/start')[0].body).toEqual({ confirm: 'RECORD WRIST RANGE' });
+  state.status.session.wrist_range.recording = { now: 40, low: -120, high: 90, span: 210 };
+  await expect(section).toContainText('Now +40° · recorded -120° to +90°');
+  await section.getByRole('button', { name: 'Save wrist range', exact: true }).click();
+  expect(writes(state, '/control/wrist-range/save')[0].body).toEqual({ confirm: 'SAVE WRIST RANGE' });
+  await expect(section).toContainText("The follower's wrist stays between -117° and +87°.");
+  await section.getByRole('button', { name: 'Remove limit', exact: true }).click();
+  expect(writes(state, '/control/wrist-range/clear')[0].body).toEqual({ confirm: 'CLEAR WRIST RANGE' });
+  await expect(section).toContainText('No limit yet');
+  // Recording needs the motors off: outside hand guiding the button explains why it waits.
+  await page.getByRole('button', { name: 'Stop arm and disable torque', exact: true }).click();
+  await page.getByRole('button', { name: 'Joint control', exact: false }).click();
+  await page.getByRole('checkbox', { name: /Arm secured; workspace clear/ }).check();
+  await page.getByRole('button', { name: /Enable & move to recorded middle/ }).click();
+  await expect(section).toContainText('Start hand guiding to record it.');
+  await expect(section.getByRole('button', { name: 'Record wrist range', exact: true })).toBeDisabled();
 });
 
 test('leader selection renders the leader handle and trigger and switching roles replaces the CAD', async ({

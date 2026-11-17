@@ -21,6 +21,7 @@ from pprint import pformat
 from types import SimpleNamespace
 
 from hardware import IDS, HardwareError, denormalized, normalized
+from wrist_range import clamp
 
 RobotAction = dict[str, float]
 
@@ -146,8 +147,10 @@ class MotorBridge:
                 self.write("Maximum_Acceleration", motor, maximum_acceleration)
             self.write("Acceleration", motor, acceleration)
 
-    def __init__(self, bus, calibration, is_current):
+    def __init__(self, bus, calibration, is_current, safe_ranges=None):
         self.bus = bus
+        # {joint: (low_raw, high_raw)}
+        self.safe_ranges = dict(safe_ranges or {})
         self.calibration = calibration
         self.motors = dict.fromkeys(calibration)
         self.protocol_version = 0
@@ -255,6 +258,11 @@ class MotorBridge:
             )
             for joint, value in raw.items()
         }
+        # A recorded range narrower than the calibration (the wrist roll, which calibration
+        # treats as a full turn) holds every goal from every controller inside it.
+        for joint, (low, high) in self.safe_ranges.items():
+            if joint in raw:
+                raw[joint] = clamp(raw[joint], self.last_raw.get(joint), low, high)
         self.require_current()
         self.bus.write_positions(raw, self.is_current)
         self.require_current()
@@ -277,8 +285,8 @@ def configure_passive_leader(bus, calibration, is_current):
 class LeRobotPositionControl:
     """Run upstream SO follower setup/actions without the ML training dependencies."""
 
-    def __init__(self, bus, calibration, is_current):
-        self.bridge = MotorBridge(bus, calibration, is_current)
+    def __init__(self, bus, calibration, is_current, safe_ranges=None):
+        self.bridge = MotorBridge(bus, calibration, is_current, safe_ranges)
         self.follower = UpstreamSOFollower()
         self.follower.bus = self.bridge
         self.follower.config = SimpleNamespace(max_relative_target=None)
