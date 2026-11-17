@@ -210,12 +210,14 @@ def pnpm_command(config):
     return [str(executable)]
 
 
-def prepare_release(config, target, operation):
+def prepare_release(config, target, operation, step=lambda message, progress: None):
+    """Build the target commit as a new release. `step` hears each stage as it starts."""
     root = Path(config["root"])
     release = root / "releases" / ("update-" + operation + "-" + target[:12])
     release.mkdir(mode=0o700)
     archive = root / "run" / ("update-" + operation + ".tar")
     try:
+        step("Downloading the new version…", 8)
         git(config, "archive", "--format=tar", "--output=" + str(archive), target)
         with tarfile.open(archive) as bundle:
             bundle.extractall(release, filter="data")
@@ -230,14 +232,17 @@ def prepare_release(config, target, operation):
     )
     # Worker environments and model weights are deliberately outside this update.
     # A new application environment keeps editable imports tied to this release.
+    step("Installing Python packages…", 15)
     run(
         [config["uv"], "sync", "--frozen", "--all-packages", "--extra", "tui", "--no-dev"],
         cwd=release,
         env=env,
     )
     pnpm = pnpm_command(config)
+    step("Installing web packages…", 30)
     run([*pnpm, "install", "--frozen-lockfile", "--prefer-offline"], cwd=release, env=env)
     # Invoke the web package directly: no second pnpm executable is required on PATH.
+    step("Building the web app…", 45)
     run([*pnpm, "--filter", "@openjensen/web", "build"], cwd=release, env=env)
     if not (release / "apps/web/out/dashboard/index.html").is_file():
         raise ValueError("The new web export is incomplete.")
@@ -430,15 +435,20 @@ def update(config, target, installed, operation):
         created=time.time(),
         pid=os.getpid(),
         message="Building the new version…",
+        progress=3,
     )
 
-    def phase(name, message):
+    # Progress is how far along the update is, by stage (0-100): building takes about
+    # two thirds of the time, then backup, validation and restart.
+    def phase(name, message, progress=None):
         state.update(phase=name, message=message)
+        if progress is not None:
+            state.update(progress=progress)
         write_state(path, state)
 
     with (root / "run/application-update.lock").open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        phase("building", "Building the new version…")
+        phase("building", "Building the new version…", 3)
         stopped = False
         switched = False
         moved = False
@@ -477,7 +487,12 @@ def update(config, target, installed, operation):
                 record.mkdir(mode=0o700, parents=True)
                 write_state(record / "workspace-backup.json", {"directory": str(private)})
             verify_target(config, target, installed)
-            release = prepare_release(config, target, operation)
+            release = prepare_release(
+                config,
+                target,
+                operation,
+                lambda message, progress: phase("building", message, progress),
+            )
             if (root / "current").resolve() != previous:
                 raise ValueError("The installed release changed during preparation.")
             with urlopen(
@@ -486,7 +501,7 @@ def update(config, target, installed, operation):
                 if json.load(response) != {"idle": True}:
                     raise ValueError("The server is no longer idle.")
             preserved_projects = project_ids(config)
-            phase("backing_up", "Stopping the server and backing up the workspace…")
+            phase("backing_up", "Stopping the server and backing up the workspace…", 65)
             service(config, "stop")
             stopped = True
             # Respect any other application writer. This lock lives in the stopped workspace.
@@ -494,13 +509,13 @@ def update(config, target, installed, operation):
                 fcntl.flock(owner, fcntl.LOCK_EX | fcntl.LOCK_NB)
                 copy_workspace(workspace, private / "backup")
                 copy_workspace(private / "backup", private / "candidate")
-                phase("validating", "Validating the workspace with the new version…")
+                phase("validating", "Validating the workspace with the new version…", 78)
                 migrate_candidate(release, private / "candidate")
                 os.rename(workspace, private / "previous-data")
                 original_moved = True
                 os.rename(private / "candidate", workspace)
                 moved = True
-            phase("restarting", "Restarting the server…")
+            phase("restarting", "Restarting the server…", 88)
             activate(root, release)
             switched = True
             service(config, "start")
@@ -508,7 +523,7 @@ def update(config, target, installed, operation):
             health(config, target)
             if project_ids(config) != preserved_projects:
                 raise RuntimeError("Workspace project verification failed.")
-            phase("complete", "Update installed. Reconnecting to the new version…")
+            phase("complete", "Update installed. Reconnecting to the new version…", 100)
             write_state(private / "completed.json", {"target_commit": target})
             prune_backups(config, private)
         except Exception:

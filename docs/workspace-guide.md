@@ -1,8 +1,8 @@
 # Workspace guide
 
-Select or create a project from the project menu, then open a page from the sidebar. Use the API reference in the navigation for programmatic access.
+The project card at the top of the sidebar shows the open project. Click it to see every project as a card and open another with one click, or make a **New project**. Then open a page from the sidebar. For programmatic access, open the **API reference** from this guide's menu.
 
-**Manage projects…** in the project menu removes a project with its datasets, jobs and recordings (a second click confirms), and moves a project in from another OpenJensen workspace on this computer. Moving needs that workspace closed in any other OpenJensen app; within one disk it renames folders, so it needs no extra space.
+**Remove or bring in projects**, at the bottom of the projects window, removes a project with its datasets, jobs and recordings (a second click confirms), and moves a project in from another OpenJensen workspace on this computer. Moving needs that workspace closed in any other OpenJensen app; within one disk it renames folders, so it needs no extra space.
 
 ## Home
 

@@ -9400,6 +9400,19 @@
             "title": "Phase",
             "type": "string"
           },
+          "progress": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Progress"
+          },
           "target_commit": {
             "title": "Target Commit",
             "type": "string"
@@ -10113,7 +10126,7 @@
   },
   "info": {
     "title": "OPEN JENSEN local VLA application",
-    "version": "0.1.40"
+    "version": "0.1.41"
   },
   "openapi": "3.1.0",
   "paths": {

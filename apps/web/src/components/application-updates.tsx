@@ -6,6 +6,15 @@ import { api, ApiError, type ApplicationUpdateStatus } from '@/lib/api';
 import './application-updates.css';
 
 const active = new Set(['queued', 'building', 'backing_up', 'validating', 'restarting']);
+// Where each stage starts, for an updater that reports only its stage.
+const stageProgress: Record<string, number> = {
+  queued: 0,
+  building: 3,
+  backing_up: 65,
+  validating: 78,
+  restarting: 88,
+  complete: 100,
+};
 const pendingKey = 'openjensen-pending-update';
 
 function recall(key: string): string | null {
@@ -66,6 +75,14 @@ export function ApplicationUpdates() {
   // A server that cannot restart itself says why once, instead of offering a button that fails.
   const updatable = available && Boolean(value?.automatic_update);
   const short = (commit?: string | null) => commit?.slice(0, 8) ?? 'Unknown';
+  // How far this update has got, while it runs and until the new version loads.
+  const tracked = operation && (!pending || operation.id === pending);
+  const progress =
+    busy || (tracked && operation.phase === 'complete')
+      ? tracked
+        ? (operation.progress ?? stageProgress[operation.phase] ?? 0)
+        : 0
+      : null;
 
   useEffect(() => {
     setPending(recall(pendingKey));
@@ -152,7 +169,7 @@ export function ApplicationUpdates() {
         {busy
           ? pending && operation?.id !== pending && !confirming
             ? 'Checking update…'
-            : 'Updating…'
+            : `Updating… ${progress ?? 0}%`
           : available
             ? 'Update available'
             : `v${value?.installed.label ?? value?.installed.version ?? '…'}`}
@@ -222,7 +239,22 @@ export function ApplicationUpdates() {
             machines match only when the full name above is identical.
           </p>
         )}
-        <p role="status">
+        {progress !== null && (
+          <div className="application-update-progress">
+            <div
+              className="application-update-bar"
+              role="progressbar"
+              aria-label="Update progress"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={progress}
+            >
+              <span style={{ width: `${progress}%` }} />
+            </div>
+            <strong>{progress}%</strong>
+          </div>
+        )}
+        <p role="status" className={progress !== null ? 'application-update-step' : undefined}>
           {busy && status.isError
             ? 'Server restarting or disconnected. Reconnecting…'
             : operation && (busy || ['failed', 'rolled_back', 'recovery_required'].includes(operation.phase))

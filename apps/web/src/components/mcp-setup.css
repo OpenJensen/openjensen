@@ -1,5 +1,4 @@
 .mcp-setup-trigger,
-.mobile-mcp-setup,
 .mcp-setup-close {
   border: 0;
   background: transparent;
@@ -8,11 +7,6 @@
 }
 .mcp-setup-trigger {
   font-family: inherit;
-}
-.mobile-mcp-setup {
-  display: none;
-  align-items: center;
-  color: var(--muted);
 }
 .mcp-setup-dialog {
   width: min(580px, calc(100vw - 32px));
@@ -64,9 +58,6 @@
   text-decoration: none;
 }
 @media (max-width: 700px) {
-  .mobile-mcp-setup {
-    display: inline-flex;
-  }
   .mcp-setup-dialog {
     padding: 20px;
   }

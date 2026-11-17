@@ -80,11 +80,11 @@ export function ManageProjectsDialog({ projects, onChanged, onClose }: Props) {
           <span className="project-dialog-mark">
             <Icon name="folder" size={20} />
           </span>
-          <h2 id={`${id}-title`}>Projects</h2>
+          <h2 id={`${id}-title`}>Remove or bring in projects</h2>
           <button
             type="button"
             className="project-dialog-close"
-            aria-label="Close projects"
+            aria-label="Close project management"
             disabled={!!working}
             onClick={() => dialog.current?.close()}
           >

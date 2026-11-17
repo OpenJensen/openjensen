@@ -1,7 +1,6 @@
 'use client';
 
-import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
-import { createPortal } from 'react-dom';
+import { useEffect, useId, useRef, useState } from 'react';
 import type { Project } from '@/lib/api';
 import { Icon } from '@/components/icon';
 import { ManageProjectsDialog } from '@/components/project-manage-dialog';
@@ -114,250 +113,151 @@ function CreateProjectDialog({ onCreate, onClose }: Pick<ProjectMenuProps, 'onCr
   );
 }
 
+type ProjectView = 'closed' | 'choose' | 'create' | 'manage';
+
+/** Every project as a card, the open one marked. One click opens a project. */
+function ChooseProjectDialog({
+  projects,
+  value,
+  onSelect,
+  onClose,
+}: Pick<ProjectMenuProps, 'projects' | 'value' | 'onSelect'> & { onClose: (next: ProjectView) => void }) {
+  const id = useId();
+  const dialog = useRef<HTMLDialogElement>(null);
+  const next = useRef<ProjectView>('closed');
+  useEffect(() => {
+    dialog.current?.showModal();
+    const current = dialog.current?.querySelector<HTMLElement>('[aria-checked="true"]');
+    (current ?? dialog.current?.querySelector<HTMLElement>('.project-choice'))?.focus();
+  }, []);
+  function finish(view: ProjectView) {
+    next.current = view;
+    dialog.current?.close();
+  }
+
+  return (
+    <dialog
+      ref={dialog}
+      className="project-create-dialog project-choose-dialog"
+      aria-labelledby={`${id}-title`}
+      onClose={() => onClose(next.current)}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) dialog.current?.close();
+      }}
+    >
+      <div className="project-choose-body">
+        <header>
+          <h2 id={`${id}-title`}>Projects</h2>
+          <button
+            type="button"
+            className="project-dialog-close"
+            aria-label="Close projects"
+            onClick={() => dialog.current?.close()}
+          >
+            ×
+          </button>
+        </header>
+        {!projects.length && <p className="project-choose-empty">No projects yet.</p>}
+        <div className="project-choose-grid">
+          {projects.length > 0 && (
+            <div className="project-choose-list" role="radiogroup" aria-label="Open project">
+              {projects.map((project) => (
+                <button
+                  key={project.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={project.id === value}
+                  data-project-id={project.id}
+                  className="project-choice"
+                  onClick={() => {
+                    if (project.id !== value) onSelect(project.id);
+                    finish('closed');
+                  }}
+                >
+                  <span className="project-choice-mark">
+                    <Icon name={project.id === value ? 'check' : 'folder'} size={20} />
+                  </span>
+                  <span className="project-choice-name">{project.name}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          <button type="button" className="project-choice project-choice-new" onClick={() => finish('create')}>
+            <span className="project-choice-mark">
+              <Icon name="plus" size={20} />
+            </span>
+            <span className="project-choice-name">New project</span>
+          </button>
+        </div>
+        <footer>
+          <button type="button" className="text-button project-choose-manage" onClick={() => finish('manage')}>
+            Remove or bring in projects
+          </button>
+        </footer>
+      </div>
+    </dialog>
+  );
+}
+
+/** The open project, shown as a card at the top of the sidebar. */
 export function ProjectMenu({ projects, value, onSelect, onCreate, onChanged, disabled = false }: ProjectMenuProps) {
   const id = useId();
   const trigger = useRef<HTMLButtonElement>(null);
-  const menu = useRef<HTMLDivElement>(null);
-  const items = useRef<Array<HTMLButtonElement | null>>([]);
-  const search = useRef({ text: '', time: 0 });
-  const [open, setOpen] = useState(false);
-  const [active, setActive] = useState(0);
-  const [creating, setCreating] = useState(false);
-  const [managing, setManaging] = useState(false);
-  const [placement, setPlacement] = useState({ left: 16, top: 0, width: 260, height: 320 });
+  const [view, setView] = useState<ProjectView>('closed');
   const selected = projects.find((project) => project.id === value);
-  const expanded = open && !disabled && !creating && !managing;
-
-  function close(restoreFocus = false) {
-    setOpen(false);
-    if (restoreFocus) trigger.current?.focus({ preventScroll: true });
-  }
-  function show(
-    index = Math.max(
-      0,
-      projects.findIndex((project) => project.id === value),
-    ),
-  ) {
-    if (disabled) return;
-    search.current = { text: '', time: 0 };
-    setActive(index);
-    setOpen(true);
-  }
-  function choose(index: number) {
-    if (index === projects.length) {
-      close();
-      setCreating(true);
-    } else if (index === projects.length + 1) {
-      close();
-      setManaging(true);
-    } else if (projects[index]) {
-      onSelect(projects[index].id);
-      close(true);
-    }
-  }
-  function keyDown(event: KeyboardEvent) {
-    const last = projects.length + 1;
-    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-      event.preventDefault();
-      setActive((active + (event.key === 'ArrowDown' ? 1 : last)) % (last + 1));
-    } else if (event.key === 'Home' || event.key === 'End') {
-      event.preventDefault();
-      setActive(event.key === 'Home' ? 0 : last);
-    } else if (event.key === 'Escape') {
-      event.preventDefault();
-      event.stopPropagation();
-      close(true);
-    } else if (event.key === 'Tab') {
-      // Return to the trigger before the browser moves to the next sidebar control.
-      close(true);
-    } else if (event.key.length === 1 && event.key !== ' ' && !event.altKey && !event.ctrlKey && !event.metaKey) {
-      event.preventDefault();
-      const now = event.timeStamp;
-      const text = (now - search.current.time < 600 ? search.current.text : '') + event.key.toLowerCase();
-      const query = [...text].every((character) => character === text[0]) ? text[0] : text;
-      const labels = [...projects.map((project) => project.name), 'Create project', 'Manage projects'];
-      const match = Array.from({ length: labels.length }, (_, offset) => (active + offset + 1) % labels.length).find(
-        (index) => labels[index].toLowerCase().startsWith(query),
-      );
-      if (match !== undefined) setActive(match);
-      search.current = { text, time: now };
-    }
-  }
-
-  useLayoutEffect(() => {
-    if (!expanded) return;
-    function position() {
-      const bounds = trigger.current?.getBoundingClientRect();
-      if (!bounds) return;
-      const width = Math.min(Math.max(bounds.width, 260), window.innerWidth - 32);
-      const below = window.innerHeight - bounds.bottom - 22;
-      const above = bounds.top - 22;
-      // Measure what the menu holds: an empty list still shows a note, a divider and
-      // "Create project…", which is taller than one row per project plus one.
-      const content = menu.current ? menu.current.scrollHeight + 2 : (projects.length + 2) * 44 + 22;
-      const desired = Math.min(320, content);
-      const upwards = below < desired && above > below;
-      const height = Math.max(44, Math.min(desired, upwards ? above : below));
-      setPlacement({
-        left: Math.max(16, Math.min(bounds.left, window.innerWidth - width - 16)),
-        top: upwards ? bounds.top - height - 6 : bounds.bottom + 6,
-        width,
-        height,
-      });
-    }
-    position();
-    window.addEventListener('resize', position);
-    window.addEventListener('scroll', position, true);
-    return () => {
-      window.removeEventListener('resize', position);
-      window.removeEventListener('scroll', position, true);
-    };
-  }, [expanded, projects.length]);
-
-  useEffect(() => {
-    if (expanded) {
-      const index = Math.min(active, projects.length + 1);
-      if (index !== active) setActive(index);
-      items.current[index]?.focus({ preventScroll: true });
-      items.current[index]?.scrollIntoView({ block: 'nearest' });
-    }
-  }, [expanded, active, projects.length]);
-  useEffect(() => {
-    if (disabled) setOpen(false);
-  }, [disabled]);
-  useEffect(() => {
-    if (!expanded) return;
-    function outside(event: Event) {
-      if (
-        event.target instanceof Node &&
-        !trigger.current?.contains(event.target) &&
-        !menu.current?.contains(event.target)
-      )
-        close();
-    }
-    document.addEventListener('pointerdown', outside);
-    document.addEventListener('focusin', outside);
-    return () => {
-      document.removeEventListener('pointerdown', outside);
-      document.removeEventListener('focusin', outside);
-    };
-  }, [expanded]);
+  const restoreFocus = () => trigger.current?.focus({ preventScroll: true });
 
   return (
     <div className="project-menu">
       <button
         ref={trigger}
         type="button"
-        className="project-menu-trigger"
+        className="project-card"
         aria-label="Current project"
         aria-describedby={`${id}-value`}
         data-project-id={value}
-        aria-haspopup="menu"
-        aria-expanded={expanded}
-        aria-controls={expanded ? `${id}-menu` : undefined}
+        aria-haspopup="dialog"
+        aria-expanded={view === 'choose' && !disabled}
         disabled={disabled}
-        onClick={() => (expanded ? close() : show())}
-        onKeyDown={(event) => {
-          if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-            event.preventDefault();
-            show(event.key === 'ArrowUp' ? projects.length + 1 : undefined);
-          } else if (event.key === 'Escape') close();
-        }}
+        onClick={() => setView('choose')}
       >
-        <Icon name="folder" size={16} />
-        <span id={`${id}-value`}>
-          {disabled ? 'Loading projects…' : (selected?.name ?? 'Select or create a project')}
+        <span className="project-card-mark">
+          <Icon name="folder" size={20} />
         </span>
-        <svg className="project-menu-chevron" width="15" height="15" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-          <path
-            d="m5 7.5 5 5 5-5"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
+        <span className="project-card-text">
+          <span id={`${id}-value`} className="project-card-name">
+            {disabled ? 'Loading projects…' : (selected?.name ?? 'No project yet')}
+          </span>
+          {!disabled && <span className="project-card-action">{selected ? 'Switch project' : 'Create a project'}</span>}
+        </span>
       </button>
-      {expanded &&
-        createPortal(
-          <div
-            ref={menu}
-            id={`${id}-menu`}
-            role="menu"
-            aria-label="Projects"
-            className="project-menu-popover"
-            style={{ left: placement.left, top: placement.top, width: placement.width, maxHeight: placement.height }}
-            onKeyDown={keyDown}
-          >
-            {!projects.length && <p className="project-menu-empty">No projects yet.</p>}
-            {projects.map((project, index) => (
-              <button
-                key={project.id}
-                ref={(element) => {
-                  items.current[index] = element;
-                }}
-                type="button"
-                role="menuitemradio"
-                aria-checked={project.id === value}
-                data-project-id={project.id}
-                tabIndex={active === index ? 0 : -1}
-                className="project-menu-item"
-                onFocus={() => setActive(index)}
-                onClick={() => choose(index)}
-              >
-                <Icon name="folder" size={16} />
-                <span>{project.name}</span>
-                <span className="project-menu-check">{project.id === value && <Icon name="check" size={16} />}</span>
-              </button>
-            ))}
-            <div className="project-menu-divider" role="separator" />
-            <button
-              ref={(element) => {
-                items.current[projects.length] = element;
-              }}
-              type="button"
-              role="menuitem"
-              tabIndex={active === projects.length ? 0 : -1}
-              className="project-menu-item project-menu-create"
-              onFocus={() => setActive(projects.length)}
-              onClick={() => choose(projects.length)}
-            >
-              <Icon name="plus" size={16} />
-              <span>Create project…</span>
-            </button>
-            <button
-              ref={(element) => {
-                items.current[projects.length + 1] = element;
-              }}
-              type="button"
-              role="menuitem"
-              tabIndex={active === projects.length + 1 ? 0 : -1}
-              className="project-menu-item project-menu-create"
-              onFocus={() => setActive(projects.length + 1)}
-              onClick={() => choose(projects.length + 1)}
-            >
-              <Icon name="folder" size={16} />
-              <span>Manage projects…</span>
-            </button>
-          </div>,
-          document.body,
-        )}
-      {managing && (
+      {view === 'choose' && !disabled && (
+        <ChooseProjectDialog
+          projects={projects}
+          value={value}
+          onSelect={onSelect}
+          onClose={(next) => {
+            setView(next);
+            if (next === 'closed') restoreFocus();
+          }}
+        />
+      )}
+      {view === 'manage' && (
         <ManageProjectsDialog
           projects={projects}
           onChanged={onChanged}
           onClose={() => {
-            setManaging(false);
-            trigger.current?.focus({ preventScroll: true });
+            setView('closed');
+            restoreFocus();
           }}
         />
       )}
-      {creating && (
+      {view === 'create' && (
         <CreateProjectDialog
           onCreate={onCreate}
           onClose={() => {
-            setCreating(false);
-            trigger.current?.focus({ preventScroll: true });
+            setView('closed');
+            restoreFocus();
           }}
         />
       )}
