@@ -99,19 +99,19 @@ function McpSetupDialog({ onClose }: { onClose: () => void }) {
   );
 }
 
-export function McpSetup({ compact = false }: { compact?: boolean }) {
+/** Shown beside the guide link on AI teleoperation, the page it explains. */
+export function McpSetup() {
   const [open, setOpen] = useState(false);
   return (
     <>
       <button
         type="button"
-        className={compact ? 'mobile-mcp-setup' : 'sidebar-link mcp-setup-trigger'}
-        aria-label="MCP setup"
+        className="page-heading-link mcp-setup-trigger"
         aria-haspopup="dialog"
         onClick={() => setOpen(true)}
       >
-        <Icon name="branch" size={compact ? 18 : 16} />
-        {!compact && 'MCP setup'}
+        <Icon name="branch" size={18} />
+        MCP setup
       </button>
       {open && createPortal(<McpSetupDialog onClose={() => setOpen(false)} />, document.body)}
     </>
