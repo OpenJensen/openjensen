@@ -164,6 +164,17 @@ def git(config, *args):
     return run(["git", "-C", config["repository"], *args], timeout=120, capture=True)
 
 
+def release_commits(config):
+    """Commits that carry a release tag on the canonical remote."""
+    commits = set()
+    for line in git(config, "ls-remote", "--tags", "origin", "refs/tags/v*").splitlines():
+        commit, _, ref = line.partition("\t")
+        # An annotated tag is listed twice; the line ending in ^{} names its commit.
+        if re.fullmatch(r"refs/tags/v[0-9]+\.[0-9]+\.[0-9]+(\^\{\})?", ref.strip()):
+            commits.add(commit.strip())
+    return commits
+
+
 def verify_target(config, target, installed):
     if (
         not re.fullmatch(r"[0-9a-f]{40}", target)
@@ -186,8 +197,10 @@ def verify_target(config, target, installed):
     if git(config, "remote", "get-url", "origin") not in CANONICAL_REMOTES:
         raise ValueError("The update source must be OpenJensen/openjensen on GitHub.")
     git(config, "fetch", "--no-tags", "origin", "+refs/heads/main:refs/remotes/origin/main")
-    if git(config, "rev-parse", "refs/remotes/origin/main") != target:
-        raise ValueError("Upstream main changed. Check and confirm the new version.")
+    # Only a published release is installed: a commit with a vX.Y.Z tag, on main.
+    if target not in release_commits(config):
+        raise ValueError("Only published releases can be installed. Check and confirm again.")
+    git(config, "merge-base", "--is-ancestor", target, "refs/remotes/origin/main")
     if installed:
         git(config, "merge-base", "--is-ancestor", installed, target)
     if installed == target:
