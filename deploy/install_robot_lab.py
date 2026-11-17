@@ -297,6 +297,47 @@ def install_mac_services(python, source, token_file, data, logs, ssh_host, no_st
     return [service["Label"] for service in services]
 
 
+def camera_pair_on_usb2(devices=Path("/sys/bus/usb/devices")):
+    buses = set()
+    for device in devices.glob("*"):
+        try:
+            if (
+                (device / "idVendor").read_text().strip() != "0abd"
+                or (device / "idProduct").read_text().strip() != "8050"
+                or (device / "speed").read_text().strip() != "480"
+            ):
+                continue
+            bus = (device / "busnum").read_text().strip()
+        except OSError:
+            continue
+        if bus in buses:
+            return True
+        buses.add(bus)
+    return False
+
+
+def setup_camera_driver(choice, offline):
+    if choice == "skip" or (choice == "auto" and not camera_pair_on_usb2()):
+        return
+    script = Path(__file__).resolve().parent / "linux/uvc/install.sh"
+    if choice == "auto":
+        if (
+            Path("/var/lib/dkms/openjensen-uvc/1.0").is_dir()
+            and Path("/sys/module/uvcvideo/parameters/mjpeg_bandwidth_cap").is_file()
+        ):
+            return
+        if not sys.stdin.isatty():
+            print(
+                "Two matching USB cameras detected. To enable full-rate paired MJPEG, "
+                f"run sudo {script}"
+            )
+            return
+    command = [str(script)]
+    if offline:
+        command.append("--offline")
+    subprocess.run((["sudo"] if os.geteuid() else []) + command, check=True)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, required=True, help="workers/robot_lab directory")
@@ -320,7 +361,15 @@ def main():
     parser.add_argument(
         "--no-start", action="store_true", help="Prepare services without starting them"
     )
+    parser.add_argument(
+        "--camera-driver",
+        choices=("auto", "install", "skip"),
+        default="auto",
+        help="Linux DKMS camera support (auto detects paired high-speed 0abd:8050 cameras)",
+    )
     args = parser.parse_args()
+    if args.camera_driver == "install" and not sys.platform.startswith("linux"):
+        parser.error("The camera driver requires Linux.")
     if sys.platform not in {"darwin", "linux"}:
         parser.error("Robot Lab supports macOS and Linux.")
     disk_parent = args.prefix.expanduser().resolve()
@@ -357,6 +406,10 @@ def main():
     uv = shutil.which("uv")
     if uv is None:
         parser.error("Install uv from https://docs.astral.sh/uv/ first.")
+    # Enroll before stopping any live service. Loading the driver is a separate,
+    # idle-only administrator action (or it activates on the next boot).
+    if sys.platform == "linux":
+        setup_camera_driver(args.camera_driver, args.offline)
     prefix = args.prefix.expanduser().resolve()
     prefix.mkdir(parents=True, exist_ok=True)
     private = prefix / "private"
