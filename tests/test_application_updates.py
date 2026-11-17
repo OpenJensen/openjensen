@@ -5,6 +5,7 @@ import json
 import os
 import subprocess
 import tarfile
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -293,6 +294,15 @@ def test_workspace_activation_and_full_rollback(deployment, monkeypatch, failure
     monkeypatch.setattr(runner, "health", healthy)
     snapshots = iter([{"preserved"}, {"lost"} if failure == "records" else {"preserved"}])
     monkeypatch.setattr(runner, "project_ids", lambda _: next(snapshots))
+    reported = []
+    write_state = runner.write_state
+
+    def record(path, value):
+        if Path(path).name == "application-update.json":
+            reported.append(value["progress"])
+        write_state(path, value)
+
+    monkeypatch.setattr(runner, "write_state", record)
     ident = "a" * 32
     if failure:
         with pytest.raises(RuntimeError):
@@ -318,6 +328,9 @@ def test_workspace_activation_and_full_rollback(deployment, monkeypatch, failure
         else "complete"
     )
     assert events[-1] == "start"
+    # The dialog's progress bar only moves forward, and reaches the end only on success.
+    assert reported == sorted(reported)
+    assert (reported[-1] == 100) is (failure is None)
 
 
 GIB = 1024**3
@@ -614,6 +627,16 @@ def test_prepare_release_does_not_require_a_global_pnpm(deployment, monkeypatch)
             pass
 
     monkeypatch.setattr(runner, "git", archive)
-    prepared = runner.prepare_release(config, NEW, "fixture")
+    steps = []
+    prepared = runner.prepare_release(
+        config, NEW, "fixture", lambda message, progress: steps.append((message, progress))
+    )
+    assert [message for message, _ in steps] == [
+        "Downloading the new version…",
+        "Installing Python packages…",
+        "Installing web packages…",
+        "Building the web app…",
+    ]
+    assert [progress for _, progress in steps] == sorted(progress for _, progress in steps)
     assert (prepared / "apps/web/out/dashboard/index.html").is_file()
     assert json.loads((prepared / ".openjensen-build.json").read_text())["commit"] == NEW

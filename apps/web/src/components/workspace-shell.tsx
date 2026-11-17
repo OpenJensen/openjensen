@@ -2,7 +2,6 @@ import type { ReactNode } from 'react';
 import Link from 'next/link';
 import './workspace-shell.css';
 import { Icon } from '@/components/icon';
-import { McpSetup } from '@/components/mcp-setup';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { apiReferenceUrl } from '@/lib/api';
 import { publicPath } from '@/lib/base-path';
@@ -17,6 +16,8 @@ type WorkspaceShellProps = {
   contentClassName?: string;
   sidebarFooter?: ReactNode;
   showGuideShortcut?: boolean;
+  showApiShortcut?: boolean;
+  sidebarClassName?: string;
   onHomeNavigate?: () => void;
 };
 
@@ -32,6 +33,8 @@ export function WorkspaceShell({
   contentClassName,
   sidebarFooter,
   showGuideShortcut = true,
+  showApiShortcut = true,
+  sidebarClassName,
   onHomeNavigate,
 }: WorkspaceShellProps) {
   return (
@@ -39,7 +42,7 @@ export function WorkspaceShell({
       <a href="#main" className="skip-link">
         {skipLabel}
       </a>
-      <aside className="sidebar" aria-label={sidebarLabel}>
+      <aside className={`sidebar${sidebarClassName ? ` ${sidebarClassName}` : ''}`} aria-label={sidebarLabel}>
         <Link
           className="brand"
           href="/dashboard/"
@@ -60,33 +63,23 @@ export function WorkspaceShell({
           <span className="brand-copy">OpenJensen</span>
         </Link>
         <div className="sidebar-content">{navigation}</div>
-        <div className="sidebar-bottom">
-          {sidebarFooter}
-          <div className="sidebar-links">
-            <McpSetup />
-            <a className="sidebar-link" href={publicPath('/guide/')}>
-              <Icon name="book" size={16} /> Guide
-            </a>
-            <a className="sidebar-link" href={apiReferenceUrl}>
-              <Icon name="external" size={16} /> API reference
-            </a>
-          </div>
-        </div>
+        {sidebarFooter && <div className="sidebar-bottom">{sidebarFooter}</div>}
       </aside>
       <div className="main-shell">
         <header className="topbar">
           <div className="breadcrumb">{breadcrumb}</div>
           <div className="topbar-actions">
             {headerActions}
-            <McpSetup compact />
             {showGuideShortcut && (
               <a className="mobile-guide-link" href={publicPath('/guide/')} aria-label="Workspace guide">
                 <Icon name="book" size={18} />
               </a>
             )}
-            <a className="mobile-api-link" href={apiReferenceUrl} aria-label="API reference">
-              <Icon name="book" size={18} />
-            </a>
+            {showApiShortcut && (
+              <a className="mobile-api-link" href={apiReferenceUrl} aria-label="API reference">
+                <Icon name="book" size={18} />
+              </a>
+            )}
             <ThemeToggle />
           </div>
         </header>

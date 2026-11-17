@@ -1,6 +1,6 @@
 import { fulfillApplicationUpdateRead } from './application-update-controls';
 import { expect, test, type Page } from '@playwright/test';
-import { openCreateProject, selectProject } from './project-controls';
+import { openCreateProject, projectsDialog, selectProject } from './project-controls';
 import { installedModules } from './module-fixtures';
 
 async function fixture(page: Page, empty = false) {
@@ -40,62 +40,62 @@ async function fixture(page: Page, empty = false) {
 }
 
 const current = (page: Page) => page.getByRole('button', { name: 'Current project', exact: true });
-const menu = (page: Page) => page.getByRole('menu', { name: 'Projects', exact: true });
+const projects = projectsDialog;
+const choice = (page: Page, name: string) => projects(page).getByRole('radio', { name, exact: true });
 const dialog = (page: Page) => page.getByRole('dialog', { name: 'Create project', exact: true });
 
-test('project switching and keyboard navigation preserve scope without creating jobs', async ({ page }, testInfo) => {
+test('every project is a card, one click opens it, and nothing is a dropdown', async ({ page }, testInfo) => {
   const { writes } = await fixture(page);
   await expect(current(page)).toContainText('Robotics examples');
-  await expect(page.getByRole('textbox', { name: 'Project name', exact: true })).toHaveCount(0);
+  await expect(current(page)).toContainText('Switch project');
+  await expect(page.getByRole('menu')).toHaveCount(0);
+  await expect(page.getByRole('combobox')).toHaveCount(0);
   await current(page).click();
-  await expect(menu(page).getByRole('menuitemradio', { name: 'Robotics examples', exact: true })).toHaveAttribute(
-    'aria-checked',
-    'true',
-  );
-  await expect(menu(page).getByRole('menuitem', { name: 'Create project…', exact: true })).toBeVisible();
+  await expect(choice(page, 'Robotics examples')).toHaveAttribute('aria-checked', 'true');
+  await expect(choice(page, 'Robotics examples')).toBeFocused();
+  await expect(choice(page, 'PushT benchmark')).toHaveAttribute('aria-checked', 'false');
+  await expect(projects(page).getByRole('button', { name: 'New project', exact: true })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('project-menu.png') });
   await page.keyboard.press('Escape');
+  await expect(projects(page)).toHaveCount(0);
   await expect(current(page)).toBeFocused();
   await selectProject(page, 'beta');
+  await expect(current(page)).toContainText('PushT benchmark');
   await page.reload();
   await expect(current(page)).toHaveAttribute('data-project-id', 'beta');
+  // Keyboard: Enter opens the cards on the open project, Tab moves between them.
   await current(page).focus();
-  await page.keyboard.press('ArrowDown');
-  await expect(menu(page).getByRole('menuitemradio', { name: 'PushT benchmark', exact: true })).toBeFocused();
-  await page.keyboard.press('Home');
-  await expect(menu(page).getByRole('menuitemradio', { name: 'Robotics examples', exact: true })).toBeFocused();
   await page.keyboard.press('Enter');
+  await expect(choice(page, 'PushT benchmark')).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  await expect(choice(page, 'Robotics examples')).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(projects(page)).toHaveCount(0);
   await expect(current(page)).toHaveAttribute('data-project-id', 'alpha');
   await expect(current(page)).toBeFocused();
-  await page.keyboard.press('ArrowDown');
-  await expect(menu(page).getByRole('menuitemradio', { name: 'Robotics examples', exact: true })).toBeFocused();
-  await page.keyboard.press('p');
-  await expect(menu(page).getByRole('menuitemradio', { name: 'PushT benchmark', exact: true })).toBeFocused();
-  await page.keyboard.press('Enter');
-  await expect(current(page)).toHaveAttribute('data-project-id', 'beta');
+  // Choosing the open project again just closes the cards.
   await current(page).click();
+  await choice(page, 'Robotics examples').click();
+  await expect(projects(page)).toHaveCount(0);
+  await expect(current(page)).toHaveAttribute('data-project-id', 'alpha');
+  await expect(current(page)).toBeFocused();
   await page.keyboard.press('Tab');
-  await expect(menu(page)).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'Home', exact: true })).toBeFocused();
+  // A click outside the window closes it without changing anything.
   await current(page).click();
-  // The popover may cover the page heading on a narrow screen. Exercise a
-  // genuine outside click at a visible content point below its bounded menu.
-  const bounds = await menu(page).boundingBox();
-  const outside = await page.evaluate(() => ({
-    x: document.documentElement.clientWidth - 8,
-    y: window.innerHeight - 8,
-  }));
-  expect(outside.y).toBeGreaterThan(bounds!.y + bounds!.height);
-  await page.mouse.click(outside.x, outside.y);
-  await expect(menu(page)).toHaveCount(0);
+  await expect(projects(page)).toBeVisible();
+  await page.mouse.click(4, 4);
+  await expect(projects(page)).toHaveCount(0);
+  await expect(current(page)).toHaveAttribute('data-project-id', 'alpha');
   expect(writes).toEqual([]);
 });
 
-test('creating from an empty menu focuses the name field and restores the new project after reload', async ({
+test('creating from an empty workspace focuses the name field and restores the new project after reload', async ({
   page,
 }) => {
   const { writes } = await fixture(page, true);
-  await expect(current(page)).toContainText('Select or create a project');
+  await expect(current(page)).toContainText('No project yet');
+  await expect(current(page)).toContainText('Create a project');
   await openCreateProject(page);
   await expect(dialog(page).getByLabel('Project name', { exact: true })).toBeFocused();
   await dialog(page).getByRole('button', { name: 'Cancel', exact: true }).click();
@@ -113,16 +113,19 @@ test('creating from an empty menu focuses the name field and restores the new pr
   expect(writes).toEqual([{ path: '/api/v1/projects', body: { name: 'Robot lab' } }]);
 });
 
-test('a first visit shows the whole menu, so the first project can be created without scrolling', async ({ page }) => {
+test('a first visit shows the whole projects window, so the first project can be created without scrolling', async ({
+  page,
+}) => {
   await fixture(page, true);
   await current(page).click();
-  const create = menu(page).getByRole('menuitem', { name: 'Create project…', exact: true });
-  await expect(menu(page).getByText('No projects yet.', { exact: true })).toBeVisible();
+  const create = projects(page).getByRole('button', { name: 'New project', exact: true });
+  await expect(projects(page).getByText('No projects yet.', { exact: true })).toBeVisible();
   await expect(create).toBeVisible();
-  // Visible to a person, not only present: nothing in the menu is cut off or scrolled away.
-  expect(await menu(page).evaluate((node) => node.scrollHeight - node.clientHeight)).toBeLessThanOrEqual(0);
-  const outer = (await menu(page).boundingBox())!;
-  for (const part of [menu(page).getByText('No projects yet.', { exact: true }), create]) {
+  await expect(create).toBeFocused();
+  // Visible to a person, not only present: nothing in the window is cut off or scrolled away.
+  expect(await projects(page).evaluate((node) => node.scrollHeight - node.clientHeight)).toBeLessThanOrEqual(0);
+  const outer = (await projects(page).boundingBox())!;
+  for (const part of [projects(page).getByText('No projects yet.', { exact: true }), create]) {
     const inner = (await part.boundingBox())!;
     expect(inner.y).toBeGreaterThanOrEqual(outer.y);
     expect(inner.y + inner.height).toBeLessThanOrEqual(outer.y + outer.height);
@@ -160,20 +163,25 @@ test('a failed creation retains the draft and pending retries block duplicate su
   expect(writes).toHaveLength(2);
 });
 
-test('long names and creation fit a narrow dark screen without clipping the menu', async ({ page }, testInfo) => {
-  const { projects, writes } = await fixture(page);
-  projects[1].name = 'Robot lab · ' + 'long project name '.repeat(4);
+test('long names and creation fit a narrow dark screen without clipping the projects window', async ({
+  page,
+}, testInfo) => {
+  const { projects: list, writes } = await fixture(page);
+  list[1].name = 'Robot lab · ' + 'long project name '.repeat(4);
   await page.setViewportSize({ width: 320, height: 720 });
   await page.reload();
   await page.getByRole('button', { name: 'Dark', exact: true }).click();
   await current(page).click();
-  const bounds = await menu(page).boundingBox();
+  const bounds = await projects(page).boundingBox();
   expect(bounds!.x).toBeGreaterThanOrEqual(0);
   expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(320);
   expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(720);
-  await expect(menu(page).getByRole('menuitem', { name: 'Create project…', exact: true })).toBeVisible();
+  const long = projects(page).locator('[data-project-id="beta"]');
+  const card = (await long.boundingBox())!;
+  expect(card.x + card.width).toBeLessThanOrEqual(bounds!.x + bounds!.width);
+  await expect(projects(page).getByRole('button', { name: 'New project', exact: true })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('project-menu-dark-mobile.png') });
-  await menu(page).getByRole('menuitem', { name: 'Create project…', exact: true }).click();
+  await projects(page).getByRole('button', { name: 'New project', exact: true }).click();
   await expect(dialog(page).getByLabel('Project name', { exact: true })).toBeFocused();
   expect(
     await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1),
@@ -184,7 +192,7 @@ test('long names and creation fit a narrow dark screen without clipping the menu
 });
 
 test('projects move in from another workspace and are removed only on the second click', async ({ page }, testInfo) => {
-  const { projects, writes } = await fixture(page);
+  const { projects: list, writes } = await fixture(page);
   const calls: { method: string; path: string; body?: unknown }[] = [];
   const nearby = [
     {
@@ -223,14 +231,14 @@ test('projects move in from another workspace and are removed only on the second
       const moved = nearby[0].projects.find((project) => project.id === 'pen')!;
       nearby[0].projects = nearby[0].projects.filter((project) => project !== moved);
       const project = { id: moved.id, name: moved.name, created_at: moved.created_at };
-      projects.push(project);
+      list.push(project);
       return route.fulfill({ json: project });
     }
     if (request.method() === 'DELETE') {
       calls.push({ method: 'DELETE', path });
       const id = path.split('/').pop()!;
-      const [removed] = projects.splice(
-        projects.findIndex((project) => project.id === id),
+      const [removed] = list.splice(
+        list.findIndex((project) => project.id === id),
         1,
       );
       return route.fulfill({ json: { id, name: removed.name, datasets: 0, jobs: 0 } });
@@ -238,8 +246,9 @@ test('projects move in from another workspace and are removed only on the second
     return route.fallback();
   });
   await current(page).click();
-  await menu(page).getByRole('menuitem', { name: 'Manage projects…', exact: true }).click();
-  const manage = page.getByRole('dialog', { name: 'Projects', exact: true });
+  await projects(page).getByRole('button', { name: 'Remove or bring in projects', exact: true }).click();
+  await expect(projects(page)).toHaveCount(0);
+  const manage = page.getByRole('dialog', { name: 'Remove or bring in projects', exact: true });
   await expect(manage.getByText('~/.local/share/older-workspace', { exact: true })).toBeVisible();
   await expect(manage.getByText('2 datasets · 10 jobs', { exact: true })).toBeVisible();
   await expect(manage.getByRole('button', { name: 'Move Busy project here', exact: true })).toBeDisabled();
