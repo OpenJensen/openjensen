@@ -75,14 +75,11 @@ export function ApplicationUpdates() {
   // A server that cannot restart itself says why once, instead of offering a button that fails.
   const updatable = available && Boolean(value?.automatic_update);
   const short = (commit?: string | null) => commit?.slice(0, 8) ?? 'Unknown';
-  // How far this update has got, while it runs and until the new version loads.
+  // How far this update has got, while it runs and, in the browser that started it, until the
+  // new version loads. The server keeps reporting its last finished update afterwards; that is
+  // history, not an update in progress, so it shows no bar.
   const tracked = operation && (!pending || operation.id === pending);
-  const progress =
-    busy || (tracked && operation.phase === 'complete')
-      ? tracked
-        ? (operation.progress ?? stageProgress[operation.phase] ?? 0)
-        : 0
-      : null;
+  const progress = busy ? (tracked ? (operation.progress ?? stageProgress[operation.phase] ?? 0) : 0) : null;
 
   useEffect(() => {
     setPending(recall(pendingKey));
