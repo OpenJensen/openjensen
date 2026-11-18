@@ -152,6 +152,8 @@ def admit(root, ident):
         "camera_key": manifest["camera_key"],
         "camera_keys": list(images),
         "image_shape": images[manifest["camera_key"]]["shape"],
+        # Steps the policy carries out from one plan before it looks at the cameras again.
+        "plan_steps": config.get("n_action_steps", 100 if kind == "act" else 50),
         # Lets the workspace tell which of its models is already installed here.
         "source_manifest_sha256": manifest.get("source_manifest_sha256"),
         "checkpoint": checkpoint,
@@ -269,6 +271,8 @@ class PolicyRunner:
         self.planning_pause = False
         # Steps the loaded policy will answer from its plan without looking at the cameras.
         self.replay = 0
+        # The operator's choice for this run: plan again after this many steps of a plan.
+        self.replan_steps = None
         self.preview = None
         self.task = ""
         self.operation = 0
@@ -344,6 +348,8 @@ class PolicyRunner:
                 "error": self.error,
                 "fps": self.model["fps"] if self.model else None,
                 "steps": self.steps,
+                "plan_steps": self.model["plan_steps"] if self.model else None,
+                "replan_steps": self.replan_steps,
                 "releases": self.release.releases,
                 "holding": self.release.holding,
                 "preflight": preflight,
@@ -756,7 +762,7 @@ class PolicyRunner:
         return self.lab.status()
 
     def start(self, payload):
-        if set(payload) - {"task", "cameras", "allow_planning_pause"} != {
+        if set(payload) - {"task", "cameras", "allow_planning_pause", "replan_steps"} != {
             "confirm",
             "operator_present",
             "workspace_clear",
@@ -807,6 +813,10 @@ class PolicyRunner:
             if time.monotonic() - self.lab.heartbeat > 2:
                 raise ValueError("The manual operator heartbeat expired")
             cameras = self._cameras(payload)
+            plan = self.model["plan_steps"]
+            replan = payload.get("replan_steps", plan)
+            if type(replan) is not int or not 1 <= replan <= plan:
+                raise ValueError(f"Choose how often the policy plans: every 1–{plan} steps")
             if (
                 self.check
                 and time.monotonic() - self.check["checked_at"] >= PREFLIGHT_VALID_SECONDS
@@ -847,6 +857,7 @@ class PolicyRunner:
             self.generation = self.lab.generation
             self.task = task
             self.planning_pause = pause
+            self.replan_steps = replan
             self.started = time.monotonic()
             self.last_prediction = self.last_health = self.started
             self.operator_deadline = self.started + 2
@@ -955,6 +966,7 @@ class PolicyRunner:
                             ) from None
                         time.sleep(0.02)
             self._reset_policy()
+            age = 0  # Steps carried out from the current plan.
             deadline, due = time.monotonic() + duration, time.monotonic()
             while not cancel.is_set() and time.monotonic() < deadline:
                 if generation != self.lab.generation or self.lab.mode != "policy":
@@ -978,6 +990,7 @@ class PolicyRunner:
                 ):
                     raise ValueError("Fresh full-arm encoder observations are unavailable")
                 before = time.monotonic()
+                planned = self.replay == 0  # With no plan left, this step makes a new one.
                 result = self._predict(message, PREDICTION_TIMEOUT_SECONDS)
                 action = result.get("action")
                 if (
@@ -997,6 +1010,12 @@ class PolicyRunner:
                     self.last_prediction = time.monotonic()
                     self.inference_ms = round((self.last_prediction - before) * 1000, 1)
                     self.steps += 1
+                age = 1 if planned else age + 1
+                if self.replay and age >= self.replan_steps:
+                    # The rest of this plan was made from an older look at the scene; drop
+                    # it, so the next step looks at the cameras and plans from where things
+                    # are now.
+                    self._reset_policy()
                 due += 1 / self.model["fps"]
                 cancel.wait(max(0, due - time.monotonic()))
         except Exception as error:

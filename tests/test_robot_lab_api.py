@@ -629,6 +629,7 @@ def test_invalid_guided_recording_settings_never_contact_hardware(tmp_path, chan
         ("policy/preflight", {"camera_index": 0, "cameras": {}}),
         ("policy/preflight", {"camera_index": 0, "allow_planning_pause": "yes"}),
         ("policy/preflight", {"camera_index": 0, "allow_planning_pause": 1}),
+        ("policy/preflight", {"camera_index": 0, "replan_steps": 12}),
         ("policy/preflight", {"camera_index": 0, "cameras": {"front": 0}}),
         ("policy/preflight", {"camera_index": 0, "cameras": {"observation.images.front": 64}}),
         ("policy/preflight", {"camera_index": 0, "cameras": {"observation.images.front": "0"}}),
@@ -716,6 +717,19 @@ def test_policy_catalog_load_and_explicit_start_are_finite_proxy_routes(tmp_path
         ):
             assert client.post("/api/v1/robot-lab/" + path, json=body).status_code == 200
             assert json.loads(calls[-1].content)["allow_planning_pause"] is True
+        # How often the policy plans again reaches the arm unchanged, within a plan's length.
+        response = client.post(
+            "/api/v1/robot-lab/policy/start", json=payload | {"replan_steps": 12}
+        )
+        assert response.status_code == 200
+        assert json.loads(calls[-1].content)["replan_steps"] == 12
+        sent = len(calls)
+        for value in (0, 101, "12", True, 1.5):
+            response = client.post(
+                "/api/v1/robot-lab/policy/start", json=payload | {"replan_steps": value}
+            )
+            assert response.status_code == 422
+        assert len(calls) == sent
         assert client.post("/api/v1/robot-lab/policy/arbitrary", json={}).status_code == 404
     asyncio.run(companion.close())
 

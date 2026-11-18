@@ -24,21 +24,34 @@ const lengthLabel = (seconds: number) => (seconds < 60 ? `${seconds} s` : `${sec
 const countdown = (seconds: number) =>
   seconds < 60 ? `${seconds} s` : `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 const taskKey = 'openjensen.robot-lab.policy-tasks';
+const lookKey = 'openjensen.robot-lab.policy-look-again';
 
-function savedTasks(): Record<string, string> {
+function saved<T>(key: string): Record<string, T> {
   try {
-    const value = JSON.parse(localStorage.getItem(taskKey) ?? '{}');
+    const value = JSON.parse(localStorage.getItem(key) ?? '{}');
     return value && typeof value === 'object' ? value : {};
   } catch {
     return {};
   }
 }
+const savedTasks = () => saved<string>(taskKey);
+
+/**
+ * How often a policy may look at the cameras again, in steps: about every half second, one
+ * second and two seconds, and its whole plan, which is how it was trained to run.
+ */
+function lookAgainSteps(fps: number, plan: number) {
+  const shorter = [0.5, 1, 2].map((seconds) => Math.max(1, Math.round(seconds * fps))).filter((steps) => steps < plan);
+  return [...new Set(shorter), plan];
+}
+const secondsLabel = (steps: number, fps: number) => `${Number((steps / fps).toFixed(1))} s`;
 
 export function RobotLabPolicy({ lab }: { lab: RobotLabState }) {
   const [selected, setSelected] = useState('');
   const [duration, setDuration] = useState(30);
   const [attending, setAttending] = useState(false);
   const [viewCameras, setViewCameras] = useState<Record<string, number>>({});
+  const [lookChoice, setLookChoice] = useState<Record<string, number>>({});
   const [stage, setStage] = useState<Stage | null>(null);
   const [failure, setFailure] = useState<{ stage: Stage; message: string } | null>(null);
   const [finishAt, setFinishAt] = useState<number | null>(null);
@@ -80,6 +93,12 @@ export function RobotLabPolicy({ lab }: { lab: RobotLabState }) {
         )
       : null;
   const camerasReady = views.length > 0 && cameras !== null;
+  // A policy carries out a plan of several steps without looking; a shorter choice makes it
+  // look at the cameras again sooner. Older robot services do not say how long a plan is.
+  const plan = choice?.plan_steps ?? null;
+  const planFps = choice?.fps ?? null;
+  const lookOptions = plan && planFps ? lookAgainSteps(planFps, plan) : [];
+  const lookSteps = lookOptions.includes(lookChoice[selectedId]) ? lookChoice[selectedId] : plan;
   const starting = stage !== null && !running;
   const typeName = (type?: string | null) => (type === 'smolvla' ? 'SmolVLA' : 'ACT');
 
@@ -104,6 +123,12 @@ export function RobotLabPolicy({ lab }: { lab: RobotLabState }) {
     const saved = savedTasks()[selectedId];
     if (saved) setTask(saved);
   }, [selectedId, requiresTask, setTask]);
+  // So is the choice of how often it looks again.
+  useEffect(() => {
+    if (!selectedId) return;
+    const steps = saved<number>(lookKey)[selectedId];
+    if (typeof steps === 'number') setLookChoice((current) => ({ ...current, [selectedId]: steps }));
+  }, [selectedId]);
   useEffect(() => {
     if (!running) return;
     const timer = window.setInterval(() => setNow(Date.now()), 250);
@@ -121,6 +146,15 @@ export function RobotLabPolicy({ lab }: { lab: RobotLabState }) {
     if (other) next[other] = cameras[view];
     if (primaryView && next[primaryView] !== lab.cameraIndex) lab.setCameraIndex(next[primaryView]);
     setViewCameras(next);
+  }
+
+  function chooseLook(steps: number) {
+    setLookChoice((current) => ({ ...current, [selectedId]: steps }));
+    try {
+      localStorage.setItem(lookKey, JSON.stringify({ ...saved<number>(lookKey), [selectedId]: steps }));
+    } catch {
+      /* Remembering the choice is a convenience. */
+    }
   }
 
   function start() {
@@ -188,6 +222,7 @@ export function RobotLabPolicy({ lab }: { lab: RobotLabState }) {
             ...(views.length > 1 ? { cameras } : {}),
             duration_seconds: runSeconds,
             ...(task ? { task } : {}),
+            ...(lookSteps !== null && lookSteps !== plan ? { replan_steps: lookSteps } : {}),
           });
           if (!current()) {
             void robotApi.stop().catch(() => undefined);
@@ -341,6 +376,28 @@ export function RobotLabPolicy({ lab }: { lab: RobotLabState }) {
                       placeholder="What the arm should do, in the words used while recording."
                     />
                   </label>
+                )}
+                {plan && planFps && lookSteps !== null && lookOptions.length > 1 && (
+                  <div className="robot-lab-field">
+                    <span className="robot-lab-field-label">Look at the cameras again every</span>
+                    <Segmented
+                      label="How often the policy looks again"
+                      value={lookSteps}
+                      disabled={lab.busy || lab.active}
+                      onChange={chooseLook}
+                      options={lookOptions.map((steps) => ({
+                        value: steps,
+                        label:
+                          steps === plan
+                            ? `${secondsLabel(steps, planFps)} · as trained`
+                            : secondsLabel(steps, planFps),
+                      }))}
+                    />
+                    <p className="robot-lab-subtle">
+                      Between looks the arm follows its plan blind. Shorter corrects sooner when the object is somewhere
+                      new.
+                    </p>
+                  </div>
                 )}
                 <div className="robot-lab-field">
                   <span className="robot-lab-field-label">Run for</span>
