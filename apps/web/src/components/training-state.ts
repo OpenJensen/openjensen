@@ -401,6 +401,11 @@ export function useTrainingPanel({
     if (timingFamily && timing)
       setTemporalDrafts((previous) => ({ ...previous, [timingFamily]: { ...timing, ...change } }));
   }
+  // LeRobot's own trainer varies the training frames: ACT, and SmolVLA trained in full.
+  const augmentationSupported =
+    !resumeId &&
+    selectedModels.length > 0 &&
+    selectedModels.every((item) => methodFor(item) === 'full' && (item.backend === 'lerobot' || item.id === 'smolvla'));
   const availableMethods = (options.data?.training_methods ?? []).filter((item) => model?.methods.includes(item.id));
   const trainingMethod =
     availableMethods.find((item) => item.id === method)?.id ??
@@ -635,6 +640,8 @@ export function useTrainingPanel({
           eval_every: evaluationInterval(recipe),
           save_every: checkpointInterval,
           ...temporalRecipe(timingFamily, timing),
+          // Sent only when chosen, so recipes and workers that predate it are unchanged.
+          ...(augmentationSupported && recipe.imageAugmentation ? { image_augmentation: true } : {}),
         };
       }
       if (!resumeId && selectedDatasets.length > 1) {
@@ -852,6 +859,7 @@ export function useTrainingPanel({
   return {
     accumulationIssue,
     accumulationSupported,
+    augmentationSupported,
     active,
     activeCameraKeys,
     activeDataset,

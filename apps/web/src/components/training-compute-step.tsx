@@ -4,6 +4,7 @@ import { checkpointTiming, defaultTemporal, temporalFamily } from '@/lib/trainin
 import { trainingMemory } from '@/lib/training-memory';
 import { TrainingHelp } from './training-help';
 import { TrainingAdvancedSettings } from './training-advanced-settings';
+import { Segmented } from './ui/choice';
 import { defaultBatchSize, defaultRecipe } from '@/lib/training-recipe';
 import { number } from './training-shared';
 import { datasetName } from '@/lib/dataset-names';
@@ -21,6 +22,7 @@ export function TrainingComputeStep({
   const {
     accumulationIssue,
     accumulationSupported,
+    augmentationSupported,
     activeCameraKeys,
     activeDataset,
     activeMethod,
@@ -275,6 +277,25 @@ export function TrainingComputeStep({
             })),
           ]}
         />
+      )}
+      {augmentationSupported && (
+        <div className="choice-field training-augmentation">
+          <span>Image augmentation</span>
+          <Segmented
+            label="Image augmentation"
+            value={recipe.imageAugmentation ? 'on' : 'off'}
+            disabled={busy}
+            onChange={(value) => update('imageAugmentation', value === 'on')}
+            options={[
+              { value: 'off', label: 'Off' },
+              { value: 'on', label: 'On' },
+            ]}
+          />
+          <p className="training-augmentation-help">
+            Varies brightness, contrast, colour, sharpness and slight shifts of the training pictures, so a small
+            dataset is less likely to be memorized. Validation pictures stay unchanged.
+          </p>
+        </div>
       )}
       <details className="training-disclosure">
         <summary>Advanced settings</summary>
