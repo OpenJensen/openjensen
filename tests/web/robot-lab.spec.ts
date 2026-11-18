@@ -117,6 +117,8 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin', 
     policyKind: 'act',
     policyViews: ['observation.images.front'],
     policyPlanningMs: 20,
+    // Steps of one plan, as a robot service reports it; null stands for an older service.
+    policyPlanSteps: 100 as number | null,
     policyCheckFailure: '',
     projectModels: [] as any[],
     removedDevices: [] as any[],
@@ -193,6 +195,7 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin', 
                 camera_key: 'observation.images.front',
                 camera_keys: state.policyViews,
                 image_shape: [3, 480, 640],
+                ...(state.policyPlanSteps ? { plan_steps: state.policyPlanSteps } : {}),
               },
             ],
             runtime: { configured: true, device: 'cpu', message: 'Configured' },
@@ -3147,6 +3150,47 @@ test('a policy that plans slowly runs straight away while the arm holds between 
   expect(writes(state, '/policy/start').at(-1)?.body).not.toHaveProperty('allow_planning_pause');
   await expect(page.getByRole('button', { name: 'Allow planning pauses and start', exact: true })).toHaveCount(0);
   await page.screenshot({ path: testInfo.outputPath('run-policy-slow-planner.png'), fullPage: true });
+  await page.getByRole('button', { name: 'Stop arm and disable torque' }).click();
+  expect(state.errors).toEqual([]);
+});
+
+test('the operator chooses how often a policy looks at the cameras again, and the choice is kept', async ({ page }) => {
+  const state = await fixture(page, true, 'Darwin', false);
+  await openTab(page, 'Run policy');
+  const looks = choices(page, 'How often the policy looks again');
+  // A 13 FPS policy with a 100-step plan: half a second, one, two, and its whole plan.
+  await expect(looks.getByRole('radio')).toHaveText(['0.5 s', '1 s', '2 s', '7.7 s · as trained']);
+  await expect(chosen(page, 'How often the policy looks again')).toHaveText('7.7 s · as trained');
+  await atTheArm(page).check();
+  await startRun(page).click();
+  await expect.poll(() => writes(state, '/policy/start').length).toBe(1);
+  // Running as trained sends nothing new, so an older robot service accepts the run.
+  expect(writes(state, '/policy/start').at(-1)?.body).not.toHaveProperty('replan_steps');
+  await page.getByRole('button', { name: 'Stop arm and disable torque' }).click();
+
+  await choice(page, 'How often the policy looks again', 26).click();
+  await startRun(page).click();
+  await expect.poll(() => writes(state, '/policy/start').length).toBe(2);
+  expect(writes(state, '/policy/start').at(-1)?.body.replan_steps).toBe(26);
+  await page.getByRole('button', { name: 'Stop arm and disable torque' }).click();
+
+  await page.reload();
+  await openTab(page, 'Run policy');
+  await expect(chosen(page, 'How often the policy looks again')).toHaveText('2 s');
+  expect(state.errors).toEqual([]);
+});
+
+test('a robot service that does not say how long a plan is shows no choice and sends none', async ({ page }) => {
+  const state = await fixture(page, true, 'Darwin', false);
+  state.policyPlanSteps = null;
+  await page.reload();
+  await openTab(page, 'Run policy');
+  await expect(choices(page, 'Policy run duration')).toBeVisible();
+  await expect(choices(page, 'How often the policy looks again')).toHaveCount(0);
+  await atTheArm(page).check();
+  await startRun(page).click();
+  await expect.poll(() => writes(state, '/policy/start').length).toBe(1);
+  expect(writes(state, '/policy/start').at(-1)?.body).not.toHaveProperty('replan_steps');
   await page.getByRole('button', { name: 'Stop arm and disable torque' }).click();
   expect(state.errors).toEqual([]);
 });
