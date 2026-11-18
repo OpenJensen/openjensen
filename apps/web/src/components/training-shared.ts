@@ -56,6 +56,7 @@ export function savedRecipe(saved: Record<string, unknown>): Recipe {
         ? saved.validationFraction
         : defaultRecipe.validationFraction,
     evalEvery: positiveInteger(saved.evalEvery) ? saved.evalEvery : defaultRecipe.evalEvery,
+    imageAugmentation: saved.imageAugmentation === true,
   };
 }
 
