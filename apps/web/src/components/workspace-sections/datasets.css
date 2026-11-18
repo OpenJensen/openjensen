@@ -47,7 +47,7 @@
 .dataset-readiness-copy p {
   margin: 0;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.5;
 }
 .dataset-readiness-actions {
@@ -62,14 +62,11 @@
 }
 
 /* Clean this dataset: check, review episode by episode, save the rest. */
+/* A panel like the Training readiness card above it. */
 .dataset-cleaning {
   display: grid;
-  gap: 12px;
-  margin: 16px 0;
-  padding: 16px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--surface);
+  gap: 14px;
+  margin-bottom: 16px;
 }
 .dataset-cleaning-head {
   display: flex;
@@ -80,10 +77,13 @@
 }
 .dataset-cleaning-head h3 {
   margin: 0;
+  font-size: 16px;
 }
 .dataset-cleaning-head p {
   margin: 4px 0 0;
   color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
 }
 .dataset-cleaning-progress {
   display: flex;
@@ -142,7 +142,9 @@
   height: auto;
   border-radius: 6px;
 }
-.episode-review.dropped {
+/* A dropped episode fades; its Keep button stays at full strength. */
+.episode-review.dropped > img,
+.episode-review.dropped .episode-review-text {
   opacity: 0.55;
 }
 .episode-review-text {
@@ -163,17 +165,25 @@
   gap: 12px;
   align-items: end;
 }
+.dataset-cleaning-save label,
+.dataset-cleaning-save .field-label {
+  font-size: 14px;
+  font-weight: 500;
+}
 .dataset-cleaning-save label {
   display: grid;
   flex: 1 1 260px;
-  gap: 4px;
+  gap: 6px;
+}
+.dataset-cleaning-save .field-label {
+  margin: 0;
 }
 .dataset-cleaning-save input {
   width: 100%;
 }
 .dataset-cleaning-save > div {
   display: grid;
-  gap: 4px;
+  gap: 6px;
 }
 .waypoint-row {
   display: flex;

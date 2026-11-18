@@ -38,7 +38,7 @@ export function DatasetCleaning({ entry }: { entry: LibraryDataset }) {
   });
 
   return (
-    <section className="dataset-cleaning" aria-labelledby="cleaning-title">
+    <section className="panel dataset-cleaning" aria-labelledby="cleaning-title">
       <div className="dataset-cleaning-head">
         <div>
           <h3 id="cleaning-title">Clean this dataset</h3>
