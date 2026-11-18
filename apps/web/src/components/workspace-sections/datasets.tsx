@@ -7,6 +7,7 @@ import { isAugmentationSource } from '@/lib/augmentation-source';
 import { Icon } from '@/components/icon';
 import { DatasetExplorer, FeatureChips } from '@/components/dataset-explorer';
 import { DatasetLibrary, DatasetLabeling, LocalDatasetImport } from '@/components/dataset-library';
+import { DatasetCleaning } from '@/components/dataset-cleaning';
 import { datasetLibrary, type LibraryDataset } from '@/lib/dataset-library';
 import { useDurableSubmission } from '@/lib/durable-submission';
 import { intakeAcknowledgement, validatedProjectHistory } from '@/lib/dataset-submission';
@@ -622,6 +623,9 @@ export default function DatasetsSection() {
                 setDatasetView('inspection');
               }}
             />
+            {selectedLibrary.status === 'ready' && (
+              <DatasetCleaning key={`cleaning-${selectedLibrary.id}`} entry={selectedLibrary} />
+            )}
             <DatasetLabeling key={selectedLibrary.id} entry={selectedLibrary} />
           </>
         )}

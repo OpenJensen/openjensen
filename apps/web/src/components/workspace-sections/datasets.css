@@ -60,3 +60,131 @@
 .dataset-readiness > [role='alert'] {
   flex-basis: 100%;
 }
+
+/* Clean this dataset: check, review episode by episode, save the rest. */
+.dataset-cleaning {
+  display: grid;
+  gap: 12px;
+  margin: 16px 0;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.dataset-cleaning-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+}
+.dataset-cleaning-head h3 {
+  margin: 0;
+}
+.dataset-cleaning-head p {
+  margin: 4px 0 0;
+  color: var(--muted);
+}
+.dataset-cleaning-progress {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  color: var(--muted);
+}
+.dataset-cleaning-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.dataset-cleaning-cost {
+  color: var(--muted);
+  font-size: 14px;
+}
+.verdict-chip {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.verdict-good {
+  color: var(--success);
+  background: var(--success-bg);
+}
+.verdict-warn {
+  color: var(--warning);
+  background: var(--warning-bg);
+}
+.verdict-bad {
+  color: var(--error);
+  background: var(--error-bg);
+}
+.episode-review-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.episode-review {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 12px;
+  align-items: center;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.episode-review img {
+  grid-column: 1 / -1;
+  width: 100%;
+  height: auto;
+  border-radius: 6px;
+}
+.episode-review.dropped {
+  opacity: 0.55;
+}
+.episode-review-text {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  align-items: center;
+  min-width: 0;
+}
+.episode-review-text p {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--muted);
+}
+.dataset-cleaning-save {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: end;
+}
+.dataset-cleaning-save label {
+  display: grid;
+  flex: 1 1 260px;
+  gap: 4px;
+}
+.dataset-cleaning-save input {
+  width: 100%;
+}
+.dataset-cleaning-save > div {
+  display: grid;
+  gap: 4px;
+}
+.waypoint-row {
+  display: flex;
+  flex-basis: 100%;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-size: 14px;
+}
+.waypoint.reached {
+  color: var(--success);
+}
+.waypoint.missed {
+  color: var(--muted);
+}
