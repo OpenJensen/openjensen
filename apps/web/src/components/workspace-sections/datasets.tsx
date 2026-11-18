@@ -622,7 +622,7 @@ export default function DatasetsSection() {
                 setDatasetView('inspection');
               }}
             />
-            <DatasetLabeling key={selectedLibrary.id} entry={selectedLibrary} />
+            <DatasetLabeling key={selectedLibrary.id} entry={selectedLibrary} onOpen={openDataset} />
           </>
         )}
         <div className="inspection-view" hidden={datasetView !== 'inspection'}>

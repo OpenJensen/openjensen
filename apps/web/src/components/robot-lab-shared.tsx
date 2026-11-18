@@ -256,11 +256,15 @@ export function DatasetRow({
   canImport,
   pending,
   onImport,
+  onCompact,
+  compacting = false,
 }: {
   dataset: RobotDataset;
   canImport: boolean;
   pending: boolean;
   onImport: () => void;
+  onCompact?: () => void;
+  compacting?: boolean;
 }) {
   return (
     <article className="robot-lab-dataset">
@@ -269,15 +273,31 @@ export function DatasetRow({
           <h3>{dataset.id}</h3>
           <p>{dataset.task}</p>
         </div>
-        <button className="secondary-button" disabled={!canImport || !dataset.finalized || pending} onClick={onImport}>
-          {pending
-            ? 'Copying to project…'
-            : dataset.finalized
-              ? 'Add to project'
-              : dataset.abandoned
-                ? 'Closed · files retained'
-                : 'Not finalized'}
-        </button>
+        <div className="robot-lab-actions">
+          {dataset.finalized && onCompact && (
+            <button
+              className="secondary-button"
+              disabled={!canImport || pending || compacting}
+              title="Create a smaller video copy with every frame and robot sample; keep the original."
+              onClick={onCompact}
+            >
+              {compacting ? 'Copying for compaction…' : 'Compact & add to project'}
+            </button>
+          )}
+          <button
+            className="secondary-button"
+            disabled={!canImport || !dataset.finalized || pending || compacting}
+            onClick={onImport}
+          >
+            {pending
+              ? 'Copying to project…'
+              : dataset.finalized
+                ? 'Add to project'
+                : dataset.abandoned
+                  ? 'Closed · files retained'
+                  : 'Not finalized'}
+          </button>
+        </div>
       </div>
       <div className="robot-lab-dataset-meta">
         <span>{dataset.episodes} episodes</span>

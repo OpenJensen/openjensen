@@ -812,6 +812,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/datasets/{ident}/compact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Compact Dataset */
+        post: operations["compact_dataset_api_v1_datasets__ident__compact_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/datasets/{ident}/convert": {
         parameters: {
             query?: never;
@@ -9072,6 +9089,37 @@ export interface operations {
             };
         };
     };
+    compact_dataset_api_v1_datasets__ident__compact_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ident: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     convert_dataset_api_v1_datasets__ident__convert_post: {
         parameters: {
             query?: never;
@@ -11100,7 +11148,9 @@ export interface operations {
     };
     import_recording_api_v1_projects__project_id__robot_lab_datasets__dataset_id__import_post: {
         parameters: {
-            query?: never;
+            query?: {
+                compact?: boolean;
+            };
             header?: never;
             path: {
                 project_id: string;

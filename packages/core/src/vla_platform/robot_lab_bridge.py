@@ -12,7 +12,6 @@ from urllib.parse import urlsplit
 import httpx
 
 from vla_platform.datasets.library import (
-    MAX_BYTES,
     MAX_FILES,
     LibraryError,
     canonical_name,
@@ -237,8 +236,6 @@ class RobotLabBridge:
             names.add(key)
             total += size
             inventory.append({"path": path, "size": size, "sha256": checksum})
-        if total > MAX_BYTES:
-            raise RobotLabError("Local recording imports support at most 2 GiB.", 413)
         if value.get("total_bytes") != total:
             raise RobotLabError("The recording manifest byte count is inconsistent.")
         if "meta/info.json" not in {item["path"] for item in inventory}:
@@ -282,9 +279,32 @@ class RobotLabBridge:
                 "The recording transfer was interrupted. Retry to resume it."
             ) from None
 
-    async def import_dataset(self, project_id, ident, library):
+    async def import_dataset(self, project_id, ident, library, *, include_profiles=False):
         async with self.import_lock:
             manifest, inventory, fingerprint = await self.manifest(ident)
+            profile_path = "openjensen/calibration-profiles.json"
+            profile_bytes = None
+            if include_profiles and profile_path not in {item["path"] for item in inventory}:
+                bundle = await self.request("GET", "calibration/bundle")
+                if (
+                    not isinstance(bundle, dict)
+                    or bundle.get("format") != "openjensen.calibration.bundle"
+                ):
+                    raise RobotLabError(
+                        "Update Robot Lab to include the saved calibration profiles."
+                    )
+                profile_bytes = json.dumps(bundle, sort_keys=True, allow_nan=False).encode()
+                inventory.append(
+                    {
+                        "path": profile_path,
+                        "size": len(profile_bytes),
+                        "sha256": hashlib.sha256(profile_bytes).hexdigest(),
+                    }
+                )
+                inventory.sort(key=lambda item: item["path"])
+                fingerprint = hashlib.sha256(
+                    json.dumps(inventory, sort_keys=True, separators=(",", ":")).encode()
+                ).hexdigest()
             # Receipts live alongside the upload, so a failed transfer can resume without
             # publishing a half-recording or replacing the Mac's original files.
             existing = None
@@ -315,7 +335,15 @@ class RobotLabBridge:
                     if uploaded[item["path"]] != item["size"]:
                         raise RobotLabError("Saved transfer inventory is inconsistent.")
                     continue
-                await library.upload(existing["id"], item["path"], self.file_stream(ident, item))
+                if item["path"] == profile_path and profile_bytes is not None:
+
+                    async def profile_stream():
+                        yield profile_bytes
+
+                    stream = profile_stream()
+                else:
+                    stream = self.file_stream(ident, item)
+                await library.upload(existing["id"], item["path"], stream)
             accepted = await library.finalize(existing["id"])
             if accepted["status"] != "ready":
                 raise RobotLabError(

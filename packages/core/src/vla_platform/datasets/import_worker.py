@@ -44,8 +44,8 @@ def inventory(root):
         if not path.is_file():
             raise ValueError("Only regular dataset files are supported")
         total += path.stat().st_size
-        if total > MAX_BYTES or len(files) >= MAX_FILES:
-            raise ValueError("Dataset exceeds 2 GiB or 4096 files")
+        if len(files) >= MAX_FILES:
+            raise ValueError("Dataset exceeds 4096 files")
         digest = hashlib.sha256()
         with path.open("rb") as handle:
             for chunk in iter(lambda: handle.read(1024 * 1024), b""):
@@ -54,7 +54,7 @@ def inventory(root):
     return hashlib.sha256(json.dumps(files, separators=(",", ":")).encode()).hexdigest(), files
 
 
-def tabular(path, *, batch_size=256):
+def tabular(path, *, batch_size=256, streaming=False):
     if path.suffix == ".csv":
         with path.open(newline="") as handle:
             for row in csv.DictReader(handle):
@@ -66,16 +66,27 @@ def tabular(path, *, batch_size=256):
         import pyarrow.parquet as pq
 
         table = pq.ParquetFile(path, arrow_extensions_enabled=False)
-        decoded = sum(
-            table.metadata.row_group(i).total_byte_size
-            for i in range(table.metadata.num_row_groups)
-        )
-        if decoded > 512 * 1024**2:
-            raise ValueError("Parquet table exceeds the 512 MiB decoded limit")
         if table.metadata.num_rows > MAX_ROWS:
             raise ValueError("Table exceeds 100,000 rows")
-        for batch in table.iter_batches(batch_size=batch_size, use_threads=False):
-            yield from batch.to_pylist()
+        if streaming:
+            # Recordings can hold gigabytes of PNG bytes across many small row groups.
+            # Decode only one bounded group at a time for previews, never the whole file.
+            for index in range(table.metadata.num_row_groups):
+                if table.metadata.row_group(index).total_byte_size > 512 * 1024**2:
+                    raise ValueError("Parquet row group exceeds the 512 MiB decoded limit")
+                for batch in table.iter_batches(
+                    batch_size=batch_size, row_groups=[index], use_threads=False
+                ):
+                    yield from batch.to_pylist()
+        else:
+            decoded = sum(
+                table.metadata.row_group(i).total_byte_size
+                for i in range(table.metadata.num_row_groups)
+            )
+            if decoded > 512 * 1024**2:
+                raise ValueError("Parquet table exceeds the 512 MiB decoded limit")
+            for batch in table.iter_batches(batch_size=batch_size, use_threads=False):
+                yield from batch.to_pylist()
     else:
         with path.open() as handle:
             for index, line in enumerate(handle):
@@ -1014,7 +1025,7 @@ def merge(roots, output):
     }
 
 
-def preview_lerobot(root, output):
+def preview_lerobot(root, output, *, cover_only=False):
     """Bounded recorded-image sequences; video sources keep their thumbnail path."""
     import io
 
@@ -1033,9 +1044,19 @@ def preview_lerobot(root, output):
     metadata_sha256 = hashlib.sha256(metadata).hexdigest()
     samples, total, truncated = [], 0, False
     paths = sorted((root / "data").rglob("*.parquet"))
+
+    def publish():
+        data = json.dumps(samples, allow_nan=False)
+        temporary = output.parent / (".samples-" + uuid.uuid4().hex)
+        try:
+            temporary.write_text(data)
+            temporary.replace(output.parent / "samples.json")
+        finally:
+            temporary.unlink(missing_ok=True)
+
     for path in paths[:64]:
         safe(root, path.relative_to(root).as_posix())
-        for row in tabular(path, batch_size=1):
+        for row in tabular(path, batch_size=1, streaming=True):
             for key in cameras:
                 if len(samples) >= 2400:
                     truncated = True
@@ -1072,18 +1093,22 @@ def preview_lerobot(root, output):
                         "metadata_sha256": metadata_sha256,
                     }
                 )
+            # Publish the first complete frame before processing a longer sequence.
+            # A later error or timeout must not erase an already usable card thumbnail.
+            if samples and (len(samples) == len(cameras) or len(samples) % 128 == 0):
+                publish()
+            if cover_only:
+                if samples and info.get("total_frames", 0) > 1:
+                    samples[-1]["preview_truncated"] = True
+                publish()
+                return {"samples": len(samples), "bytes": total, "truncated": True}
             if truncated:
                 break
         if truncated:
             break
     if samples and (truncated or len(paths) > 64):
         samples[-1]["preview_truncated"] = True
-    temporary = output.parent / (".samples-" + uuid.uuid4().hex)
-    try:
-        temporary.write_text(json.dumps(samples, allow_nan=False))
-        temporary.replace(output.parent / "samples.json")
-    finally:
-        temporary.unlink(missing_ok=True)
+    publish()
     return {"samples": len(samples), "bytes": total, "truncated": truncated or len(paths) > 64}
 
 
@@ -1188,16 +1213,29 @@ def demo(root, episodes=2):
 
 
 def main():
+    request = json.loads(sys.stdin.buffer.read(1024**2))
     if sys.platform != "win32":
         import resource
 
         resource.setrlimit(resource.RLIMIT_NOFILE, (128, 128))
-        resource.setrlimit(resource.RLIMIT_CPU, (300, 300))
-        resource.setrlimit(resource.RLIMIT_FSIZE, (MAX_BYTES, MAX_BYTES))
+        seconds = 1800 if request["operation"] == "compact" else 300
+        resource.setrlimit(resource.RLIMIT_CPU, (seconds, seconds))
+        if request["operation"] != "compact":
+            resource.setrlimit(resource.RLIMIT_FSIZE, (MAX_BYTES, MAX_BYTES))
         if sys.platform == "linux":
             resource.setrlimit(resource.RLIMIT_AS, (3 * 1024**3, 3 * 1024**3))
-    request = json.loads(sys.stdin.buffer.read(1024**2))
     op = request["operation"]
+    if op == "compact":
+        import runpy
+
+        module = runpy.run_path(str(Path(__file__).with_name("compact.py")))
+        root, output = Path(request["root"]), Path(request["output"])
+        inventory(root)
+        receipt = module["compact"](
+            root, output, progress=output.parent / "compaction-progress.json"
+        )
+        print(json.dumps({"detection": detect(output), "compaction": receipt}, allow_nan=False))
+        return
     if op == "merge":
         print(
             json.dumps(
@@ -1212,7 +1250,9 @@ def main():
     elif op == "demo":
         result = demo(root)
     elif op == "preview":
-        result = preview_lerobot(root, Path(request["output"]))
+        result = preview_lerobot(
+            root, Path(request["output"]), cover_only=request.get("cover_only", False)
+        )
     else:
         detected = detect(root)
         if detected["sha256"] != request["sha256"]:

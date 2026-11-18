@@ -115,6 +115,7 @@ class DatasetLibrary:
         self.root = (data_dir / "dataset-library").resolve()
         self.root.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.tasks = {}
+        self.preview_tasks = {}
         self.lock = asyncio.Lock()
         self.worker_limit = asyncio.Semaphore(1)
         for value in self.records():
@@ -163,7 +164,7 @@ class DatasetLibrary:
         if (
             type(value.get("total_bytes")) is not int
             or value["total_bytes"] != sum(files.values())
-            or not 0 <= value["total_bytes"] <= MAX_BYTES
+            or value["total_bytes"] < 0
             or type(value.get("annotation_revision")) is not int
             or value["annotation_revision"] < 0
         ):
@@ -345,6 +346,28 @@ class DatasetLibrary:
             for k, v in value.items()
             if k not in ("normalized", "files") and not k.startswith("_")
         }
+        if (
+            value["status"] == "ready"
+            and (value.get("detection") or {}).get("format") == "lerobot_v3"
+        ):
+            try:
+                info = json.loads(
+                    contained(
+                        self.resolve(value["id"], value["project_id"]), "meta/info.json"
+                    ).read_bytes()
+                )
+                result["can_compact"] = any(
+                    feature.get("dtype") == "image" for feature in info["features"].values()
+                )
+            except OSError, ValueError, KeyError:
+                pass
+        if value.get("compacted_from") and value["status"] == "converting":
+            try:
+                result["compaction_progress"] = json.loads(
+                    (self.directory(value["id"]) / "compaction-progress.json").read_bytes()
+                )
+            except OSError, ValueError:
+                pass
         result["uploaded_files"] = len(value["files"]) if "files" in value else None
         result["can_discard"] = value["status"] == "uploading" and not (
             value.get("detection") or value.get("normalized") or value.get("converted")
@@ -395,8 +418,6 @@ class DatasetLibrary:
                 with os.fdopen(descriptor, "wb") as handle:
                     async for chunk in stream:
                         size += len(chunk)
-                        if size + value["total_bytes"] > MAX_BYTES:
-                            raise LibraryError("Local uploads support at most 2 GiB", 413)
                         if shutil.disk_usage(self.root).free < DISK_HEADROOM + len(chunk):
                             raise LibraryError("Not enough free storage for this upload", 507)
                         handle.write(chunk)
@@ -648,12 +669,6 @@ class DatasetLibrary:
         sources = [self.get(ident, project_id) for ident in idents]
         roots = [self.resolve(ident, project_id) for ident in idents]
         total = sum(value["total_bytes"] for value in sources)
-        if total > MAX_BYTES:
-            raise LibraryError(
-                f"Together these datasets hold {total / 1024**3:.1f} GiB; "
-                f"a saved dataset holds at most {MAX_BYTES // 1024**3} GiB. Combine fewer.",
-                413,
-            )
         if shutil.disk_usage(self.root).free < total + DISK_HEADROOM:
             raise LibraryError("Not enough free storage to combine these datasets", 507)
         created = self.begin(project_id, name)
@@ -718,6 +733,105 @@ class DatasetLibrary:
         except BaseException:
             shutil.rmtree(self.directory(value["id"]))
             raise
+
+    async def start_compaction(self, ident):
+        """Make a separate video-backed copy; repeat clicks reuse the same work."""
+        async with self.lock:
+            original = self.get(ident)
+            source = self.resolve(ident, original["project_id"])
+            features = json.loads(contained(source, "meta/info.json").read_bytes()).get(
+                "features", {}
+            )
+            if not any(feature.get("dtype") == "image" for feature in features.values()):
+                raise LibraryError("This dataset already stores its camera images as videos")
+            previous = next(
+                (
+                    item
+                    for item in self.records()
+                    if item.get("compacted_from") == ident
+                    and item.get("source_sha256") == original["detection"]["sha256"]
+                    and item["status"] in {"converting", "ready"}
+                ),
+                None,
+            )
+            if previous:
+                return self.public(previous)
+            if shutil.disk_usage(self.root).free < DISK_HEADROOM:
+                raise LibraryError("Not enough free storage to compact this dataset", 507)
+            created = self.begin(original["project_id"], (original["name"][:90] + " compact"))
+            value = self.get(created["id"])
+            value.update(
+                status="converting",
+                detection=original["detection"],
+                compacted_from=ident,
+                source_sha256=original["detection"]["sha256"],
+                annotations=json.loads(json.dumps(original["annotations"])),
+                annotation_revision=original["annotation_revision"],
+                conversion={"mode": "compact"},
+            )
+            value["_conversion_job_id"] = self.operations.create(
+                value,
+                "dataset.convert",
+                {"conversion": {"mode": "compact"}, "source_sha256": value["source_sha256"]},
+            )["id"]
+            self.save(value)
+            task = asyncio.create_task(self.compact_copy(value["id"], source))
+            self.tasks[value["id"]] = task
+            task.add_done_callback(lambda finished: self.tasks.pop(value["id"], None))
+            return self.public(value)
+
+    async def compact_copy(self, ident, source):
+        value = self.get(ident)
+        output = self.directory(ident) / "compacted.pending"
+        try:
+            result = await self.worker(
+                {"operation": "compact", "root": str(source), "output": str(output)}, timeout=1800
+            )
+            output.rename(self.directory(ident) / "compacted")
+            destination = self.directory(ident) / "compacted"
+            value.update(
+                status="ready",
+                normalized="compacted",
+                source_directory="compacted",
+                detection=result["detection"],
+                compaction=result["compaction"],
+                files={
+                    p.relative_to(destination).as_posix(): p.stat().st_size
+                    for p in destination.rglob("*")
+                    if p.is_file()
+                },
+                error=None,
+            )
+            value["total_bytes"] = sum(value["files"].values())
+            try:
+                await self.worker(
+                    {
+                        "operation": "preview",
+                        "root": str(destination),
+                        "output": str(self.directory(ident) / "previews"),
+                    },
+                    60,
+                )
+            except LibraryError as exc:
+                value["preview_note"] = str(exc)
+        except asyncio.CancelledError:
+            value.update(
+                status="failed", error="Compaction interrupted. Original dataset preserved."
+            )
+            self.save(
+                value,
+                operation_status="cancelled"
+                if ident in self._conversion_cancels
+                else "interrupted",
+            )
+            raise
+        except (LibraryError, OSError, ValueError) as exc:
+            value.update(status="failed", error=str(exc))
+        finally:
+            if output.exists():
+                shutil.rmtree(output)
+            self.save(value)
+            self._conversion_cancels.discard(ident)
 
     async def start_conversion(self, ident, settings):
         async with self.lock:
@@ -815,6 +929,51 @@ class DatasetLibrary:
         if value["status"] != "ready" or not value["normalized"]:
             raise LibraryError("Convert the dataset before inspecting or training")
         return contained(self.directory(ident), value["normalized"])
+
+    async def ensure_samples(self, ident):
+        """Repair missing thumbnail caches for saved recordings when they are viewed."""
+        value = self.get(ident)
+        try:
+            cached = self.samples(ident)
+            if cached and all(
+                contained(self.directory(ident) / "previews", sample["path"]).is_file()
+                for sample in cached
+            ):
+                return cached
+        except OSError, ValueError, KeyError, TypeError:
+            pass
+        if (
+            value["status"] != "ready"
+            or (value.get("detection") or {}).get("format") != "lerobot_v3"
+            or not (value.get("detection") or {}).get("cameras")
+        ):
+            return []
+        if self._closing:
+            raise LibraryError("Dataset previews are stopping", 503)
+        if ident not in self.preview_tasks:
+
+            async def render():
+                await self.worker(
+                    {
+                        "operation": "preview",
+                        "root": str(self.resolve(ident, value["project_id"])),
+                        "output": str(self.directory(ident) / "previews"),
+                        "cover_only": True,
+                    },
+                    20,
+                )
+                return self.samples(ident)
+
+            task = asyncio.create_task(render())
+            self.preview_tasks[ident] = task
+
+            def finished(task):
+                self.preview_tasks.pop(ident, None)
+                if not task.cancelled():
+                    task.exception()
+
+            task.add_done_callback(finished)
+        return await asyncio.shield(self.preview_tasks[ident])
 
     def samples(self, ident):
         path = self.directory(ident) / "samples.json"
@@ -971,6 +1130,10 @@ class DatasetLibrary:
 
     async def close(self):
         self._closing = True
+        previews = list(self.preview_tasks.values())
+        for task in previews:
+            task.cancel()
+        await asyncio.gather(*previews, return_exceptions=True)
         owned = dict(self.tasks)
         for task in owned.values():
             task.cancel()

@@ -646,6 +646,10 @@ export function RobotLabRecord({ lab }: { lab: RobotLabState }) {
         <hr className="robot-lab-divider" />
         <div>
           <h3>Datasets on the robot computer</h3>
+          <p className="robot-lab-subtle">
+            Compact a recording into a smaller video copy with its saved calibration profiles. Originals stay on this
+            computer.
+          </p>
         </div>
         {datasets.error && (
           <p className="robot-lab-subtle" role="alert">
@@ -665,6 +669,19 @@ export function RobotLabRecord({ lab }: { lab: RobotLabState }) {
                 dataset={dataset}
                 canImport={canAct && !!projectId}
                 pending={pending === `Imported ${dataset.id} into this project.`}
+                compacting={pending === 'Compacting ' + dataset.id + ' in this project.'}
+                onCompact={() => {
+                  const owner = projectId;
+                  void perform(
+                    'Compacting ' + dataset.id + ' in this project.',
+                    () => importRobotDataset(owner, dataset.id, true),
+                    (result) => {
+                      setImported({ dataset: dataset.id, projectId: owner, id: result.id });
+                      void client.invalidateQueries({ queryKey: ['datasets', owner] });
+                      void client.invalidateQueries({ queryKey: ['jobs', owner] });
+                    },
+                  );
+                }}
                 onImport={() => {
                   const owner = projectId;
                   void perform(

@@ -120,10 +120,14 @@ async def convert_dataset(ident: str, payload: Conversion, library: LibraryDep):
     return await library.start_conversion(ident, payload.model_dump())
 
 
+@router.post("/datasets/{ident}/compact", status_code=202)
+async def compact_dataset(ident: str, library: LibraryDep):
+    return await library.start_compaction(ident)
+
+
 @router.get("/datasets/{ident}/samples")
 async def samples(ident: str, library: LibraryDep):
-    library.get(ident)
-    return library.samples(ident)
+    return await library.ensure_samples(ident)
 
 
 @router.get("/datasets/{ident}/preview/{name}")
