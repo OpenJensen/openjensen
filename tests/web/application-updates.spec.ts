@@ -187,6 +187,10 @@ test('accepted update reports progress and reloads once the confirmed version is
   await expect(page.getByRole('button', { name: 'Version and updates' })).toHaveText('v0.1.0');
   expect(writes).toBe(1);
   expect(await page.evaluate(() => sessionStorage.getItem('openjensen-pending-update'))).toBeNull();
+  // Once the new version runs, the finished update is history: no bar stays at 100%.
+  await page.getByRole('button', { name: 'Version and updates' }).click();
+  await expect(page.getByRole('dialog')).toContainText('Installed');
+  await expect(page.getByRole('progressbar', { name: 'Update progress', exact: true })).toHaveCount(0);
 });
 
 test('busy server error stays in the confirmation dialog without claiming an update', async ({ page }) => {
@@ -259,8 +263,14 @@ test('lost acceptance reply reconnects to the same update without submitting twi
     'aria-valuenow',
     '3',
   );
+  // Wait for the reload itself: polling the page while it reloads can land mid-navigation.
+  const reloaded = page.waitForEvent('framenavigated', {
+    predicate: (frame) => frame === page.mainFrame(),
+  });
   complete = true;
-  await expect.poll(() => page.evaluate(() => performance.timeOrigin)).not.toBe(initialOrigin);
+  await reloaded;
+  await page.waitForLoadState('domcontentloaded');
+  expect(await page.evaluate(() => performance.timeOrigin)).not.toBe(initialOrigin);
   await expect(page.getByRole('button', { name: 'Version and updates' })).toHaveText('v0.1.0');
   expect(writes).toBe(1);
   expect(await page.evaluate(() => sessionStorage.getItem('openjensen-pending-update'))).toBeNull();
