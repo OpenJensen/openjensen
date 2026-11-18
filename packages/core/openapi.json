@@ -17761,6 +17761,19 @@
                     "title": "Operator Present",
                     "type": "boolean"
                   },
+                  "replan_steps": {
+                    "anyOf": [
+                      {
+                        "maximum": 100.0,
+                        "minimum": 1.0,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Replan Steps"
+                  },
                   "task": {
                     "default": "",
                     "maxLength": 1000,
