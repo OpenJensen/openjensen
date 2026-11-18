@@ -1193,7 +1193,12 @@
 /* Image augmentation: one visible choice ahead of the advanced settings. */
 .training-augmentation {
   margin-top: 20px;
-  font-size: 15px;
+}
+/* Named like the GPU choice above it. */
+.training-augmentation > span {
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 500;
 }
 .training-augmentation-help {
   margin: 0;
