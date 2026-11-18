@@ -704,6 +704,53 @@ test('local training copies open the jobs-first wizard and retain native model a
   expect(unexpected).toEqual([]);
 });
 
+test('image augmentation is one visible choice for ACT, off unless chosen, and reaches the trainer', async ({
+  page,
+}) => {
+  const { submitted, unexpected } = await workspace(page, 'local-snapshot', false);
+  await page.getByRole('link', { name: 'Datasets', exact: true }).click();
+  await page.getByRole('button', { name: 'Open dataset pick-up-duck', exact: true }).click();
+  await page.getByRole('button', { name: 'Train on this dataset', exact: true }).click();
+  const setup = page.getByRole('navigation', { name: 'Training setup' });
+  await setup.getByRole('button', { name: 'Model', exact: true }).click();
+  // SmolVLA LoRA trains outside LeRobot's own trainer, so it is not offered there.
+  await chooseOnlyModel(page, 'SmolVLA');
+  await setup.getByRole('button', { name: 'Compute', exact: true }).click();
+  const choice = page.getByRole('radiogroup', { name: 'Image augmentation', exact: true });
+  await expect(choice).toHaveCount(0);
+  await setup.getByRole('button', { name: 'Model', exact: true }).click();
+  await chooseOnlyModel(page, 'ACT');
+  await setup.getByRole('button', { name: 'Compute', exact: true }).click();
+  // Visible without opening the advanced settings, and off by default.
+  await expect(choice).toBeVisible();
+  await expect(choice.getByRole('radio', { checked: true })).toHaveText('Off');
+  const help = page.locator('.training-augmentation-help');
+  await expect(help).toContainText('Validation pictures stay unchanged');
+  expect(
+    await help.evaluate((element) => Number.parseFloat(getComputedStyle(element).fontSize)),
+  ).toBeGreaterThanOrEqual(14);
+  await choice.getByRole('radio', { name: 'On', exact: true }).click();
+  await page.getByRole('button', { name: 'Start training', exact: true }).click();
+  await expect.poll(() => submitted.length).toBe(1);
+  expect(submitted[0].training).toMatchObject({ model_id: 'code://lerobot/act', image_augmentation: true });
+  expect(unexpected).toEqual([]);
+});
+
+test('a run with image augmentation off sends no augmentation field', async ({ page }) => {
+  const { submitted, unexpected } = await workspace(page, 'local-snapshot', false);
+  await page.getByRole('link', { name: 'Datasets', exact: true }).click();
+  await page.getByRole('button', { name: 'Open dataset pick-up-duck', exact: true }).click();
+  await page.getByRole('button', { name: 'Train on this dataset', exact: true }).click();
+  const setup = page.getByRole('navigation', { name: 'Training setup' });
+  await setup.getByRole('button', { name: 'Model', exact: true }).click();
+  await chooseOnlyModel(page, 'ACT');
+  await setup.getByRole('button', { name: 'Compute', exact: true }).click();
+  await page.getByRole('button', { name: 'Start training', exact: true }).click();
+  await expect.poll(() => submitted.length).toBe(1);
+  expect(submitted[0].training).not.toHaveProperty('image_augmentation');
+  expect(unexpected).toEqual([]);
+});
+
 test('metadata-only local inspections stay removable but cannot be added or submitted', async ({ page }) => {
   const { submitted, unexpected } = await workspace(page, 'local-unprepared', false);
   await page.getByRole('link', { name: 'Datasets', exact: true }).click();

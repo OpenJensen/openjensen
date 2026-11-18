@@ -6,7 +6,7 @@
 }
 .gpu-picker-label {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 500;
 }
 .gpu-picker-cards {

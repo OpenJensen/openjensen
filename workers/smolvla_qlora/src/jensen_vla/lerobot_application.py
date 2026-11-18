@@ -44,6 +44,7 @@ SHARED_FIELDS = TEMPORAL_FIELDS | {
     "log_every",
     "num_workers",
     "seed",
+    "image_augmentation",
 }
 
 
@@ -79,6 +80,8 @@ def resolve_recipe(job):
         )
     if recipe.get("model_revision") != profile["model_revision"]:
         raise ValueError("Native training must use the catalog's immutable model revision")
+    if type(recipe.get("image_augmentation", False)) is not bool:
+        raise ValueError("image_augmentation must be true or false")
     accumulation_steps(recipe, profile["policy_type"])
     validate_temporal(recipe, profile["policy_type"])
     data = job["dataset"]
@@ -181,6 +184,10 @@ def cli_arguments(
             for key in ["observation.state", *recipe["camera_keys"]]
             if key in features
         }
+    if recipe.get("image_augmentation") is True:
+        # LeRobot varies brightness, contrast, saturation, hue, sharpness and a slight shift
+        # or turn of training frames; held-out validation frames stay unchanged.
+        values["dataset.image_transforms.enable"] = True
     if "learning_rate" in recipe:
         values["policy.optimizer_lr"] = recipe["learning_rate"]
     if "weight_decay" in recipe:
