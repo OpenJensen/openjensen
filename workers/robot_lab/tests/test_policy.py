@@ -760,6 +760,50 @@ class PolicyTests(unittest.TestCase):
         steps = [message for message in sent if not message.get("reset")]
         self.assertTrue(steps and all("jpeg" in message for message in steps))
 
+    def planning_steps(self, extra):
+        """Run a policy that plans 10 actions at a time and return which of its first 12
+        steps looked at the camera and planned."""
+        runner = self.prepare()
+        sent = self.chunked(runner, 10)
+        runner.start(self.run_payload() | extra)
+
+        def control_loop():
+            while self.lab.mode == "policy":
+                try:
+                    runner.apply(dict(self.lab.positions), time.monotonic())
+                except HardwareError as error:
+                    self.lab.stop(str(error))
+                    return
+                time.sleep(0.01)
+
+        threading.Thread(target=control_loop, daemon=True).start()
+        deadline = time.monotonic() + 3
+        while runner.steps < 12 and self.lab.mode == "policy" and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.assertEqual(self.lab.mode, "policy", self.lab.error)
+        self.lab.stop()
+        steps = [message for message in sent if not message.get("reset")][:12]
+        self.assertEqual(len(steps), 12)
+        return runner, [number for number, message in enumerate(steps) if "jpeg" in message]
+
+    def test_a_run_plans_again_as_often_as_the_operator_chose(self):
+        runner, planned = self.planning_steps({"replan_steps": 3})
+        self.assertEqual(planned, [0, 3, 6, 9])
+        self.assertEqual(runner.snapshot()["replan_steps"], 3)
+
+    def test_a_run_follows_each_whole_plan_unless_told_otherwise(self):
+        runner, planned = self.planning_steps({})
+        self.assertEqual(planned, [0, 10])
+        self.assertEqual(runner.snapshot()["replan_steps"], 100)
+
+    def test_a_plan_length_outside_the_trained_plan_is_refused(self):
+        runner = self.prepare()
+        self.assertEqual(runner.catalog()["policies"][0]["plan_steps"], 100)
+        for value in (0, 101, "3", True, 2.0):
+            with self.assertRaisesRegex(ValueError, "every 1–100 steps"):
+                runner.start(self.run_payload() | {"replan_steps": value})
+        self.assertEqual(self.lab.mode, "manual")
+
     def counting_camera(self, rate, age):
         """A camera pool that records frame arrivals, as the real one does: it delivers
         ``rate`` frames a second, and each step is handed a frame ``age`` seconds old."""

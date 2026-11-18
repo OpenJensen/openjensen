@@ -12934,6 +12934,8 @@ export interface operations {
                      * @constant
                      */
                     operator_present: true;
+                    /** Replan Steps */
+                    replan_steps?: number | null;
                     /**
                      * Task
                      * @default

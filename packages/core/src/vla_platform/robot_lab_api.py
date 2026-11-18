@@ -56,6 +56,9 @@ class PolicyStartRequest(BaseModel):
     cameras: PolicyCameras | None = None
     # The operator's choice to let this run pause while the policy plans its actions.
     allow_planning_pause: StrictBool = False
+    # Plan again after this many steps of each plan; the robot service checks it against the
+    # loaded policy's plan. Absent, the policy carries out every plan as it was trained.
+    replan_steps: StrictInt | None = Field(default=None, ge=1, le=100)
     duration_seconds: StrictInt = Field(ge=1, le=600)
     expected_generation: StrictInt
 
