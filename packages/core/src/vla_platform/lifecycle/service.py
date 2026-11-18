@@ -74,6 +74,8 @@ def validate_training_inputs(recipe: dict) -> None:
             )
     if recipe.get("seed", 42) > 2147483647:
         raise ValueError("seed must be between 0 and 2147483647")
+    if type(recipe.get("image_augmentation", False)) is not bool:
+        raise ValueError("image_augmentation must be true or false")
     if recipe.get("warmup_steps", 50) >= recipe.get("steps", 20000):
         raise ValueError("Warmup steps must be less than the total training steps")
     for name in (
@@ -849,6 +851,13 @@ class Lifecycle:
                 )
             if not resuming:
                 validate_temporal(recipe, model.id)
+                if recipe.get("image_augmentation") is True:
+                    from vla_platform.lifecycle.native_profiles import native_profile_for_recipe
+
+                    if native_profile_for_recipe(recipe, request.training_method) is None:
+                        raise ValueError(
+                            "Image augmentation is available for ACT and full SmolVLA training"
+                        )
             if request.operation == "policy.workflow" and model.id == "act":
                 raise ValueError(
                     "Train ACT separately, then export it; its GGUF workflow is unsupported"

@@ -101,6 +101,20 @@ def test_training_defaults_keep_the_gpu_busy():
     assert recipe["num_workers"] == 0 and recipe["eval_every"] == 100
 
 
+def test_image_augmentation_reaches_lerobot_only_when_chosen():
+    recipe, profile = resolve_recipe(request(image_augmentation=True))
+    arguments = cli_arguments(recipe, profile, output="out", dataset_root="dataset")
+    assert "--dataset.image_transforms.enable=true" in arguments
+    # Left out or off, training runs exactly as before: no transform argument at all.
+    for job in (request(), request(image_augmentation=False)):
+        recipe, profile = resolve_recipe(job)
+        arguments = cli_arguments(recipe, profile, output="out", dataset_root="dataset")
+        assert not any(arg.startswith("--dataset.image_transforms") for arg in arguments)
+    for value in ("yes", 1, None):
+        with pytest.raises(ValueError, match="true or false"):
+            resolve_recipe(request(image_augmentation=value))
+
+
 def test_native_recipe_rejects_unknown_arguments_and_moving_models():
     with pytest.raises(ValueError, match="Unsupported native"):
         resolve_recipe(request(command="arbitrary command"))
