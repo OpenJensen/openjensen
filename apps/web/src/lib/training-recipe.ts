@@ -8,6 +8,8 @@ export type Recipe = {
   gradientAccumulation: number;
   validationFraction: number;
   evalEvery: number;
+  /** Vary colour, sharpness and slight shifts of training frames (LeRobot image transforms). */
+  imageAugmentation: boolean;
 };
 
 // SmolVLA recipe defaults; automatic saving targets five checkpoints per run.
@@ -21,6 +23,7 @@ export const defaultRecipe: Recipe = {
   gradientAccumulation: 1,
   validationFraction: 0.2,
   evalEvery: 1000,
+  imageAugmentation: false,
 };
 
 /**

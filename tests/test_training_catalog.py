@@ -571,6 +571,53 @@ def test_unsupported_accumulation_rejected_before_job_or_dataset_execution(
 
 
 @pytest.mark.parametrize(
+    "model_id,module,method,value,issue",
+    [
+        ("smolvla", "jensen_vla.application", "lora", True, "ACT and full SmolVLA"),
+        ("act", "jensen_vla.lerobot_application", "full", "yes", "true or false"),
+        ("act", "jensen_vla.lerobot_application", "full", True, None),
+    ],
+)
+def test_image_augmentation_is_checked_before_any_job_runs(
+    tmp_path, model_id, module, method, value, issue
+):
+    worker = runtime(training_module=module, training_model_ids=[model_id], gpu_memory_mib=81920)
+    config = tmp_path / "runtimes.json"
+    config.write_text(RuntimeCatalog(runtimes=[worker]).model_dump_json())
+    with TestClient(
+        create_app(Settings(data_dir=tmp_path / "data", runtime_config=config))
+    ) as client:
+        client.put("/api/v1/compute-settings", json={"local": {"enabled": True}})
+        project = client.post("/api/v1/projects", json={"name": "Augmentation admission"}).json()[
+            "id"
+        ]
+        model = TRAINING_MODEL_BY_ID[model_id]
+        response = client.post(
+            f"/api/v1/projects/{project}/policy-jobs",
+            json={
+                "operation": "policy.finetune",
+                "runtime_id": "trainer",
+                "dataset_job_id": "not-loaded",
+                "training_method": method,
+                "training": {
+                    "model_id": model.model_id,
+                    "model_revision": model.model_revision,
+                    "image_augmentation": value,
+                },
+            },
+        )
+        assert response.status_code == 422
+        detail = response.json()["detail"]
+        if issue:
+            assert issue in detail
+        else:
+            # Accepted by the augmentation check; it stops later, at the missing dataset.
+            assert "augmentation" not in detail
+            assert "dataset" in detail.lower()
+        assert client.get(f"/api/v1/projects/{project}/jobs").json() == []
+
+
+@pytest.mark.parametrize(
     "module,memory,issue",
     [
         ("jensen_vla.application", 81920, "native LeRobot worker"),
