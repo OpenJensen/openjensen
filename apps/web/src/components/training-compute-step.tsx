@@ -94,6 +94,26 @@ export function TrainingComputeStep({
           reuses the installed environment.
         </p>
       )}
+      {panel.switchFromId && (
+        <div className="training-help" role="status">
+          <p>
+            Continue from {panel.resumeOptions.find((item) => item.id === resumeId)?.label}. The previous GPU stops
+            automatically before the new GPU starts. Steps after this checkpoint will be repeated. Model, optimizer and
+            total step target are preserved.
+          </p>
+          <label>
+            Maximum time on the new GPU (minutes)
+            <input
+              type="number"
+              min={1}
+              max={1440}
+              value={panel.switchMinutes}
+              onChange={(event) => panel.setSwitchMinutes(Number(event.target.value))}
+            />
+          </label>
+          <p>If the new GPU is unavailable, the saved checkpoint remains available to resume.</p>
+        </div>
+      )}
       <section className="training-recipe-review" aria-label="Training recipe review">
         <div className="training-recipe-title">
           <span>{resumeId ? 'Resume saved training' : 'Your training recipe'}</span>

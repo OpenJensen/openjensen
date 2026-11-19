@@ -5962,6 +5962,8 @@ export interface components {
             simulation?: components["schemas"]["SimulationRequest"] | null;
             /** Source Id */
             source_id?: string | null;
+            /** Switch From Job Id */
+            switch_from_job_id?: string | null;
             /**
              * Timeout Seconds
              * @default 7200

@@ -424,12 +424,19 @@ class Lifecycle:
                     raise ValueError("Selected checkpoint is unavailable or corrupt") from exc
         raise ValueError("Artifact does not exist in this project")
 
-    async def resume_checkpoint(self, project_id, job_id):
+    async def resume_checkpoint(
+        self, project_id, job_id, *, allow_running=False, checkpoint_name=None
+    ):
         job = await self.execution.get(job_id)
         if (
             not job
             or job.project_id != project_id
-            or job.status not in {"failed", "cancelled", "interrupted"}
+            or job.status
+            not in (
+                {"failed", "cancelled", "interrupted", "running"}
+                if allow_running
+                else {"failed", "cancelled", "interrupted"}
+            )
             or job.kind not in {"policy.finetune", "policy.workflow"}
         ):
             raise ValueError("Resume requires an interrupted training job in this project")
@@ -452,6 +459,8 @@ class Lifecycle:
                     ):
                         candidates.append((int(path.name.removeprefix("checkpoint-")), path))
             for step, checkpoint in sorted(candidates, reverse=True):
+                if checkpoint_name is not None and checkpoint.name != checkpoint_name:
+                    continue
                 try:
                     if (checkpoint / "remote-checkpoint.json").is_file():
                         # Derive the descriptor location from the run and step, never
@@ -645,6 +654,53 @@ class Lifecycle:
             )
         raise ValueError("Checkpoint lineage is too deep")
 
+    async def switch_source(self, project_id, request, *, require_latest=True):
+        source = await self.execution.get(request.switch_from_job_id)
+        if (
+            not source
+            or source.project_id != project_id
+            or source.kind != "policy.finetune"
+            or source.status == "succeeded"
+            or not isinstance(source.request, PolicyRequest)
+        ):
+            raise ValueError("Choose unfinished training in this project to switch GPU")
+        if (
+            source.request.runtime_id == request.runtime_id
+            and source.request.execution_target_id == request.execution_target_id
+        ):
+            raise ValueError("Choose a different GPU or compute target")
+        artifact = await self.artifact(project_id, request.artifact_id)
+        if artifact.job_id != source.id or artifact.format != "training_checkpoint":
+            raise ValueError("The checkpoint must belong to the training run being switched")
+        checkpoint = await self.resume_checkpoint(
+            project_id,
+            source.id,
+            allow_running=True,
+            checkpoint_name=None if require_latest else artifact.id.rpartition(":")[2],
+        )
+        if require_latest and artifact.id != f"{source.id}:{checkpoint.name}":
+            raise ValueError("A newer checkpoint is available; reopen Switch GPU to use it")
+        return source
+
+    async def stop_switch_source(self, job):
+        if job.execution is not None and job.execution.runtime_sha256 is not None:
+            from vla_platform.compute.contracts import verify_binding
+
+            runtime = self.runtime(job.request.runtime_id)
+            if runtime is None:
+                raise ValueError("The accepted compute target is no longer available")
+            verify_binding(job.execution, runtime)
+        source = await self.switch_source(job.project_id, job.request, require_latest=False)
+        await self.event(job, "preparing", "Stopping previous GPU; saved checkpoint is preserved")
+        stopped = await self.execution.cancel(source.id)
+        if (
+            not stopped
+            or stopped.cancellation is None
+            or stopped.cancellation.cleanup != "succeeded"
+        ):
+            raise ValueError("Previous GPU shutdown is unconfirmed; resume after cleanup completes")
+        await self.event(job, "preparing", "Previous GPU stopped; resuming saved optimizer state")
+
     async def validate(self, project_id: str, request: PolicyRequest):
         selected_runtime = self.runtime(request.runtime_id)
         if request.runtime_id.startswith("portable-") and not request.execution_target_id:
@@ -659,6 +715,8 @@ class Lifecycle:
             == str(setup.directory / "smolvla-cu126/bin/python")
         ):
             raise ValueError("Wait for local setup to finish before using this worker")
+        if request.switch_from_job_id:
+            await self.switch_source(project_id, request)
         if (
             selected_runtime
             and selected_runtime.training_only

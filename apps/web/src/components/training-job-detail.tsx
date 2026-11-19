@@ -77,6 +77,13 @@ export function TrainingJobDetail({
           exportRuntimes={options.isSuccess ? options.data.runtimes : []}
           exportJobs={jobs.data ?? []}
           exportArtifacts={artifacts.data ?? []}
+          onSwitchGpu={
+            (artifacts.data ?? []).some(
+              (item) => item.job_id === selectedRun.id && item.format === 'training_checkpoint',
+            )
+              ? () => panel.switchGpu(selectedRun.id)
+              : undefined
+          }
           onCancel={() => cancel.mutate(selectedRun.id)}
           cancelling={cancel.isPending && cancel.variables === selectedRun.id}
           cancelError={cancel.variables === selectedRun.id ? cancel.error : null}

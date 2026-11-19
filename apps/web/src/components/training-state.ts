@@ -81,6 +81,8 @@ export function useTrainingPanel({
   const [runtimeId, setRuntimeId] = useState('');
   const [method, setMethod] = useState('');
   const [resumeId, setResumeId] = useState('');
+  const [switchFromId, setSwitchFromId] = useState('');
+  const [switchMinutes, setSwitchMinutes] = useState(120);
   const [recipe, setRecipe] = useState(defaultRecipe);
   const [temporalDrafts, setTemporalDrafts] = useState<TemporalDrafts>({});
   const [loaded, setLoaded] = useState(false);
@@ -241,7 +243,9 @@ export function useTrainingPanel({
     .filter((job) => job.project_id === projectId && job.kind === 'policy.finetune')
     .sort((a, b) => b.created_at.localeCompare(a.created_at));
   // Completed artifacts have reached the recipe's final step and cannot resume.
-  const resumableRuns = trainingRuns.filter((job) => ['failed', 'interrupted', 'cancelled'].includes(job.status));
+  const resumableRuns = trainingRuns.filter(
+    (job) => ['failed', 'interrupted', 'cancelled'].includes(job.status) || job.id === switchFromId,
+  );
   const checkpoints = (artifacts.data ?? []).filter(
     (item) => item.format === 'training_checkpoint' && resumableRuns.some((job) => job.id === item.job_id),
   );
@@ -549,49 +553,59 @@ export function useTrainingPanel({
     recipe.validationFraction > 0 &&
     recipe.validationFraction < 1 &&
     positiveInteger(recipe.evalEvery);
-  const blocked = computeSelection.error
-    ? 'Saved compute selection could not be read. Review compute before starting.'
-    : configuredTarget && !chosenRuntime
-      ? 'The selected compute target is unavailable. Review it in Settings.'
-      : !projectId
-        ? 'Select a project.'
-        : !submission.hydrated
-          ? 'Loading saved request…'
-          : !submission.available
-            ? 'Browser recovery storage is unavailable. Restore it before starting a job.'
-            : attempt
-              ? 'Inspect the earlier training request before submitting another job.'
-              : !batch.hydrated || !batch.available || batch.journal
-                ? 'Resolve the saved multi-model plan before starting another job.'
-                : !resumeId && selectedModels.some((item) => item.status === 'coming_soon')
-                  ? 'A selected model is coming soon. Choose an available model before training.'
-                  : !resumeId && modelIds.some((id) => !models.some((item) => item.id === id))
-                    ? 'A selected model is unavailable. Select your models again.'
-                    : !loaded || options.isPending || jobs.isPending
-                      ? 'Loading…'
-                      : options.isError || jobs.isError
-                        ? 'Couldn’t load training options.'
-                        : resumeId && !priorRequest
-                          ? 'The original training recipe is unavailable.'
-                          : !activeDataset
-                            ? 'Select a dataset.'
-                            : !resumeId && datasetIssue(activeDataset.result)
-                              ? datasetIssue(activeDataset.result)
-                              : !resumeId && !selectedCameras.length
-                                ? 'Select at least one camera.'
-                                : !model || !activeMethod
-                                  ? 'Select a model and method.'
-                                  : mixtureIssue || modelIssue || batchIssue || localRecipeIssue
-                                    ? mixtureIssue || modelIssue || batchIssue || localRecipeIssue
-                                    : !runtime
-                                      ? 'Choose an available GPU.'
-                                      : accumulationIssue
-                                        ? accumulationIssue
-                                        : timingIssue
-                                          ? timingIssue
-                                          : !resumeId && !recipeValid
-                                            ? 'Check training settings.'
-                                            : null;
+  const switchIssue =
+    switchFromId && (!Number.isInteger(switchMinutes) || switchMinutes < 1 || switchMinutes > 1440)
+      ? 'Choose a time limit between 1 and 1,440 minutes.'
+      : switchFromId &&
+          runtime?.id === priorRequest?.runtime_id &&
+          (configuredTarget?.id ?? null) === (priorRequest?.execution_target_id ?? null)
+        ? 'Choose a different GPU.'
+        : null;
+  const blocked =
+    switchIssue ??
+    (computeSelection.error
+      ? 'Saved compute selection could not be read. Review compute before starting.'
+      : configuredTarget && !chosenRuntime
+        ? 'The selected compute target is unavailable. Review it in Settings.'
+        : !projectId
+          ? 'Select a project.'
+          : !submission.hydrated
+            ? 'Loading saved request…'
+            : !submission.available
+              ? 'Browser recovery storage is unavailable. Restore it before starting a job.'
+              : attempt
+                ? 'Inspect the earlier training request before submitting another job.'
+                : !batch.hydrated || !batch.available || batch.journal
+                  ? 'Resolve the saved multi-model plan before starting another job.'
+                  : !resumeId && selectedModels.some((item) => item.status === 'coming_soon')
+                    ? 'A selected model is coming soon. Choose an available model before training.'
+                    : !resumeId && modelIds.some((id) => !models.some((item) => item.id === id))
+                      ? 'A selected model is unavailable. Select your models again.'
+                      : !loaded || options.isPending || jobs.isPending
+                        ? 'Loading…'
+                        : options.isError || jobs.isError
+                          ? 'Couldn’t load training options.'
+                          : resumeId && !priorRequest
+                            ? 'The original training recipe is unavailable.'
+                            : !activeDataset
+                              ? 'Select a dataset.'
+                              : !resumeId && datasetIssue(activeDataset.result)
+                                ? datasetIssue(activeDataset.result)
+                                : !resumeId && !selectedCameras.length
+                                  ? 'Select at least one camera.'
+                                  : !model || !activeMethod
+                                    ? 'Select a model and method.'
+                                    : mixtureIssue || modelIssue || batchIssue || localRecipeIssue
+                                      ? mixtureIssue || modelIssue || batchIssue || localRecipeIssue
+                                      : !runtime
+                                        ? 'Choose an available GPU.'
+                                        : accumulationIssue
+                                          ? accumulationIssue
+                                          : timingIssue
+                                            ? timingIssue
+                                            : !resumeId && !recipeValid
+                                              ? 'Check training settings.'
+                                              : null);
   const mutation = useMutation({
     retry: false,
     mutationFn: async () => {
@@ -602,7 +616,8 @@ export function useTrainingPanel({
         runtime_id: runtime.id,
         dataset_job_id: activeDataset.id,
         training_method: activeMethod,
-        timeout_seconds: 86400,
+        timeout_seconds: switchFromId ? switchMinutes * 60 : 86400,
+        ...(switchFromId ? { switch_from_job_id: switchFromId } : {}),
       };
       if (resumeId) {
         body.training = null;
@@ -698,11 +713,13 @@ export function useTrainingPanel({
       ? submittedRun?.stage === 'preparing' || submittedRun?.status === 'queued'
         ? 'Preparing GPU…'
         : 'Training…'
-      : resumeId
-        ? 'Resume training'
-        : selectedModels.length > 1
-          ? `Start ${selectedModels.length} training jobs`
-          : 'Start training';
+      : switchFromId
+        ? 'Switch GPU and continue'
+        : resumeId
+          ? 'Resume training'
+          : selectedModels.length > 1
+            ? `Start ${selectedModels.length} training jobs`
+            : 'Start training';
   const summaryModel = resumeId
     ? String(model?.label ?? originalTraining?.model_id ?? 'Original model')
     : (model?.label ?? 'Choose a model');
@@ -713,11 +730,26 @@ export function useTrainingPanel({
       setDatasetId(dataset);
       setExtraDatasetIds([]);
     }
+    setSwitchFromId('');
     setResumeId('');
     mutation.reset();
     setView('new');
   }
+  function switchGpu(runId: string) {
+    const saved = (artifacts.data ?? [])
+      .filter((item) => item.job_id === runId && item.format === 'training_checkpoint')
+      .sort((a, b) => Number(b.metadata?.step ?? 0) - Number(a.metadata?.step ?? 0))[0];
+    if (!saved) return;
+    selectionGeneration.current += 1;
+    setSwitchFromId(runId);
+    setResumeId(saved.id);
+    setStep(2);
+    mutation.reset();
+    setView('new');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
   function resumeRun(runId: string, checkpointId?: string) {
+    setSwitchFromId('');
     selectionGeneration.current += 1;
     const checkpoint = checkpointId
       ? resumeOptions.find((item) => item.id === checkpointId && item.jobId === runId)
@@ -752,6 +784,7 @@ export function useTrainingPanel({
       setModelIds([model.id]);
     }
     setMethod(request.training_method);
+    setSwitchFromId('');
     setResumeId('');
     setStep(2);
     mutation.reset();
@@ -881,6 +914,10 @@ export function useTrainingPanel({
     resumeId,
     resumeOptions,
     resumeRun,
+    switchGpu,
+    switchFromId,
+    switchMinutes,
+    setSwitchMinutes,
     trainAgain,
     reviewHistory,
     runStarting,

@@ -5928,6 +5928,18 @@
             ],
             "title": "Source Id"
           },
+          "switch_from_job_id": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Switch From Job Id"
+          },
           "timeout_seconds": {
             "default": 7200,
             "maximum": 86400.0,
@@ -10217,7 +10229,7 @@
   },
   "info": {
     "title": "OPEN JENSEN local VLA application",
-    "version": "0.1.50"
+    "version": "0.1.51"
   },
   "openapi": "3.1.0",
   "paths": {

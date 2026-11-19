@@ -56,6 +56,7 @@ def one_click(tmp_path, monkeypatch):
         runner_calls=[],
         blocked=False,
         ignore_cancel=False,
+        cleanup_error=False,
         started=None,
         release=None,
     )
@@ -71,6 +72,8 @@ def one_click(tmp_path, monkeypatch):
             try:
                 await state.release.wait()
             except asyncio.CancelledError:
+                if state.cleanup_error:
+                    raise RuntimeError("Cloud cleanup could not be confirmed")
                 if not state.ignore_cancel:
                     raise
         return {"workspace": catalog.sky_workspace_name(project), "sky_api_endpoint": endpoint}
@@ -331,5 +334,106 @@ def test_caller_cannot_supply_worker_dataset_bindings(one_click):
                 )
             assert state.prepare_calls == state.runner_calls == []
             assert len(await execution.list("project")) == 1
+
+    asyncio.run(exercise())
+
+
+@pytest.mark.parametrize("cleanup_confirmed", [True, False])
+def test_gpu_switch_preserves_checkpoint_and_stops_source_before_dispatch(
+    one_click, monkeypatch, cleanup_confirmed
+):
+    import hashlib
+
+    from test_lifecycle import completed_checkpoint
+    from vla_platform.lifecycle.contracts import LifecycleResult, PolicyArtifact
+
+    state, workspace, _ = one_click
+    state.blocked = True
+
+    async def exercise():
+        async with workspace() as execution:
+            execution.cloud_slots = asyncio.Semaphore(1)
+            state.cleanup_error = not cleanup_confirmed
+            source = await execution.submit("project", recipe(runtime_id="skypilot-gcp-T4"))
+            await asyncio.wait_for(state.started.wait(), 2)
+            root = execution.settings.data_dir / "jobs" / source.id / "operation/training"
+            checkpoint = completed_checkpoint(root, 5)
+            saved_recipe = {**source.request.training, "method": "lora"}
+            (checkpoint / "recipe.json").write_text(json.dumps(saved_recipe))
+            manifest_path = checkpoint / "manifest.json"
+            manifest = json.loads(manifest_path.read_text())
+            manifest["files"]["recipe.json"] = hashlib.sha256(
+                (checkpoint / "recipe.json").read_bytes()
+            ).hexdigest()
+            manifest_path.write_text(json.dumps(manifest))
+            artifact = PolicyArtifact(
+                id=f"{source.id}:{checkpoint.name}",
+                project_id="project",
+                job_id=source.id,
+                label="Saved step 5",
+                format="training_checkpoint",
+                path=checkpoint.relative_to(execution.settings.data_dir).as_posix(),
+                manifest_sha256=hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
+                file_bytes=100,
+                metadata={"step": 5},
+            )
+            live = await execution.get(source.id)
+            live.result = LifecycleResult(artifacts=[artifact])
+            await execution.save(live)
+            before = manifest_path.read_bytes()
+            request = recipe(
+                training=None,
+                artifact_id=artifact.id,
+                switch_from_job_id=source.id,
+                timeout_seconds=600,
+            )
+            # Missing/foreign/corrupt inputs cannot stop the current training.
+            with pytest.raises(ValueError):
+                await execution.submit("another-project", request)
+            with pytest.raises(ValueError, match="different GPU"):
+                await execution.submit(
+                    "project", request.model_copy(update={"runtime_id": "skypilot-gcp-T4"})
+                )
+            (checkpoint / "training.pt").write_bytes(b"damaged")
+            with pytest.raises(ValueError, match="completed checkpoint"):
+                await execution.submit("project", request)
+            assert (await execution.get(source.id)).status == "running"
+            (checkpoint / "training.pt").write_bytes(b"checkpoint fixture")
+
+            captured = []
+            original_runner = sky_runner.run
+
+            async def run(payload, stage_dir, target, on_event):
+                stopped = await execution.get(source.id)
+                assert stopped.status == "cancelled"
+                assert stopped.cancellation.cleanup == "succeeded"
+                assert Path(payload["artifact"]["path"]).name == checkpoint.name
+                captured.append(payload)
+                return await original_runner(payload, stage_dir, target, on_event)
+
+            monkeypatch.setattr(sky_runner, "run", run)
+            state.blocked = False
+            switched = await execution.submit("project", request, idempotency_key="switch-once")
+            assert (
+                await execution.submit("project", request, idempotency_key="switch-once")
+            ).id == switched.id
+            await asyncio.wait_for(execution.tasks[switched.id], 5)
+            result = await execution.get(switched.id)
+            if not cleanup_confirmed:
+                assert result.status == "failed"
+                assert "shutdown is unconfirmed" in result.error
+                assert captured == []
+                assert len(state.prepare_calls) == 1
+                assert manifest_path.read_bytes() == before
+                return
+            assert result.status == "succeeded", result.error
+            assert len(captured) == 1
+            assert captured[0]["parameters"]["training"] is None
+            assert manifest_path.read_bytes() == before
+            assert json.loads((checkpoint / "recipe.json").read_text())["steps"] == 10
+            with pytest.raises(ValueError, match="already has a GPU switch"):
+                await execution.submit("project", request, idempotency_key="duplicate-switch")
+
+    from pathlib import Path
 
     asyncio.run(exercise())

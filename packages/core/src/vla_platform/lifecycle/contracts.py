@@ -215,6 +215,9 @@ class PolicyRequest(StrictRecord):
     dataset_job_id: str | None = None
     dataset_job_ids: list[str] | None = Field(default=None, min_length=2, max_length=8)
     dataset_camera_mappings: dict[str, dict[str, str]] | None = None
+    switch_from_job_id: str | None = Field(
+        default=None, max_length=100, exclude_if=lambda value: value is None
+    )
     resume_job_id: str | None = None
     training_method: str = Field(default="lora", pattern=r"^[\w-]+$")
     training: dict[str, Any] | None = None
@@ -247,6 +250,13 @@ class PolicyRequest(StrictRecord):
 
     @model_validator(mode="after")
     def input_contract(self):
+        if self.switch_from_job_id and (
+            self.operation != "policy.finetune"
+            or not self.artifact_id
+            or self.resume_job_id
+            or self.training is not None
+        ):
+            raise ValueError("GPU switching requires a saved checkpoint and its original recipe")
         if self.dataset_job_ids is not None:
             if (
                 self.operation != "policy.finetune"
