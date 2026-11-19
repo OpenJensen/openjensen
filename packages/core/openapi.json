@@ -10217,7 +10217,7 @@
   },
   "info": {
     "title": "OPEN JENSEN local VLA application",
-    "version": "0.1.50"
+    "version": "0.1.51"
   },
   "openapi": "3.1.0",
   "paths": {
