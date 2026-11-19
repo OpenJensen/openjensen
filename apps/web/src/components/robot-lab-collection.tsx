@@ -40,6 +40,8 @@ export function RobotLabCollection({ lab }: { lab: RobotLabState }) {
   const [model, setModel] = useState('gpt-6-astra');
   const [otherModel, setOtherModel] = useState(false);
   const [task, setTask] = useState('Place one object into the tray');
+  const [fixture, setFixture] = useState('');
+  const [criterion, setCriterion] = useState('');
   const [wrist, setWrist] = useState(0);
   const [side, setSide] = useState(1);
   const [present, setPresent] = useState(false);
@@ -136,6 +138,7 @@ export function RobotLabCollection({ lab }: { lab: RobotLabState }) {
         mode,
         model: mode === 'mock' ? 'gpt-6-astra' : model,
         task,
+        experiment: { configuration_id: fixture.trim() || null, success_criterion: criterion.trim() || null },
         camera_indices: mode === 'mock' ? [0, 1] : [wristIndex, sideIndex],
         fps,
         max_seconds: seconds,
@@ -227,6 +230,17 @@ export function RobotLabCollection({ lab }: { lab: RobotLabState }) {
               placeholder="What the arm should do"
             />
           </label>
+          <details>
+            <summary>Experiment settings</summary>
+            <label>
+              Fixture configuration ID
+              <input value={fixture} maxLength={128} onChange={(e) => setFixture(e.target.value)} />
+            </label>
+            <label>
+              Success criterion
+              <input value={criterion} maxLength={500} onChange={(e) => setCriterion(e.target.value)} />
+            </label>
+          </details>
           {mode === 'physical' && (
             <>
               <p className="robot-lab-subtle">

@@ -365,6 +365,7 @@ class AgentExecutor:
                         raise ValueError("Controller generation changed before command completion")
                     record.update(
                         result,
+                        dispatch_ack_monotonic_ns=time.monotonic_ns(),
                         status="started" if operation == "execute" else "completed",
                         authority_epoch=self.epoch,
                     )
@@ -372,7 +373,9 @@ class AgentExecutor:
             self._save(record)
             return record
         except Exception as error:
-            record.update(status="rejected", reason=str(error))
+            record.update(
+                status="rejected", reason=str(error), error_monotonic_ns=time.monotonic_ns()
+            )
             self._save(record)
             raise
 

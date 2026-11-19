@@ -3,16 +3,20 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import os
 import queue
 import shutil
 import threading
 import time
+from pathlib import Path
 
-from agent_control import UNITS, durable_json, identity
+from agent_control import LIMITS, UNITS, digest, durable_json, identity
+from collection_streams import CameraStreams
 from dataset import DatasetWriter
 from hardware import JOINTS
+from lerobot_control import PROFILE
 
 
 class AgentCollection:
@@ -27,7 +31,7 @@ class AgentCollection:
         self.latest = None
 
     def status(self):
-        return dict(self.state)
+        return {**self.state, "contract_version": 2, "robot_clock_ns": time.monotonic_ns()}
 
     def sample(self, value):
         if self.state.get("status") != "recording":
@@ -61,6 +65,9 @@ class AgentCollection:
                 raise ValueError("Finalize the manual recording first")
             if shutil.disk_usage(self.lab.datasets_dir).free < 10 * 1024**3:
                 raise ValueError("Agent collection requires 10 GiB disk headroom")
+            if (self.lab.datasets_dir / ("agent-" + run_id)).exists():
+                raise ValueError("Episode identity already exists")
+            self.sealed = False
             self.done.clear()
             self.latest = None
             self.samples = queue.Queue(maxsize=500)
@@ -87,7 +94,76 @@ class AgentCollection:
                 "dropped_samples": 0,
             }
             self.metadata = {
-                "schema_version": 1,
+                "schema_version": 2,
+                "run_parameters": payload.get("run_parameters"),
+                "task": payload["task"],
+                "experiment": payload.get("experiment", {}),
+                "session_id": self.lab.agent.target_session_id,
+                "source_family_id": payload.get("source_family_id", run_id + "-0"),
+                "collection_source": "supervised_pi"
+                if payload.get("environment_kind") == "physical"
+                else "synthetic_pi",
+                "calibration_sha256": self.lab.agent.calibration_hash(),
+                "control_hz_nominal": 40,
+                "controller": {
+                    "profile": PROFILE,
+                    "limits": LIMITS,
+                    "version": digest([PROFILE, LIMITS]),
+                },
+                "kinematics": payload.get("kinematics"),
+                "controller_source_sha256": {
+                    name: hashlib.sha256(Path(__file__).with_name(name).read_bytes()).hexdigest()
+                    for name in (
+                        "server.py",
+                        "agent_control.py",
+                        "lerobot_control.py",
+                        "agent_collection.py",
+                        "collection_streams.py",
+                        "camera.py",
+                    )
+                },
+                "application_build": payload.get("application_build"),
+                "device_clocks": {
+                    "motors": {
+                        "clock_id": None,
+                        "offset_ns": None,
+                        "drift_ppm": None,
+                        "uncertainty_ns": None,
+                    },
+                    "feedback_timestamp": "host read completion",
+                },
+                "hardware_firmware_version": None,
+                "contact_force": None,
+                "camera_configuration": {
+                    role: {
+                        "index": i,
+                        "shape_hwc": shapes["observation.images." + role],
+                        "mode": getattr(self.lab.camera, "negotiated_modes", {}).get(i),
+                        "intrinsics": None,
+                        "extrinsics": None,
+                        "sensor_clock_id": None,
+                        "robot_arrival_clock_id": "robot_monotonic",
+                        "sensor_offset_ns": None,
+                        "sensor_drift_ppm": None,
+                        "sensor_uncertainty_ns": None,
+                    }
+                    for role, i in zip(("wrist", "side"), indices)
+                },
+                "outcome_label": "unknown",
+                "outcome_evidence": [],
+                "recovery": None,
+                "human_intervention": None,
+                "hardware_model": "SO101",
+                "camera_geometry_version": None,
+                "clock_domain_ids": {
+                    "controller": "robot_monotonic",
+                    "core": "application_monotonic",
+                    "worker": "node_hrtime",
+                    "wall": "unix_utc",
+                },
+                "clock_unit": "ns",
+                "reset_minutes": None,
+                "supervision_minutes": None,
                 **self.state,
                 "camera_roles": dict(zip(("wrist", "side"), indices)),
                 "joint_order": list(JOINTS),
@@ -114,8 +190,14 @@ class AgentCollection:
                 "model": payload.get("model"),
                 "task_success_verified": False,
             }
+            self.metadata["camera_configuration_version"] = digest(
+                self.metadata["camera_configuration"]
+            )
             self.writer.start_episode()
             durable_json(self.evidence / "recording.json", self.metadata)
+            self.streams = CameraStreams(self.evidence, dict(zip(indices, ("wrist", "side"))))
+            self.lab.camera.set_collection_sink(self.streams.capture)
+            self.stream_start_ns = time.monotonic_ns()
             self.thread = threading.Thread(target=self._record, daemon=True, name="agent-recording")
             self.thread.start()
             return self.status()
@@ -129,12 +211,38 @@ class AgentCollection:
         )
         return self.status()
 
+    def side_frame(self, payload):
+        if self.state.get("status") != "recording" or payload.get("run_id") != self.state.get(
+            "run_id"
+        ):
+            raise ValueError("Recording is not active")
+        capture = self.lab.camera.latest_timed_jpeg(self.indices[1])
+        stamp = (
+            int(capture["captured_monotonic"] * 1e9)
+            if "captured_monotonic" in capture
+            else capture["read_end_monotonic_ns"]
+        )
+        return {
+            "jpeg": base64.b64encode(capture["jpeg"]).decode(),
+            "read_complete_robot_ns": stamp,
+            "frame_id": f"side-{stamp}",
+            "encoded_available_robot_ns": time.monotonic_ns(),
+        }
+
     def observation(self, payload):
+        with self.guard:
+            return self._save_observation(payload)
+
+    def _save_observation(self, payload):
         if payload.get("run_id") != self.state.get("run_id"):
             raise ValueError("Unknown recording run")
+        if self.sealed:
+            raise ValueError("Episode evidence is sealed")
         oid = identity(payload["observation_id"])
         directory = self.evidence / "observations"
         directory.mkdir(exist_ok=True)
+        if (directory / (oid + ".json")).exists():
+            raise ValueError("Observation already recorded")
         if not payload["images"] or not set(payload["images"]) <= {"wrist", "side"}:
             raise ValueError("Choose known observation image roles")
         for role, encoded in payload["images"].items():
@@ -143,15 +251,19 @@ class AgentCollection:
                 raise ValueError("Invalid model image")
             (directory / (oid + "-" + role + ".jpg")).write_bytes(data)
         durable_json(directory / (oid + ".json"), payload["metadata"])
-        return {"saved": True}
+        return {"saved": True, "available_robot_ns": time.monotonic_ns()}
 
     def event(self, payload):
         if not self.writer or payload.get("run_id") != self.state.get("run_id"):
             raise ValueError("Unknown recording run")
-        encoded = json.dumps(payload.get("event"), allow_nan=False)
+        encoded = json.dumps(
+            {**payload["event"], "mirror_arrival_robot_ns": time.monotonic_ns()}, allow_nan=False
+        )
         if len(encoded) > 12000:
             raise ValueError("Trace event too large")
         with self.guard:
+            if self.sealed or payload.get("run_id") != self.state.get("run_id"):
+                raise ValueError("Episode evidence is sealed or belongs to another run")
             with (self.evidence / "trace.jsonl").open("a") as stream:
                 stream.write(encoded + "\n")
                 stream.flush()
@@ -160,6 +272,7 @@ class AgentCollection:
 
     def _record(self):
         previous = {}
+        sequences = {}
         next_frame = time.monotonic()
         try:
             with (
@@ -167,6 +280,8 @@ class AgentCollection:
                 (self.evidence / "frames.jsonl").open("a") as frames,
             ):
                 while not self.done.is_set():
+                    if self.streams.error:
+                        raise ValueError(self.streams.error)
                     if self.lab.generation != self.generation or self.lab.mode != "agent":
                         raise ValueError("Controller stopped during collection")
                     while True:
@@ -187,15 +302,38 @@ class AgentCollection:
                     captured = time.monotonic_ns()
                     if captured - sample["state_read_monotonic_ns"] > 250_000_000:
                         raise ValueError("Measured controller state is stale")
-                    images, times = {}, {}
+                    images, times, cameras = {}, {}, {}
                     for role, index in zip(("wrist", "side"), self.indices):
-                        frame, timestamp = self.lab.camera.read_latest_timed(index)
+                        if hasattr(self.lab.camera, "collection_frame"):
+                            frame, timestamp, sequence = self.lab.camera.collection_frame(index)
+                        else:
+                            frame, timestamp = self.lab.camera.read_latest_timed(index)
+                            sequence = None
                         stamp = int(timestamp * 1e9)
                         if stamp <= previous.get(index, 0) or captured - stamp > 500_000_000:
                             raise ValueError("Missing, repeated or stale " + role + " camera frame")
+                        received = time.monotonic_ns()
+                        cameras[role] = {
+                            "frame_id": f"{role}-{stamp}",
+                            "sensor_capture_ns": None,
+                            "read_complete_robot_ns": stamp,
+                            "available_robot_ns": received,
+                            "source_sequence": sequence,
+                            "unselected_reader_frames": (
+                                sequence - sequences[index] - 1
+                                if sequence is not None and index in sequences
+                                else None
+                            ),
+                            "age_ns": received - stamp,
+                        }
+                        sequences[index] = sequence
                         times[role] = stamp
                         images["observation.images." + role] = frame[:, :, ::-1]
                         previous[index] = stamp
+                    if min(times.values()) < self.stream_start_ns:
+                        previous.clear()
+                        self.done.wait(0.01)
+                        continue
                     if max(times.values()) - min(times.values()) > 150_000_000:
                         raise ValueError("Camera pair exceeds 150 ms skew")
                     index = self.writer.frames
@@ -210,6 +348,12 @@ class AgentCollection:
                                 "frame_index": index,
                                 "capture_monotonic_ns": captured,
                                 "camera_monotonic_ns": times,
+                                "cameras": cameras,
+                                "pair_available_robot_ns": max(
+                                    c["available_robot_ns"] for c in cameras.values()
+                                ),
+                                "pair_skew_ns": max(times.values()) - min(times.values()),
+                                "missed_schedule_slots_before": self.state["dropped_samples"],
                                 "controller_sample_id": sample["sample_id"],
                                 "command_id": sample["command_id"],
                                 "state_read_monotonic_ns": sample["state_read_monotonic_ns"],
@@ -224,7 +368,9 @@ class AgentCollection:
                     self.state["frames"] = self.writer.frames
                     next_frame += 1 / self.writer.fps
                     if now - next_frame >= 1 / self.writer.fps:
-                        self.state["dropped_samples"] += 1
+                        self.state["dropped_samples"] += (
+                            int((now - next_frame) * self.writer.fps) + 1
+                        )
                         next_frame = now + 1 / self.writer.fps
                 if self.state["status"] == "failed":
                     raise ValueError(self.state["error"])
@@ -234,13 +380,24 @@ class AgentCollection:
                 os.fsync(actions.fileno())
                 os.fsync(frames.fileno())
         except Exception as error:
-            self.state.update(status="failed", error=str(error))
+            self.state.update(
+                status="failed", error=str(error), failure_robot_ns=time.monotonic_ns()
+            )
             self.lab.stop(
                 "Agent recording failed: " + str(error),
                 expected_generation=self.generation,
                 expected_mode="agent",
             )
         finally:
+            # Flush successful writes even when a camera or queue failed.
+            with (self.evidence / "controller.jsonl").open("a") as remaining:
+                while not self.samples.empty():
+                    remaining.write(json.dumps(self.samples.get_nowait()) + "\n")
+            self.lab.camera.set_collection_sink(None)
+            self.streams.finish()
+            self.state["camera_stream_frames"] = self.streams.counts
+            if self.streams.error:
+                self.state.update(status="failed", error=self.streams.error)
             self.writer.episode_active = False
             try:
                 if self.writer.image_writer:
@@ -275,4 +432,16 @@ class AgentCollection:
             self.thread.join(timeout=20)
         if self.thread and self.thread.is_alive():
             return {**self.state, "status": "finalizing"}
+        with self.guard:
+            if not self.sealed:
+                # Seal after trailing tool results/run_ended have been mirrored, before import.
+                files = {}
+                for path in sorted(self.root.rglob("*")):
+                    if path.is_file() and not path.is_symlink():
+                        with path.open("rb") as stream:
+                            files[path.relative_to(self.root).as_posix()] = hashlib.file_digest(
+                                stream, "sha256"
+                            ).hexdigest()
+                durable_json(self.evidence / "seal.json", {"schema_version": 2, "sha256": files})
+                self.sealed = True
         return self.status()

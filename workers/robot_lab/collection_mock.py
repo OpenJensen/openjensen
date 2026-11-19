@@ -17,6 +17,38 @@ from test_robot_lab import CALIBRATION, FakeBus
 
 
 class SyntheticCamera:
+    def __init__(self):
+        self.cache = {}
+        self.sequence = [0, 0]
+        self.lock = threading.RLock()
+        self.stop_stream = threading.Event()
+
+    def set_collection_sink(self, sink):
+        if sink is None:
+            self.stop_stream.set()
+            self.thread.join()
+            return
+        self.stop_stream.clear()
+
+        def produce():
+            while not self.stop_stream.is_set():
+                for i in (0, 1):
+                    frame = self.read(i)
+                    with self.lock:
+                        timestamp = time.monotonic()
+                        self.sequence[i] += 1
+                        self.cache[i] = (frame, timestamp)
+                        sink(i, self.sequence[i], timestamp, frame)
+                self.stop_stream.wait(0.037)
+
+        self.thread = threading.Thread(target=produce, daemon=True)
+        self.thread.start()
+
+    def collection_frame(self, index):
+        with self.lock:
+            frame, timestamp = self.read_latest_timed(index)
+            return frame, timestamp, self.sequence[index]
+
     def read(self, index=0, **kwargs):
         if index not in (0, 1):
             raise ValueError("Synthetic camera missing")
@@ -30,7 +62,10 @@ class SyntheticCamera:
         self.read(index)
 
     def read_latest_timed(self, index=0, **kwargs):
-        return self.read(index), time.monotonic()
+        with self.lock:
+            if index in self.cache:
+                return self.cache[index]
+            return self.read(index), time.monotonic()
 
     def capture_timed(self, index=0):
         started = time.monotonic_ns()
@@ -43,7 +78,10 @@ class SyntheticCamera:
         }
 
     def latest_timed_jpeg(self, index=0, **kwargs):
-        return self.capture_timed(index)
+        frame, stamp = self.read_latest_timed(index)
+        stream = io.BytesIO()
+        Image.fromarray(frame[:, :, ::-1]).save(stream, format="JPEG")
+        return {"jpeg": stream.getvalue(), "captured_monotonic": stamp}
 
     def jpeg(self, index=0, **kwargs):
         return self.capture_timed(index)["jpeg"]
