@@ -649,8 +649,11 @@ export function useRobotLab() {
     done?: (result: T) => void,
     announce = true,
     calibrationTarget?: 'start' | 'resume' | 'ranges' | 'saved',
+    // A quick action (starting or saving an episode) leaves the rest of the
+    // page usable and refreshes only the robot status.
+    quick = false,
   ) {
-    const token = ++epoch.current;
+    const token = quick ? epoch.current : ++epoch.current;
     const calibrationExpected = calibrationTarget
       ? {
           phase:
@@ -684,10 +687,12 @@ export function useRobotLab() {
           token,
         }
       : null;
-    setPending(label);
+    if (!quick) {
+      setPending(label);
+      setAwaitingCalibration(null);
+    }
     setError(null);
     setNotice(null);
-    setAwaitingCalibration(null);
     try {
       const result = await action();
       if (!mounted.current || token !== epoch.current) return;
@@ -698,9 +703,11 @@ export function useRobotLab() {
       }
       done?.(result);
       setNotice(announce && !(isStatus(result) && result.session?.error) ? label : null);
-      void client.invalidateQueries({ queryKey: ['robot-lab', 'datasets'] });
-      void client.invalidateQueries({ queryKey: ['robot-lab', 'devices'] });
-      void client.invalidateQueries({ queryKey: ['robot-lab', 'calibration-profiles'] });
+      if (!quick) {
+        void client.invalidateQueries({ queryKey: ['robot-lab', 'datasets'] });
+        void client.invalidateQueries({ queryKey: ['robot-lab', 'devices'] });
+        void client.invalidateQueries({ queryKey: ['robot-lab', 'calibration-profiles'] });
+      }
       void client.invalidateQueries({ queryKey: statusKey });
     } catch (failure) {
       if (mounted.current && token === epoch.current) {
@@ -719,7 +726,7 @@ export function useRobotLab() {
         void client.invalidateQueries({ queryKey: statusKey });
       }
     } finally {
-      if (mounted.current && token === epoch.current) setPending(null);
+      if (!quick && mounted.current && token === epoch.current) setPending(null);
     }
   }
   function selectIllustratedJoint(joint: RobotJoint) {

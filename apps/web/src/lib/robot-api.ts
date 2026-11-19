@@ -119,6 +119,17 @@ export type RobotPolicyCatalog = {
   runtime: { configured: boolean; device: string | null; message: string };
   state: RobotPolicyState;
 };
+/** Every finished try in the open recording, as the robot computer counts them. */
+export type RecordingStats = {
+  tries: number;
+  discarded: number;
+  failed: number;
+  saved_seconds: number;
+  recent: { outcome: 'saved' | 'saving' | 'discarded' | 'failed'; seconds: number }[];
+  disk_free_bytes: number | null;
+  bytes_per_second: number;
+};
+
 export type RobotStatus = {
   calibration_transfer?: { robot_id: string; role: RobotRole; verified: boolean; backup_created: boolean };
   diagnostics?: RobotDiagnostics;
@@ -237,6 +248,11 @@ export type RobotStatus = {
     dataset_id: string | null;
     episode_active: boolean;
     saving?: boolean;
+    /** Episodes handed to the background save that are not in the dataset yet. */
+    saving_episodes?: number;
+    save_error?: string | null;
+    task?: string | null;
+    stats?: RecordingStats | null;
     frames: number;
     episodes: number;
     fps: number;

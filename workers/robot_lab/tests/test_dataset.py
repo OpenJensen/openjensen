@@ -328,6 +328,157 @@ class DatasetTests(unittest.TestCase):
         self.assertEqual(writer.total_frames, 2)
         self.assertEqual(len(writer.episodes), 1)
 
+    def record_episode(self, writer, episode, frames=5):
+        import numpy as np
+
+        writer.start_episode()
+        for index in range(frames):
+            positions = {joint: float(index + axis + episode) for axis, joint in enumerate(JOINTS)}
+            images = {
+                key: np.full(shape, [index * 20, episode * 40, camera * 100], dtype=np.uint8)
+                for camera, (key, shape) in enumerate(writer.image_shapes.items())
+            }
+            writer.add_frame(
+                positions,
+                {joint: value + 0.5 for joint, value in positions.items()},
+                images or None,
+                captured_at=100 + episode * 10 + index / 5,
+            )
+
+    def test_episodes_recorded_while_earlier_ones_save_match_saving_one_at_a_time(self):
+        import threading
+
+        import pyarrow.parquet as pq
+
+        shapes = {
+            key: (4, 6, 3) for key in ("observation.images.front", "observation.images.camera_4")
+        }
+        direct = DatasetWriter(self.root, "one-at-a-time", "Reach", 5, shapes)
+        queued = DatasetWriter(self.root, "in-background", "Reach", 5, shapes)
+        first_saving, release = threading.Event(), threading.Event()
+        build = queued.build_queued
+
+        def hold_first(source, *args):
+            if source.name == "000000":
+                first_saving.set()
+                release.wait(10)
+            return build(source, *args)
+
+        queued.build_queued = hold_first
+        try:
+            for episode in range(3):
+                self.record_episode(direct, episode)
+                direct.save_episode()
+            self.record_episode(queued, 0)
+            queued.queue_episode()
+            self.assertTrue(first_saving.wait(5))
+            # Episode 0 is still saving while episodes 1 and 2 are recorded.
+            for episode in (1, 2):
+                self.record_episode(queued, episode)
+                queued.queue_episode()
+            self.assertEqual((queued.saving_count(), queued.episodes, queued.frames), (3, [], 0))
+            with self.assertRaisesRegex(ValueError, "no saved episodes"):
+                queued.abandon_empty()
+        finally:
+            release.set()
+        queued.finalize()
+        direct.finalize()
+        for relative in (
+            "data/chunk-000/file-000.parquet",
+            "data/chunk-000/file-001.parquet",
+            "data/chunk-000/file-002.parquet",
+            "meta/episodes/chunk-000/file-000.parquet",
+        ):
+            self.assertEqual(
+                pq.read_table(queued.root / relative).to_pylist(),
+                pq.read_table(direct.root / relative).to_pylist(),
+                relative,
+            )
+        for relative in ("meta/info.json", "meta/stats.json"):
+            self.assertEqual(
+                json.loads((queued.root / relative).read_text()),
+                json.loads((direct.root / relative).read_text()),
+            )
+        rows = pq.read_table(queued.root / "data/chunk-000/file-002.parquet").to_pylist()
+        self.assertEqual([row["index"] for row in rows], list(range(10, 15)))
+        self.assertEqual({row["episode_index"] for row in rows}, {2})
+        self.assertIsNone(queued.save_error())
+        self.assertFalse((queued.root / ".saving").exists())
+        self.assertFalse((queued.root / ".pending").exists())
+
+    def test_failed_background_save_keeps_its_frames_and_later_episodes_still_save(self):
+        import pyarrow.parquet as pq
+
+        writer = DatasetWriter(self.root, "one-fails", "Reach", 5, (4, 6, 3))
+        build = writer.build_queued
+
+        def fail_first(source, *args):
+            if source.name == "000000":
+                raise OSError("storage unavailable")
+            return build(source, *args)
+
+        writer.build_queued = fail_first
+        for episode in range(2):
+            self.record_episode(writer, episode)
+            writer.queue_episode()
+        writer.wait_for_saves(30)
+        self.assertIn("storage unavailable", writer.save_error())
+        self.assertIn("one-fails/.saving/000000", writer.save_error())
+        kept = writer.root / ".saving/000000"
+        self.assertEqual(len((kept / "frames.jsonl").read_text().splitlines()), 5)
+        self.assertEqual(len(list(kept.glob("*.png"))), 5)
+        writer.finalize()
+        rows = pq.read_table(writer.root / "data/chunk-000/file-000.parquet").to_pylist()
+        self.assertEqual([row["index"] for row in rows], list(range(5)))
+        self.assertEqual({row["episode_index"] for row in rows}, {0})
+        self.assertEqual(rows[0]["observation.state"], [1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
+        self.assertTrue(kept.is_dir())
+        self.assertFalse(
+            [
+                entry
+                for entry in manifest(self.root, writer.id)["files"]
+                if ".saving" in entry["path"]
+            ]
+        )
+
+    def test_stats_count_every_try_by_outcome_with_its_length(self):
+        writer = DatasetWriter(self.root, "tries", "Reach", 5, (4, 6, 3))
+        build = writer.build_queued
+
+        def fail_third(source, *args):
+            if source.name == "000001":
+                raise OSError("storage unavailable")
+            return build(source, *args)
+
+        writer.build_queued = fail_third
+        self.record_episode(writer, 0)
+        writer.save_episode()
+        self.record_episode(writer, 1, frames=3)
+        writer.discard_episode()
+        writer.start_episode()
+        writer.discard_episode()  # Nothing recorded yet: not a try.
+        self.record_episode(writer, 2, frames=10)
+        writer.queue_episode()
+        self.record_episode(writer, 3)
+        writer.queue_episode()
+        writer.wait_for_saves(30)
+        stats = writer.stats()
+        self.assertEqual(
+            stats["recent"],
+            [
+                {"outcome": "saved", "seconds": 1.0},
+                {"outcome": "discarded", "seconds": 0.6},
+                {"outcome": "saved", "seconds": 2.0},
+                {"outcome": "failed", "seconds": 1.0},
+            ],
+        )
+        self.assertEqual((stats["tries"], stats["discarded"], stats["failed"]), (4, 1, 1))
+        self.assertEqual(stats["saved_seconds"], 3.0)
+        self.assertEqual(stats["bytes_per_second"], (4 * 6 * 3 + 64) * 5)
+        self.assertGreater(stats["disk_free_bytes"], 0)
+        self.assertEqual(len(writer.stats(recent=2)["recent"]), 2)
+        writer.finalize()
+
     def test_finalize_metadata_failure_does_not_publish_a_false_finalized_state(self):
         writer = DatasetWriter(self.root, "retry-finish", "Reach", 5)
         writer.start_episode()
