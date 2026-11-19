@@ -656,18 +656,37 @@ class DatasetLibrary:
             )
         if shutil.disk_usage(self.root).free < total + DISK_HEADROOM:
             raise LibraryError("Not enough free storage to combine these datasets", 507)
+
+        async def produce(source):
+            return await self.worker(
+                {
+                    "operation": "merge",
+                    "roots": [str(root) for root in roots],
+                    "output": str(source),
+                },
+                timeout=600,
+            )
+
+        combined, result = await self.build(
+            project_id,
+            name,
+            produce,
+            {"combined_from": [{"id": item["id"], "name": item["name"]} for item in sources]},
+            stage="combining",
+        )
+        return {**combined, "combined": result}
+
+    async def build(self, project_id, name, produce, details=None, *, stage="building"):
+        """Save a dataset that ``produce`` writes into an empty folder, then read it back.
+
+        Producing the same bytes again returns the dataset that already exists instead of
+        keeping a duplicate. A failure leaves no half-made dataset behind.
+        """
         created = self.begin(project_id, name)
         ident = created["id"]
         operation = self.get(ident).get("_import_job_id")
         try:
-            result = await self.worker(
-                {
-                    "operation": "merge",
-                    "roots": [str(root) for root in roots],
-                    "output": str(self.directory(ident) / "source"),
-                },
-                timeout=600,
-            )
+            result = await produce(self.directory(ident) / "source")
             async with self.lock:
                 value = self.get(ident)
                 source = self.directory(ident) / "source"
@@ -677,25 +696,26 @@ class DatasetLibrary:
                     if path.is_file()
                 }
                 value["total_bytes"] = sum(value["files"].values())
-                value["combined_from"] = [
-                    {"id": item["id"], "name": item["name"]} for item in sources
-                ]
+                if value["total_bytes"] > MAX_BYTES:
+                    raise LibraryError(
+                        f"The new dataset holds {value['total_bytes'] / 1024**3:.1f} GiB; "
+                        f"a saved dataset holds at most {MAX_BYTES // 1024**3} GiB.",
+                        413,
+                    )
+                value.update(details or {})
                 self.save(value)
-            # Combining the same datasets again yields the same bytes; finalize then
-            # returns the dataset that already exists instead of keeping a duplicate.
-            combined = await self.finalize(ident)
-            if combined["status"] != "ready":
-                raise LibraryError("The combined dataset could not be read back")
-            return {**combined, "combined": result}
+            made = await self.finalize(ident)
+            if made["status"] != "ready":
+                raise LibraryError("The new dataset could not be read back")
+            return made, result
         except BaseException as exc:
-            # Leave no half-made dataset and no job that looks as if it is still uploading.
             shutil.rmtree(self.directory(ident), ignore_errors=True)
             if operation:
                 self.operations.update(
                     operation,
                     status="failed",
-                    stage="combining",
-                    error=str(exc) or "Combining these datasets was interrupted",
+                    stage=stage,
+                    error=str(exc) or "Saving this dataset was interrupted",
                 )
             raise
 

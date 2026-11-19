@@ -5558,6 +5558,51 @@
         "title": "PhysicalArming",
         "type": "object"
       },
+      "PipelineCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "copies": {
+            "default": 2,
+            "maximum": 4.0,
+            "minimum": 1.0,
+            "title": "Copies",
+            "type": "integer"
+          },
+          "dataset_id": {
+            "pattern": "^[a-f0-9]{32}$",
+            "title": "Dataset Id",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "recipe": {
+            "default": "check",
+            "enum": [
+              "check",
+              "check_free",
+              "augment"
+            ],
+            "title": "Recipe",
+            "type": "string"
+          }
+        },
+        "required": [
+          "dataset_id"
+        ],
+        "title": "PipelineCreate",
+        "type": "object"
+      },
       "PlanRequest": {
         "additionalProperties": false,
         "properties": {
@@ -7535,6 +7580,26 @@
         "title": "ReplayObservation",
         "type": "object"
       },
+      "Review": {
+        "additionalProperties": false,
+        "properties": {
+          "decisions": {
+            "maxProperties": 5000,
+            "patternProperties": {
+              "^[A-Za-z0-9_-]{1,64}$": {
+                "type": "boolean"
+              }
+            },
+            "title": "Decisions",
+            "type": "object"
+          }
+        },
+        "required": [
+          "decisions"
+        ],
+        "title": "Review",
+        "type": "object"
+      },
       "RuntimePackage": {
         "properties": {
           "connected": {
@@ -7612,6 +7677,29 @@
           "minimum_free_gib"
         ],
         "title": "RuntimePackage",
+        "type": "object"
+      },
+      "Save": {
+        "additionalProperties": false,
+        "properties": {
+          "augment_copies": {
+            "default": 0,
+            "maximum": 4.0,
+            "minimum": 0.0,
+            "title": "Augment Copies",
+            "type": "integer"
+          },
+          "name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "Save",
         "type": "object"
       },
       "SceneJobResult": {
@@ -10129,7 +10217,7 @@
   },
   "info": {
     "title": "OPEN JENSEN local VLA application",
-    "version": "0.1.49"
+    "version": "0.1.50"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -14126,6 +14214,481 @@
           }
         },
         "summary": "Plan Augmentation"
+      }
+    },
+    "/api/v1/projects/{project_id}/dataset-pipelines": {
+      "get": {
+        "operationId": "list_pipelines_api_v1_projects__project_id__dataset_pipelines_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Pipelines",
+        "tags": [
+          "Dataset pipelines"
+        ]
+      },
+      "post": {
+        "description": "Start a one-click recipe: check episodes for mistakes, or make augmented copies.",
+        "operationId": "create_pipeline_api_v1_projects__project_id__dataset_pipelines_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PipelineCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Pipeline",
+        "tags": [
+          "Dataset pipelines"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/dataset-pipelines/{ident}": {
+      "get": {
+        "operationId": "get_pipeline_api_v1_projects__project_id__dataset_pipelines__ident__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "ident",
+            "required": true,
+            "schema": {
+              "title": "Ident",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Pipeline",
+        "tags": [
+          "Dataset pipelines"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/dataset-pipelines/{ident}/continue": {
+      "post": {
+        "operationId": "continue_pipeline_api_v1_projects__project_id__dataset_pipelines__ident__continue_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "ident",
+            "required": true,
+            "schema": {
+              "title": "Ident",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Continue Pipeline",
+        "tags": [
+          "Dataset pipelines"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/dataset-pipelines/{ident}/episodes": {
+      "get": {
+        "operationId": "pipeline_episodes_api_v1_projects__project_id__dataset_pipelines__ident__episodes_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "ident",
+            "required": true,
+            "schema": {
+              "title": "Ident",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Pipeline Episodes",
+        "tags": [
+          "Dataset pipelines"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/dataset-pipelines/{ident}/media": {
+      "get": {
+        "description": "A still frame or review strip that a step of this pipeline wrote.",
+        "operationId": "pipeline_media_api_v1_projects__project_id__dataset_pipelines__ident__media_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "ident",
+            "required": true,
+            "schema": {
+              "title": "Ident",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "maxLength": 300,
+              "minLength": 1,
+              "title": "Path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Pipeline Media",
+        "tags": [
+          "Dataset pipelines"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/dataset-pipelines/{ident}/review": {
+      "put": {
+        "operationId": "review_pipeline_api_v1_projects__project_id__dataset_pipelines__ident__review_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "ident",
+            "required": true,
+            "schema": {
+              "title": "Ident",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Review"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Review Pipeline",
+        "tags": [
+          "Dataset pipelines"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/dataset-pipelines/{ident}/save": {
+      "post": {
+        "description": "Apply the review, optionally add augmented copies, and save a new dataset.",
+        "operationId": "save_pipeline_api_v1_projects__project_id__dataset_pipelines__ident__save_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "ident",
+            "required": true,
+            "schema": {
+              "title": "Ident",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Save"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save Pipeline",
+        "tags": [
+          "Dataset pipelines"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/dataset-pipelines/{ident}/steps/{index}/manifest": {
+      "get": {
+        "description": "The full episode manifest one step wrote, for inspection.",
+        "operationId": "step_manifest_api_v1_projects__project_id__dataset_pipelines__ident__steps__index__manifest_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "ident",
+            "required": true,
+            "schema": {
+              "title": "Ident",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "index",
+            "required": true,
+            "schema": {
+              "title": "Index",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Step Manifest",
+        "tags": [
+          "Dataset pipelines"
+        ]
       }
     },
     "/api/v1/projects/{project_id}/dataset-uploads": {
