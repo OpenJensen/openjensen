@@ -19,6 +19,7 @@ from vla_platform import __version__, build
 from vla_platform.agent_control.service import AgentControl
 from vla_platform.agent_control_api import register_errors as register_agent_errors
 from vla_platform.agent_control_api import router as agent_control_router
+from vla_platform.api_connections import ApiConnections
 from vla_platform.api_connections_api import router as api_connections_router
 from vla_platform.application_updates import ApplicationUpdates
 from vla_platform.augmentation.contracts import (
@@ -72,6 +73,8 @@ from vla_platform.modules import (
     workspace_modules,
 )
 from vla_platform.modules_api import router as modules_router
+from vla_platform.pipelines.api import router as pipelines_router
+from vla_platform.pipelines.service import PipelineError, Pipelines
 from vla_platform.project_transfer_api import router as project_transfer_router
 from vla_platform.projects import Projects
 from vla_platform.recordings_api import router as recordings_router
@@ -165,6 +168,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             app.state.job_observability = execution.observability
             app.state.explorer = explorer
             app.state.dataset_library = DatasetLibrary(settings.data_dir)
+            app.state.pipelines = Pipelines(
+                settings.data_dir,
+                library=app.state.dataset_library,
+                api_keys=ApiConnections(settings.data_dir),
+            )
             app.state.robot_lab = RobotLabBridge(settings.data_dir)
             app.state.cloud_connections = CloudConnections(settings.data_dir)
             app.state.huggingface_connection = HuggingFaceConnection(settings.data_dir)
@@ -220,6 +228,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                             await app.state.application_updates.close()
                         if hasattr(app.state, "robot_lab"):
                             await app.state.robot_lab.close()
+                        if hasattr(app.state, "pipelines"):
+                            await app.state.pipelines.close()
                         if hasattr(app.state, "dataset_library"):
                             await app.state.dataset_library.close()
                         if hasattr(execution.lifecycle, "local_worker_setup"):
@@ -278,11 +288,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(updates_router)
     app.include_router(modules_router)
     app.include_router(workspace_jobs_router)
+    app.include_router(pipelines_router)
     app.include_router(job_observability_router)
     app.include_router(compute_targets_router)
 
     @app.exception_handler(LibraryError)
     async def dataset_library_error(_request: Request, exc: LibraryError):
+        return JSONResponse({"detail": str(exc)}, status_code=exc.status)
+
+    @app.exception_handler(PipelineError)
+    async def dataset_pipeline_error(_request: Request, exc: PipelineError):
         return JSONResponse({"detail": str(exc)}, status_code=exc.status)
 
     app.add_middleware(
