@@ -303,3 +303,24 @@ def test_installer_bootstraps_with_distribution_python_310():
         "deploy/macos/install_robot_lab.py",
     ):
         ast.parse((root / relative).read_text(), feature_version=(3, 10))
+
+
+def test_camera_pair_uses_physical_usb_devices_on_the_same_high_speed_bus(tmp_path):
+    def camera(name, bus, speed="480"):
+        device = tmp_path / name
+        device.mkdir()
+        for key, value in {
+            "idVendor": "0abd",
+            "idProduct": "8050",
+            "speed": speed,
+            "busnum": bus,
+        }.items():
+            (device / key).write_text(value)
+
+    camera("1-4.1", "1")
+    (tmp_path / "1-4.1:1.0").mkdir()
+    camera("2-1", "2")
+    camera("1-4.2", "1", "12")
+    assert not installer.camera_pair_on_usb2(tmp_path)
+    camera("1-4.4", "1")
+    assert installer.camera_pair_on_usb2(tmp_path)

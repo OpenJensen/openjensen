@@ -299,6 +299,133 @@ def install_mac_services(python, source, token_file, data, logs, ssh_host, no_st
     return [service["Label"] for service in services]
 
 
+def camera_pair_on_usb2(devices=Path("/sys/bus/usb/devices")):
+    buses = set()
+    for device in devices.glob("*"):
+        try:
+            if (
+                (device / "idVendor").read_text().strip() != "0abd"
+                or (device / "idProduct").read_text().strip() != "8050"
+                or (device / "speed").read_text().strip() != "480"
+            ):
+                continue
+            bus = (device / "busnum").read_text().strip()
+        except OSError:
+            continue
+        if bus in buses:
+            return True
+        buses.add(bus)
+    return False
+
+
+def camera_admin_command(command):
+    if os.geteuid() and sys.stdin.isatty():
+        return ["sudo", "--", *command]
+    if os.geteuid():
+        desktop = os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")
+        if desktop and shutil.which("gnome-terminal") and shutil.which("sudo"):
+            command = [
+                "gnome-terminal",
+                "--wait",
+                "--title=OpenJensen camera driver",
+                "--",
+                "sudo",
+                "-p",
+                "Install the OpenJensen camera driver. Ubuntu password for %p: ",
+                "--",
+                *command,
+            ]
+        elif desktop and shutil.which("pkexec"):
+            command = ["pkexec", "--disable-internal-agent", *command]
+        else:
+            command = ["sudo", "-n", "--", *command]
+    return command
+
+
+def camera_driver_installed():
+    if not Path("/var/lib/dkms/openjensen-uvc/1.0").is_dir():
+        return False
+    kernels = {os.uname().release}
+    next_image = Path("/boot/vmlinuz").resolve().name
+    if next_image.startswith("vmlinuz-"):
+        kernels.add(next_image.removeprefix("vmlinuz-"))
+    for kernel in kernels:
+        result = subprocess.run(
+            ["modinfo", "-k", kernel, "-F", "parm", "uvcvideo"], capture_output=True, text=True
+        )
+        if result.returncode or "mjpeg_bandwidth_cap:" not in result.stdout:
+            return False
+    return True
+
+
+def setup_camera_driver(choice, offline):
+    if choice == "skip" or (choice == "auto" and not camera_pair_on_usb2()):
+        return
+    script = Path(__file__).resolve().parent / "linux/uvc/install.sh"
+    if choice == "auto" and camera_driver_installed():
+        return
+    command = [str(script)]
+    if offline:
+        command.append("--offline")
+    subprocess.run(camera_admin_command(command), check=True)
+
+
+def camera_update(run_dir, operation):
+    """Run once for a completed application update on the local USB host."""
+    import fcntl
+    import re
+
+    if sys.platform != "linux" or not re.fullmatch("[0-9a-f]{32}", operation):
+        raise ValueError("Invalid camera update")
+    if not camera_pair_on_usb2():
+        return
+    receipt = run_dir / ("camera-driver-" + operation + ".json")
+
+    def report(message, *, finished=True):
+        temporary = receipt.with_suffix(".tmp")
+        temporary.write_text(json.dumps({"message": message, "finished": finished}))
+        temporary.replace(receipt)
+        print(message, flush=True)
+
+    # The migration from a legacy launcher and the new release may both see
+    # the same completed update. Only one of them may request authorization.
+    with (run_dir / "camera-driver.lock").open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if receipt.exists() and json.loads(receipt.read_text()).get("finished"):
+            return
+        active = Path("/sys/module/uvcvideo/parameters/mjpeg_bandwidth_cap")
+        if camera_driver_installed():
+            report(
+                "The dual-camera driver is active and registered with DKMS."
+                if active.is_file()
+                else "The dual-camera driver is installed. Restart Linux to activate it."
+            )
+            return
+        script = Path(__file__).resolve().parent / "linux/uvc/install.sh"
+        command = [str(script), "--activate-if-unused"]
+        command = camera_admin_command(command)
+        report(
+            "Installing the camera driver. Approve the administrator prompt on the USB computer.",
+            finished=False,
+        )
+        try:
+            subprocess.run(command, check=True)
+            if not camera_driver_installed():
+                raise OSError("The selected kernel module does not contain the camera driver.")
+        except (OSError, subprocess.CalledProcessError) as exc:
+            print(exc, file=sys.stderr)
+            report(
+                "Camera driver installation did not finish. Check the administrator prompt, "
+                "kernel headers and DKMS on the USB computer, then run deploy/linux/uvc/install.sh "
+                "with sudo or retry on the next update."
+            )
+            return
+        if active.is_file():
+            report("The dual-camera driver is active and registered with DKMS.")
+        else:
+            report("The dual-camera driver is installed. Restart Linux to activate it.")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, required=True, help="workers/robot_lab directory")
@@ -322,7 +449,15 @@ def main():
     parser.add_argument(
         "--no-start", action="store_true", help="Prepare services without starting them"
     )
+    parser.add_argument(
+        "--camera-driver",
+        choices=("auto", "install", "skip"),
+        default="auto",
+        help="Linux DKMS camera support (auto detects paired high-speed 0abd:8050 cameras)",
+    )
     args = parser.parse_args()
+    if args.camera_driver == "install" and not sys.platform.startswith("linux"):
+        parser.error("The camera driver requires Linux.")
     if sys.platform not in {"darwin", "linux"}:
         parser.error("Robot Lab supports macOS and Linux.")
     disk_parent = args.prefix.expanduser().resolve()
@@ -359,6 +494,10 @@ def main():
     uv = shutil.which("uv")
     if uv is None:
         parser.error("Install uv from https://docs.astral.sh/uv/ first.")
+    # Enroll before stopping any live service. Loading the driver is a separate,
+    # idle-only administrator action (or it activates on the next boot).
+    if sys.platform == "linux":
+        setup_camera_driver(args.camera_driver, args.offline)
     prefix = args.prefix.expanduser().resolve()
     prefix.mkdir(parents=True, exist_ok=True)
     private = prefix / "private"
@@ -477,4 +616,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) == 4 and sys.argv[1] == "camera-driver-update":
+        camera_update(Path(sys.argv[2]), sys.argv[3])
+    else:
+        main()

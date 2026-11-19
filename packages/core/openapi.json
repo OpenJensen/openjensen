@@ -9554,6 +9554,17 @@
             "title": "Automatic Update",
             "type": "boolean"
           },
+          "camera_driver_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Camera Driver Message"
+          },
           "channel": {
             "default": "release",
             "enum": [
@@ -10217,7 +10228,7 @@
   },
   "info": {
     "title": "OPEN JENSEN local VLA application",
-    "version": "0.1.50"
+    "version": "0.1.51"
   },
   "openapi": "3.1.0",
   "paths": {
