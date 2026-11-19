@@ -291,6 +291,91 @@ test('recordings of one episode each combine into a dataset that is ready to tra
   await expect(banner).toHaveCount(0);
 });
 
+test('a dataset is checked, cleaned and saved with jittered copies in one pass', async ({ page }, testInfo) => {
+  test.setTimeout(240_000);
+  const project = await ownProject(page, `Clean ${testInfo.project.name}`);
+  const source = resolve(testInfo.outputPath('three-takes'));
+  await mkdir(source, { recursive: true });
+  const worker = resolve('packages/core/src/vla_platform/datasets/import_worker.py');
+  const reader = resolve('workers/_cpu_readers/.venv/bin/python');
+  const made = spawnSync(
+    reader,
+    [
+      '-I',
+      '-c',
+      'import runpy,sys;from pathlib import Path;runpy.run_path(sys.argv[1],run_name="adapter")["demo"](Path(sys.argv[2]),3)',
+      worker,
+      source,
+    ],
+    { encoding: 'utf8' },
+  );
+  expect(made.status, made.stderr).toBe(0);
+  const entry = await (
+    await page.request.post(`/api/v1/projects/${project.id}/dataset-uploads`, { data: { name: 'three-takes' } })
+  ).json();
+  for (const name of (await readdir(source, { recursive: true })) as string[]) {
+    const path = resolve(source, name);
+    if (!(await stat(path)).isFile()) continue;
+    const uploaded = await page.request.put(
+      `/api/v1/dataset-uploads/${entry.id}/file?path=${encodeURIComponent(name.split(sep).join('/'))}`,
+      { data: await readFile(path), headers: { 'content-type': 'application/octet-stream' } },
+    );
+    expect(uploaded.status(), await uploaded.text()).toBe(200);
+  }
+  expect((await page.request.post(`/api/v1/dataset-uploads/${entry.id}/finish`)).status()).toBe(200);
+  expect(
+    (
+      await page.request.post(`/api/v1/datasets/${entry.id}/convert`, { data: { fps: 6, task: 'Move the block' } })
+    ).status(),
+  ).toBe(202);
+  await expect
+    .poll(async () => (await (await page.request.get(`/api/v1/datasets/${entry.id}`)).json()).status, {
+      timeout: 30_000,
+    })
+    .toBe('ready');
+  await page.reload();
+  await page.getByRole('button', { name: 'Open dataset three-takes', exact: true }).click();
+  const cleaning = page.getByRole('region', { name: 'Clean this dataset', exact: true });
+  // One click checks every episode; without an OpenAI key the gripper trace decides alone.
+  await cleaning.getByRole('button', { name: 'Check episodes', exact: true }).click();
+  const shown = cleaning.getByRole('radiogroup', { name: 'Episodes to show', exact: true });
+  await expect(shown.getByRole('radio', { name: 'All 3', exact: true })).toBeVisible({ timeout: 120_000 });
+  const episodes = cleaning.locator('.episode-review');
+  await expect(episodes).toHaveCount(3);
+  // The operator decides: whatever the check suggested, keep two and drop the third.
+  for (const index of [0, 1]) {
+    const button = episodes.nth(index).getByRole('button');
+    if ((await button.textContent())?.trim() === 'Keep') await button.click();
+  }
+  const third = episodes.nth(2).getByRole('button');
+  if ((await third.textContent())?.trim() === 'Drop') await third.click();
+  await expect(shown.getByRole('radio', { name: 'Kept 2', exact: true })).toBeVisible();
+  await cleaning
+    .getByRole('radiogroup', { name: 'Augmented copies of each kept episode', exact: true })
+    .getByRole('radio', { name: '1', exact: true })
+    .click();
+  await cleaning.getByRole('textbox', { name: 'New dataset name', exact: true }).fill('three-takes clean');
+  await cleaning.getByRole('button', { name: 'Save 4 episodes as a new dataset', exact: true }).click();
+  await expect(cleaning.getByRole('status').filter({ hasText: 'Saved three-takes clean: 4 episodes' })).toBeVisible({
+    timeout: 120_000,
+  });
+  await page.screenshot({ path: testInfo.outputPath('cleaned.png'), fullPage: true });
+  // The new dataset is in the library next to the original, which keeps its three episodes.
+  const library = (await (await page.request.get(`/api/v1/datasets?project_id=${project.id}`)).json()) as {
+    name: string;
+    converted?: { episodes: number };
+    detection?: { episodes?: number };
+    profile?: { total_episodes?: number };
+  }[];
+  const count = (item?: (typeof library)[number]) =>
+    item?.converted?.episodes ?? item?.detection?.episodes ?? item?.profile?.total_episodes;
+  const saved = library.find((item) => item.name === 'three-takes clean');
+  const original = library.find((item) => item.name === 'three-takes');
+  expect(saved, JSON.stringify(library.map((item) => item.name))).toBeTruthy();
+  expect(count(saved)).toBe(4);
+  expect(count(original)).toBe(3);
+});
+
 test('saved Hugging Face inspections reopen without a new inspection request', async ({ page }) => {
   const time = '2026-10-06T08:00:00Z',
     project = 'history-project';
