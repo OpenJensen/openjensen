@@ -1331,6 +1331,27 @@
   border-radius: 10px;
   background: var(--surface);
 }
+.robot-lab-source-choice {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  margin: 8px 0 0;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.robot-lab-source-choice legend {
+  padding: 0 5px;
+  font-weight: 600;
+}
+.robot-lab-source-choice select {
+  display: block;
+  max-width: 100%;
+  margin-top: 4px;
+}
+.robot-lab-source-choice .primary-button {
+  justify-self: start;
+}
 .robot-lab-calibration-arms {
   display: grid;
   gap: 8px;
@@ -1355,6 +1376,9 @@
   font-size: 13px;
   color: var(--muted);
   margin-top: 4px;
+}
+.robot-lab-calibration-arm .robot-lab-choice-warning {
+  color: var(--warning-text, var(--text));
 }
 .robot-lab-calibration-attention {
   color: var(--danger, #a84036) !important;

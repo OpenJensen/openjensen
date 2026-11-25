@@ -715,6 +715,8 @@ export function useRobotLab() {
         } else {
           setError(readable(failure));
         }
+        void client.invalidateQueries({ queryKey: ['robot-lab', 'calibration-profiles'] });
+        void client.invalidateQueries({ queryKey: ['robot-lab', 'devices'] });
         // Read status to confirm an uncertain outcome; never replay motor writes.
         void client.invalidateQueries({ queryKey: statusKey });
       }

@@ -12646,14 +12646,26 @@ export interface operations {
             content: {
                 "application/json": {
                     /**
+                     * Apply To Arm
+                     * @default false
+                     */
+                    apply_to_arm?: boolean;
+                    /**
                      * Confirm
                      * @constant
                      */
                     confirm: "REUSE CALIBRATION";
+                    /** Connection Key */
+                    connection_key?: string | null;
                     /** Port */
                     port: string;
                     /** Profile Key */
                     profile_key?: string | null;
+                    /**
+                     * Remember
+                     * @default false
+                     */
+                    remember?: boolean;
                     /** Robot Id */
                     robot_id: string;
                     /**

@@ -84,6 +84,19 @@ class RequestError(ValueError):
     pass
 
 
+class CalibrationChoiceRequired(RequestError):
+    def __init__(self, robot_id, role, port):
+        super().__init__(f"Choose calibration for {robot_id} ({role}) in Robot Lab")
+        self.robot_id, self.role, self.port = robot_id, role, port
+
+
+def factory_calibration(calibration):
+    return all(
+        entry["homing_offset"] == 0 and entry["range_min"] == 0 and entry["range_max"] == 4095
+        for entry in calibration.values()
+    )
+
+
 def require(payload, key, expected):
     if payload.get(key) != expected:
         raise RequestError(f"Confirm this operation with {key}={expected!r}")
@@ -231,6 +244,7 @@ class RobotLab:
         self.observe_timeout = observe_timeout
         self.device_registry = DeviceRegistry(self.data_dir)
         self.calibration_revisions = CalibrationRevisions(self.data_dir)
+        self.calibration_conflicts = {}
         self.calibration_profiles = CalibrationProfiles(self.data_dir, valid_calibration)
         self.assembled_session = None
         self.assembled_state = empty_assembled_state()
@@ -468,13 +482,56 @@ class RobotLab:
             )
         return calibration
 
+    def calibration_identity(self, port, ports=None):
+        if not port:
+            return None
+        if ports is None:
+            ports = self.port_provider()
+        device = next((p for p in ports if p["device"] == port), None)
+        if device is None:
+            return None
+        serial = device.get("serial_number")
+        if serial and sum(p.get("serial_number") == serial for p in ports) == 1:
+            return "serial:" + serial
+        return "port:" + port
+
+    def compare_calibration(self, port, robot_id, role, saved, actual):
+        identity = self.calibration_identity(port)
+        key = (identity, robot_id, role)
+        if actual == saved:
+            self.calibration_conflicts.pop(key, None)
+            return True
+        complete = set(actual) == set(JOINTS)
+        # Invalid register values remain a hardware/setup problem, never a usable source.
+        if complete:
+            valid_calibration(actual)
+        self.calibration_conflicts[key] = {
+            "joints": [j for j in saved if saved[j] != actual.get(j)],
+            "recommended": "saved" if factory_calibration(actual) else "motors",
+            "motors_available": not (complete and factory_calibration(actual)),
+            "motor_key": self.calibration_profiles.key(robot_id, role, actual)
+            if complete
+            else None,
+        }
+        return False
+
     def calibration_library(self, robot_id, role, port=None):
         path = self.calibration_path(robot_id, role)
         effective_role = "leader" if path.parent.name == "so_leader" else "follower"
         entries = self.calibration_profiles.entries(self.calibration_root, effective_role)
         current = self.profile_info(robot_id, role, port)
         calibration = self.load_calibration(robot_id, role) if current["valid"] else None
+        identity = self.calibration_identity(port)
+        conflict = self.calibration_conflicts.get((identity, robot_id, role))
+        remembered = (
+            self.calibration_profiles.preference(identity, robot_id, role) if identity else None
+        )
         return {
+            "conflict": conflict,
+            "connection_key": self.calibration_profiles.key(robot_id, role, identity)
+            if identity
+            else None,
+            "remembered_source": remembered["source"] if remembered else None,
             "profiles": [
                 {key: value for key, value in entry.items() if key != "calibration"}
                 | {
@@ -483,7 +540,7 @@ class RobotLab:
                 }
                 for entry in entries
             ],
-            "needs_review": not current["valid"] or not current["setup_fresh"],
+            "needs_review": bool(conflict) or not current["valid"] or not current["setup_fresh"],
         }
 
     def _archive_calibration(self, robot_id, role, path, source):
@@ -495,7 +552,7 @@ class RobotLab:
                 return  # Invalid older files are still retained by the file backup.
             self.calibration_profiles.save(path.stem, effective_role, calibration, source)
 
-    def calibration_reuse(self, payload):
+    def calibration_reuse(self, payload, *, expected_generation=None, expected_motor_key=None):
         require(payload, "confirm", "REUSE CALIBRATION")
         if set(payload) - {
             "confirm",
@@ -505,10 +562,15 @@ class RobotLab:
             "source",
             "profile_key",
             "same_arm",
+            "apply_to_arm",
+            "connection_key",
+            "remember",
         }:
             raise RequestError("Invalid calibration recovery request")
         if payload.get("same_arm") is not True:
             raise RequestError("Confirm the same physical arm and unchanged joint-to-motor IDs")
+        if any(type(payload.get(key, False)) is not bool for key in ("remember", "apply_to_arm")):
+            raise RequestError("Invalid calibration choice")
         source = payload.get("source")
         if source not in {"saved", "motors"}:
             raise RequestError("Choose a saved profile or calibration on the motors")
@@ -518,6 +580,8 @@ class RobotLab:
         with self.lock:
             self._idle()
             generation = self.generation
+            if expected_generation is not None and generation != expected_generation:
+                raise RequestError("Calibration recovery cancelled by Stop")
             if self.calibration_state.get("recoverable"):
                 raise RequestError(
                     "Finish or cancel the captured calibration before reusing a profile"
@@ -525,6 +589,13 @@ class RobotLab:
             port = self._port(payload.get("port"))
             if path.is_symlink() or (path.exists() and not path.is_file()):
                 raise RequestError("Calibration destination must be a regular file")
+            identity = self.calibration_identity(port)
+            if not identity or (
+                "connection_key" in payload
+                and payload["connection_key"]
+                != self.calibration_profiles.key(robot_id, role, identity)
+            ):
+                raise RequestError("Arm connection changed. Choose the connected arm again")
             selected = None
             if source == "saved":
                 selected = next(
@@ -552,70 +623,96 @@ class RobotLab:
                     actual = valid_calibration(bus.read_calibration())
                     if actual != bus.read_calibration():
                         raise RequestError("Motor calibration changed while reading; retry")
-                    if all(
-                        entry["homing_offset"] == 0
-                        and entry["range_min"] == 0
-                        and entry["range_max"] == 4095
-                        for entry in actual.values()
+                    if expected_motor_key and expected_motor_key != self.calibration_profiles.key(
+                        robot_id, role, actual
                     ):
-                        raise RequestError(
-                            "Motors have default full-range settings. "
-                            "Complete manual calibration first"
-                        )
+                        raise CalibrationChoiceRequired(robot_id, role, port)
                     calibration = selected["calibration"] if selected else actual
-                    different = [
-                        joint.replace("_", " ")
-                        for joint in JOINTS
-                        if calibration[joint] != actual[joint]
-                    ]
-                    if different:
+                    if factory_calibration(calibration):
                         raise RequestError(
-                            "Saved profile differs from the motors: "
-                            + ", ".join(different)
-                            + ". Choose a matching profile, use the calibration on the motors "
-                            "if this arm is already calibrated, or calibrate manually. "
-                            "No settings were changed."
+                            "Motors have default full-range settings. Choose a calibrated "
+                            "machine profile or complete manual calibration first"
                         )
-            finally:
-                # Recovery never writes motor settings, goals, or torque.
-                bus.close()
-            with self.stop_lock:
-                if generation != self.generation or self.stopping:
-                    raise RequestError("Calibration recovery cancelled by Stop")
-                self._archive_calibration(robot_id, role, path, "previous profile")
-                self.calibration_profiles.save(path.stem, effective_role, calibration, source)
-                backup = None
-                if path.exists():
-                    backup = path.with_name(path.stem + f".backup-{time.time_ns()}.json")
-                    shutil.copy2(path, backup)
-                    backup.chmod(0o600)
-                try:
-                    atomic_json(path, calibration)
-                    path.chmod(0o600)
-                    self.calibration_revisions.acknowledge(port, robot_id, role, path)
-                except Exception:
-                    if backup is not None:
-                        shutil.copy2(backup, path)
-                    else:
-                        path.unlink(missing_ok=True)
-                    raise
-                if self.error and self.error.startswith(
-                    (
-                        "Motor setup changed on this port",
-                        "Motor IDs changed on this port",
-                        "Motor calibration differs from the saved profile",
-                        "Leader calibration differs from its saved profile",
-                        "No saved calibration for ",
+                    different = calibration != actual
+                    if different and not payload.get("apply_to_arm"):
+                        joints = [
+                            j.replace("_", " ") for j in JOINTS if calibration[j] != actual[j]
+                        ]
+                        raise RequestError(
+                            "Saved profile differs from the motors: " + ", ".join(joints)
+                        )
+                # Stop takes this lock before it takes a bus lock. Calibration publication
+                # and verified EEPROM replacement must commit or roll back together.
+                with self.stop_lock, bus.lock:
+                    if generation != self.generation or self.stopping:
+                        raise RequestError("Calibration recovery cancelled by Stop")
+                    if self.calibration_identity(port) != identity:
+                        raise RequestError("Arm connection changed. Choose the connected arm again")
+                    self._archive_calibration(robot_id, role, path, "previous profile")
+                    active_key = self.calibration_profiles.save(
+                        path.stem, effective_role, calibration, source
                     )
-                ):
-                    self.error = None
-                self.diagnostics.emit(
-                    "calibration_reused",
-                    robot_id=robot_id,
-                    role=role,
-                    source=source,
-                    previous_profile_backed_up=backup is not None,
+                    if different:
+                        self.calibration_profiles.save(
+                            path.stem, effective_role, actual, "previous arm settings"
+                        )
+                    backup = None
+                    if path.exists():
+                        backup = path.with_name(path.stem + f".backup-{time.time_ns()}.json")
+                        shutil.copy2(path, backup)
+                        backup.chmod(0o600)
+                    try:
+                        if different:
+                            bus.write_calibration(calibration)
+                            if bus.read_calibration() != calibration:
+                                raise RequestError(
+                                    "The arm did not verify the selected calibration"
+                                )
+                        atomic_json(path, calibration)
+                        path.chmod(0o600)
+                        self.calibration_revisions.acknowledge(port, robot_id, role, path)
+                        self.calibration_profiles.remember(
+                            identity,
+                            robot_id,
+                            role,
+                            {
+                                "source": source,
+                                "profile_key": active_key,
+                                "motor_key": self.calibration_profiles.key(robot_id, role, actual),
+                            }
+                            if payload.get("remember")
+                            else None,
+                        )
+                    except Exception:
+                        if backup is not None:
+                            shutil.copy2(backup, path)
+                        else:
+                            path.unlink(missing_ok=True)
+                        if different:
+                            bus.write_calibration(actual)
+                            if bus.read_calibration() != actual:
+                                raise HardwareError("Could not restore previous motor calibration")
+                        raise
+                    self.calibration_conflicts.pop((identity, robot_id, role), None)
+            finally:
+                bus.close()
+            if self.error and self.error.startswith(
+                (
+                    "Motor setup changed on this port",
+                    "Motor IDs changed on this port",
+                    "Motor calibration differs from the saved profile",
+                    "Leader calibration differs from its saved profile",
+                    "No saved calibration for ",
                 )
+            ):
+                self.error = None
+            self.diagnostics.emit(
+                "calibration_reused",
+                robot_id=robot_id,
+                role=role,
+                source=source,
+                previous_profile_backed_up=backup is not None,
+            )
             return self.status()
 
     def calibration_export(self, robot_id, role):
@@ -860,6 +957,7 @@ class RobotLab:
                 "calibration_persistence": hardware,
                 "calibration_transfer": True,
                 "calibration_profiles": True,
+                "calibration_choice": True,
                 "device_registry": True,
                 "device_removal": True,
                 "control": hardware,
@@ -992,6 +1090,13 @@ class RobotLab:
                     device["profile_role"] or "follower",
                     device["port"] or None,
                 )
+                identity = self.calibration_identity(device["port"], ports)
+                if any(
+                    (identity, device["robot_id"], role) in self.calibration_conflicts
+                    for role in ("leader", "follower")
+                ):
+                    device["calibration"] = "choice_required"
+                    continue
                 device["calibration"] = (
                     "saved"
                     if profile["valid"] and profile["setup_fresh"]
@@ -1073,7 +1178,9 @@ class RobotLab:
                                 actual = bus.read_calibration()
                                 profile["joints"] = {j: actual.get(j) == saved[j] for j in JOINTS}
                                 profile["state"] = (
-                                    "matched" if all(profile["joints"].values()) else "mismatch"
+                                    "matched"
+                                    if self.compare_calibration(port, robot_id, role, saved, actual)
+                                    else "mismatch"
                                 )
                             except (ValueError, OSError, HardwareError) as error:
                                 profile["error"] = str(error)
@@ -1619,6 +1726,57 @@ class RobotLab:
         return self.status()
 
     def control_start(self, payload):
+        # A mismatch is discovered before any goal or torque-enable write. Only this
+        # admission condition may be retried, once per arm, with the original Stop fence.
+        with self.lock:
+            generation = self.generation
+            resolved = set()
+            while True:
+                try:
+                    return self._control_start(payload, generation)
+                except CalibrationChoiceRequired as choice:
+                    robot_id, role, port = choice.robot_id, choice.role, choice.port
+                    identity = self.calibration_identity(port)
+                    conflict = self.calibration_conflicts.get((identity, robot_id, role))
+                    pref = self.calibration_profiles.preference(identity, robot_id, role)
+                    if not identity or not pref or not conflict or role in resolved:
+                        raise
+                    path = self.calibration_path(robot_id, role)
+                    file_role = "leader" if path.parent.name == "so_leader" else "follower"
+                    current = self.calibration_profiles.key(
+                        path.stem, file_role, self.load_calibration(robot_id, role, port)
+                    )
+                    if (
+                        (pref["source"] == "saved" and current != pref["profile_key"])
+                        or (
+                            identity.startswith("port:")
+                            and pref["motor_key"] != conflict["motor_key"]
+                        )
+                        or (pref["source"] == "motors" and not conflict["motors_available"])
+                    ):
+                        raise
+                    resolved.add(role)
+                    saved = pref["source"] == "saved"
+                    self.calibration_reuse(
+                        {
+                            "robot_id": robot_id,
+                            "role": role,
+                            "port": port,
+                            "source": pref["source"],
+                            "profile_key": current if saved else None,
+                            "apply_to_arm": saved,
+                            "connection_key": self.calibration_profiles.key(
+                                robot_id, role, identity
+                            ),
+                            "remember": True,
+                            "same_arm": True,
+                            "confirm": "REUSE CALIBRATION",
+                        },
+                        expected_generation=generation,
+                        expected_motor_key=conflict["motor_key"],
+                    )
+
+    def _control_start(self, payload, generation):
         require(payload, "confirm", "ENABLE MOTION")
         mode = payload.get("mode")
         if mode not in ("manual", "leader", "handguide"):
@@ -1655,7 +1813,6 @@ class RobotLab:
             calibration = {j: calibration[j] for j in joints}
             if to_middle:
                 middle_targets(calibration)
-            generation = self.generation
             control_generation = [generation]
             self.last_fault = None
             self.last_raw = {}
@@ -1677,11 +1834,10 @@ class RobotLab:
                     if generation != self.generation:
                         raise RequestError("Session cancelled by Stop")
                     # Never rewrite saved EEPROM calibration when starting motion.
-                    if bus.read_calibration() != calibration:
-                        raise RequestError(
-                            "Motor calibration differs from the saved profile; recalibrate "
-                            "before motion"
-                        )
+                    if not self.compare_calibration(
+                        port, robot_id, "follower", calibration, bus.read_calibration()
+                    ):
+                        raise CalibrationChoiceRequired(robot_id, "follower", port)
                     if joints == JOINTS:
                         self.calibration_revisions.acknowledge(
                             port, robot_id, "follower", self.calibration_path(robot_id, "follower")
@@ -1712,9 +1868,15 @@ class RobotLab:
                         leader = self.bus_factory(leader_port)
                         with leader.lock:
                             leader.check_six()
-                            if leader.read_calibration() != leader_calibration:
-                                raise RequestError(
-                                    "Leader calibration differs from its saved profile"
+                            if not self.compare_calibration(
+                                leader_port,
+                                payload["leader_id"],
+                                "leader",
+                                leader_calibration,
+                                leader.read_calibration(),
+                            ):
+                                raise CalibrationChoiceRequired(
+                                    payload["leader_id"], "leader", leader_port
                                 )
                             configure_passive_leader(
                                 leader, leader_calibration, lambda: generation == self.generation
@@ -3269,6 +3431,17 @@ class Handler(BaseHTTPRequestHandler):
             self._error(error)
 
     def _error(self, error):
+        if isinstance(error, CalibrationChoiceRequired):
+            return self._send(
+                409,
+                {
+                    "error": str(error),
+                    "code": "calibration_choice_required",
+                    "robot_id": error.robot_id,
+                    "role": error.role,
+                    "port": error.port,
+                },
+            )
         if isinstance(error, HardwareError):
             self.server.lab.diagnostics.emit(
                 "hardware_request_failed", exception=type(error).__name__, message=str(error)

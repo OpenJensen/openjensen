@@ -42,7 +42,12 @@ export function RobotLab() {
   } = lab;
   const hasCalibrationStatus = online && !!state?.capabilities?.calibration_profiles && step >= 3 && !active;
   const showError = (message?: string | null) =>
-    !!message && !(hasCalibrationStatus && isCalibrationSetupError(message));
+    !!message &&
+    !(
+      hasCalibrationStatus &&
+      (isCalibrationSetupError(message) ||
+        (state?.capabilities?.calibration_choice && message.startsWith('Choose calibration for ')))
+    );
   return (
     <div
       ref={root}

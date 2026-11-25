@@ -1,5 +1,6 @@
 'use client';
 
+import { CalibrationChoice } from './robot-lab-calibration-choice';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { robotApi } from '@/lib/robot-api';
@@ -83,14 +84,27 @@ export function RobotLabCalibrationProfiles({ lab }: { lab: RobotLabState }) {
           </div>
         </>
       )}
-      {needsReview && (
+      {needsReview && !state?.capabilities?.calibration_choice && (
         <p className="robot-lab-event robot-lab-warning" role="status">
           This arm needs a calibration check. If its mechanics and motor IDs are unchanged, verify the saved file or
           read its motor settings. You do not need to repeat manual calibration.
         </p>
       )}
       {profiles.error && <p role="alert">Could not load local profiles: {profiles.error.message}</p>}
-      {showChoices && (
+      {showChoices && state?.capabilities?.calibration_choice && profiles.data && (
+        <CalibrationChoice
+          lab={lab}
+          role={role}
+          robotId={robotId}
+          port={portConnected ? port : ''}
+          library={profiles.data}
+          onDone={() => {
+            setEditing(false);
+            void profiles.refetch();
+          }}
+        />
+      )}
+      {showChoices && !state?.capabilities?.calibration_choice && (
         <>
           <div className="robot-lab-actions" role="group" aria-label="Calibration source">
             <button

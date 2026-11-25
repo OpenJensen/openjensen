@@ -17302,10 +17302,27 @@
               "schema": {
                 "additionalProperties": false,
                 "properties": {
+                  "apply_to_arm": {
+                    "default": false,
+                    "title": "Apply To Arm",
+                    "type": "boolean"
+                  },
                   "confirm": {
                     "const": "REUSE CALIBRATION",
                     "title": "Confirm",
                     "type": "string"
+                  },
+                  "connection_key": {
+                    "anyOf": [
+                      {
+                        "pattern": "^[a-f0-9]{64}$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Connection Key"
                   },
                   "port": {
                     "maxLength": 200,
@@ -17324,6 +17341,11 @@
                       }
                     ],
                     "title": "Profile Key"
+                  },
+                  "remember": {
+                    "default": false,
+                    "title": "Remember",
+                    "type": "boolean"
                   },
                   "robot_id": {
                     "maxLength": 64,
