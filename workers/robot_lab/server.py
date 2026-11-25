@@ -500,20 +500,37 @@ class RobotLab:
         key = (identity, robot_id, role)
         if actual == saved:
             self.calibration_conflicts.pop(key, None)
-            return True
+            return "matched"
         complete = set(actual) == set(JOINTS)
         # Invalid register values remain a hardware/setup problem, never a usable source.
         if complete:
             valid_calibration(actual)
+        motor_key = self.calibration_profiles.key(robot_id, role, actual) if complete else None
+        motors_available = not (complete and factory_calibration(actual))
+        preference = (
+            self.calibration_profiles.preference(identity, robot_id, role) if identity else None
+        )
+        if preference and identity.startswith("port:") and preference["motor_key"] != motor_key:
+            preference = None
+        if preference and preference["source"] == "motors" and not motors_available:
+            preference = None
+        if preference and preference["source"] == "saved":
+            path = self.calibration_path(robot_id, role)
+            file_role = "leader" if path.parent.name == "so_leader" else "follower"
+            current = saved if complete else self.load_calibration(robot_id, role, port)
+            if (
+                self.calibration_profiles.key(path.stem, file_role, current)
+                != preference["profile_key"]
+            ):
+                preference = None
         self.calibration_conflicts[key] = {
+            "preference": preference,
             "joints": [j for j in saved if saved[j] != actual.get(j)],
             "recommended": "saved" if factory_calibration(actual) else "motors",
-            "motors_available": not (complete and factory_calibration(actual)),
-            "motor_key": self.calibration_profiles.key(robot_id, role, actual)
-            if complete
-            else None,
+            "motors_available": motors_available,
+            "motor_key": motor_key,
         }
-        return False
+        return "remembered" if preference else "mismatch"
 
     def calibration_library(self, robot_id, role, port=None):
         path = self.calibration_path(robot_id, role)
@@ -523,11 +540,15 @@ class RobotLab:
         calibration = self.load_calibration(robot_id, role) if current["valid"] else None
         identity = self.calibration_identity(port)
         conflict = self.calibration_conflicts.get((identity, robot_id, role))
+        if conflict and conflict["preference"]:
+            conflict = None
         remembered = (
             self.calibration_profiles.preference(identity, robot_id, role) if identity else None
         )
         return {
-            "conflict": conflict,
+            "conflict": {k: conflict[k] for k in ("joints", "recommended", "motors_available")}
+            if conflict
+            else None,
             "connection_key": self.calibration_profiles.key(robot_id, role, identity)
             if identity
             else None,
@@ -626,7 +647,7 @@ class RobotLab:
                     if expected_motor_key and expected_motor_key != self.calibration_profiles.key(
                         robot_id, role, actual
                     ):
-                        raise CalibrationChoiceRequired(robot_id, role, port)
+                        raise RequestError("Arm settings changed during reconnect. Check the arm again")
                     calibration = selected["calibration"] if selected else actual
                     if factory_calibration(calibration):
                         raise RequestError(
@@ -1092,7 +1113,12 @@ class RobotLab:
                 )
                 identity = self.calibration_identity(device["port"], ports)
                 if any(
-                    (identity, device["robot_id"], role) in self.calibration_conflicts
+                    (
+                        conflict := self.calibration_conflicts.get(
+                            (identity, device["robot_id"], role)
+                        )
+                    )
+                    and not conflict["preference"]
                     for role in ("leader", "follower")
                 ):
                     device["calibration"] = "choice_required"
@@ -1177,10 +1203,8 @@ class RobotLab:
                                 saved = self.load_calibration(robot_id, role, port)
                                 actual = bus.read_calibration()
                                 profile["joints"] = {j: actual.get(j) == saved[j] for j in JOINTS}
-                                profile["state"] = (
-                                    "matched"
-                                    if self.compare_calibration(port, robot_id, role, saved, actual)
-                                    else "mismatch"
+                                profile["state"] = self.compare_calibration(
+                                    port, robot_id, role, saved, actual
                                 )
                             except (ValueError, OSError, HardwareError) as error:
                                 profile["error"] = str(error)
@@ -1738,22 +1762,10 @@ class RobotLab:
                     robot_id, role, port = choice.robot_id, choice.role, choice.port
                     identity = self.calibration_identity(port)
                     conflict = self.calibration_conflicts.get((identity, robot_id, role))
-                    pref = self.calibration_profiles.preference(identity, robot_id, role)
-                    if not identity or not pref or not conflict or role in resolved:
-                        raise
-                    path = self.calibration_path(robot_id, role)
-                    file_role = "leader" if path.parent.name == "so_leader" else "follower"
-                    current = self.calibration_profiles.key(
-                        path.stem, file_role, self.load_calibration(robot_id, role, port)
-                    )
-                    if (
-                        (pref["source"] == "saved" and current != pref["profile_key"])
-                        or (
-                            identity.startswith("port:")
-                            and pref["motor_key"] != conflict["motor_key"]
-                        )
-                        or (pref["source"] == "motors" and not conflict["motors_available"])
-                    ):
+                    pref = conflict["preference"] if conflict else None
+                    if role in resolved and conflict:
+                        conflict["preference"] = None
+                    if not pref or role in resolved:
                         raise
                     resolved.add(role)
                     saved = pref["source"] == "saved"
@@ -1763,7 +1775,7 @@ class RobotLab:
                             "role": role,
                             "port": port,
                             "source": pref["source"],
-                            "profile_key": current if saved else None,
+                            "profile_key": pref["profile_key"] if saved else None,
                             "apply_to_arm": saved,
                             "connection_key": self.calibration_profiles.key(
                                 robot_id, role, identity
@@ -1834,8 +1846,11 @@ class RobotLab:
                     if generation != self.generation:
                         raise RequestError("Session cancelled by Stop")
                     # Never rewrite saved EEPROM calibration when starting motion.
-                    if not self.compare_calibration(
-                        port, robot_id, "follower", calibration, bus.read_calibration()
+                    if (
+                        self.compare_calibration(
+                            port, robot_id, "follower", calibration, bus.read_calibration()
+                        )
+                        != "matched"
                     ):
                         raise CalibrationChoiceRequired(robot_id, "follower", port)
                     if joints == JOINTS:
@@ -1868,12 +1883,15 @@ class RobotLab:
                         leader = self.bus_factory(leader_port)
                         with leader.lock:
                             leader.check_six()
-                            if not self.compare_calibration(
-                                leader_port,
-                                payload["leader_id"],
-                                "leader",
-                                leader_calibration,
-                                leader.read_calibration(),
+                            if (
+                                self.compare_calibration(
+                                    leader_port,
+                                    payload["leader_id"],
+                                    "leader",
+                                    leader_calibration,
+                                    leader.read_calibration(),
+                                )
+                                != "matched"
                             ):
                                 raise CalibrationChoiceRequired(
                                     payload["leader_id"], "leader", leader_port

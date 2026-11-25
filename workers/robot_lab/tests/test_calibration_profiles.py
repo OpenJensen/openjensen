@@ -189,6 +189,9 @@ class CalibrationProfilesTests(unittest.TestCase):
         )
         self.lab.calibration_root = self.root / "calibrations"
         self.bus.calibration["gripper"]["homing_offset"] = 95
+        probe = self.lab.probe({"robot_id": "arm", "role": "follower", "port": "fake"})
+        self.assertEqual(probe["profile"]["state"], "remembered")
+        self.assertFalse(self.lab.calibration_library("arm", "follower", "fake")["needs_review"])
         result = self.lab.control_start(start)
         self.assertEqual(result["session"]["mode"], "handguide")
         self.assertEqual(self.lab.calibration["gripper"]["homing_offset"], 95)

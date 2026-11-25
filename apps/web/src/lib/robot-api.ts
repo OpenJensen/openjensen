@@ -352,7 +352,7 @@ export type RobotProbe = {
     robot_id: string;
     role: RobotRole;
     sha256?: string;
-    state: 'missing' | 'invalid' | 'stale' | 'unavailable' | 'matched' | 'mismatch';
+    state: 'missing' | 'invalid' | 'stale' | 'unavailable' | 'matched' | 'mismatch' | 'remembered';
     joints: Partial<Record<RobotJoint, boolean>>;
     error?: string | null;
   };
