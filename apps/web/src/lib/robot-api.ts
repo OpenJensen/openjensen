@@ -154,6 +154,7 @@ export type RobotStatus = {
     calibration_persistence?: boolean;
     calibration_transfer?: boolean;
     calibration_profiles?: boolean;
+    calibration_choice?: boolean;
     device_registry?: boolean;
     device_removal?: boolean;
     partial_control?: boolean;
@@ -326,7 +327,7 @@ export type RobotDevice = {
   connected: boolean;
   description: string;
   motor_ids?: boolean;
-  calibration?: 'saved' | 'needs_attention' | 'missing';
+  calibration?: 'saved' | 'needs_attention' | 'missing' | 'choice_required';
 };
 export type CameraCaptureMode = { fourcc: string; width: number; height: number; fps: number };
 export type CameraCaptureSettings = {
@@ -351,7 +352,7 @@ export type RobotProbe = {
     robot_id: string;
     role: RobotRole;
     sha256?: string;
-    state: 'missing' | 'invalid' | 'stale' | 'unavailable' | 'matched' | 'mismatch';
+    state: 'missing' | 'invalid' | 'stale' | 'unavailable' | 'matched' | 'mismatch' | 'remembered';
     joints: Partial<Record<RobotJoint, boolean>>;
     error?: string | null;
   };
@@ -496,6 +497,9 @@ export const robotApi = {
         current: boolean;
       }[];
       needs_review: boolean;
+      conflict?: { joints: string[]; recommended: 'motors' | 'saved'; motors_available: boolean } | null;
+      connection_key?: string | null;
+      remembered_source?: 'motors' | 'saved' | null;
     }>(`/calibration/profiles?${new URLSearchParams({ robot_id, role, port })}`),
   reuseCalibration: (input: {
     robot_id: string;
@@ -504,6 +508,9 @@ export const robotApi = {
     source: 'saved' | 'motors';
     profile_key?: string;
     same_arm: boolean;
+    remember?: boolean;
+    apply_to_arm?: boolean;
+    connection_key?: string;
   }) => request<RobotStatus>('/calibration/reuse', { ...input, confirm: 'REUSE CALIBRATION' }),
   exportCalibration: (robot_id: string, role: RobotRole) =>
     request<CalibrationDocument>(`/calibration/export?${new URLSearchParams({ robot_id, role })}`),

@@ -142,6 +142,9 @@ class CalibrationReuseRequest(BaseModel):
     source: Literal["saved", "motors"]
     profile_key: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
     same_arm: StrictBool
+    remember: StrictBool = False
+    apply_to_arm: StrictBool = False
+    connection_key: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
     confirm: Literal["REUSE CALIBRATION"]
 
 

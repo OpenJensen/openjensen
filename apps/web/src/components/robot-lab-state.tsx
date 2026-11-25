@@ -715,6 +715,8 @@ export function useRobotLab() {
         } else {
           setError(readable(failure));
         }
+        void client.invalidateQueries({ queryKey: ['robot-lab', 'calibration-profiles'] });
+        void client.invalidateQueries({ queryKey: ['robot-lab', 'devices'] });
         // Read status to confirm an uncertain outcome; never replay motor writes.
         void client.invalidateQueries({ queryKey: statusKey });
       }
@@ -979,6 +981,7 @@ export function useRobotLab() {
       : undefined;
   const selectedCalibrated =
     profileUsable(selectedProfile) && !['missing', 'invalid', 'stale'].includes(profileCheck?.state ?? '');
+  const profileReady = profileCheck?.state === 'matched' || profileCheck?.state === 'remembered';
   const calibrationLabel =
     session?.mode === 'calibration'
       ? 'Capturing…'
@@ -990,11 +993,13 @@ export function useRobotLab() {
             ? 'Check failed'
             : profileCheck?.state === 'mismatch'
               ? 'Settings differ'
-              : profileCheck?.state === 'matched'
-                ? 'Matches arm'
-                : selectedCalibrated
-                  ? 'Saved · not checked'
-                  : 'Not saved';
+              : profileCheck?.state === 'remembered'
+                ? 'Using remembered calibration'
+                : profileCheck?.state === 'matched'
+                  ? 'Matches arm'
+                  : selectedCalibrated
+                    ? 'Saved · not checked'
+                    : 'Not saved';
   const motorLabel = !portConnected
     ? 'USB unavailable'
     : active && session?.port === port
@@ -1149,7 +1154,7 @@ export function useRobotLab() {
                     target: 2,
                     action: () => openStep(2),
                   }
-                : profileCheck?.state !== 'matched'
+                : !profileReady
                   ? {
                       text: 'Calibration is saved. Check it against the arm.',
                       label: 'Check calibration',
@@ -1165,7 +1170,7 @@ export function useRobotLab() {
     { value: mappingLabel, good: mappingComplete && checkedCount === 6 && !mismatched, warn: !!mismatched },
     {
       value: calibrationLabel,
-      good: profileCheck?.state === 'matched' && session?.mode !== 'calibration',
+      good: profileReady && session?.mode !== 'calibration',
       warn:
         selectedProfile?.valid === false ||
         (!!selectedProfile && !selectedCalibrated) ||

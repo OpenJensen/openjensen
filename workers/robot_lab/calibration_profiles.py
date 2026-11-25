@@ -21,6 +21,21 @@ class CalibrationProfiles:
             json.dumps([robot_id, role, calibration], sort_keys=True).encode()
         ).hexdigest()
 
+    def preference_path(self, identity, robot_id, role):
+        return self.root / "choices" / (self.key(robot_id, role, identity) + ".json")
+
+    def preference(self, identity, robot_id, role):
+        path = self.preference_path(identity, robot_id, role)
+        return self.read(path) if path.exists() else None
+
+    def remember(self, identity, robot_id, role, choice):
+        path = self.preference_path(identity, robot_id, role)
+        if choice is None:
+            path.unlink(missing_ok=True)
+        else:
+            path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            durable_json(path, choice)
+
     def read(self, path):
         if path.is_symlink() or not path.is_file() or path.stat().st_size > 65536:
             raise ValueError("Calibration must be a regular file smaller than 64 KiB")

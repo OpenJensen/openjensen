@@ -188,7 +188,7 @@ class CalibrationTransferTests(unittest.TestCase):
         different = copy.deepcopy(CALIBRATION)
         different["gripper"]["homing_offset"] = 123
         self.lab.calibration_import(self.payload(document=different))
-        with self.assertRaisesRegex(RequestError, "Motor calibration differs"):
+        with self.assertRaisesRegex(RequestError, "Choose calibration for destination"):
             self.lab.control_start(
                 {
                     "port": "/dev/cu.fake",

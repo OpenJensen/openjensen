@@ -1,4 +1,4 @@
-"""Calibration recovery uses fake buses; it must never write to motors."""
+"""Exercise calibration choices and read-only recovery using fake motor buses."""
 
 import copy
 import json
@@ -20,7 +20,7 @@ class CalibrationProfilesTests(unittest.TestCase):
         self.bus = FakeBus()
         self.lab = RobotLab(
             self.root / "data",
-            bus_factory=lambda *_: self.bus,
+            bus_factory=self.open_bus,
             camera=FakeCamera(),
             port_provider=lambda: [{"device": "fake"}],
             start_threads=False,
@@ -161,6 +161,91 @@ class CalibrationProfilesTests(unittest.TestCase):
         payload = self.payload()
         with self.assertRaisesRegex(RequestError, "changed or is unavailable"):
             self.lab.calibration_reuse({**payload, "profile_key": "../../private"})
+
+    def open_bus(self, *_):
+        self.bus.opened = True
+        return self.bus
+
+    def test_connection_offers_sources_and_remembers_the_arm_after_restart(self):
+        self.lab.port_provider = lambda: [{"device": "fake", "serial_number": "arm-1"}]
+        self.lab.calibration_revisions.acknowledge("fake", "arm", "follower", self.path)
+        self.bus.calibration["gripper"]["homing_offset"] = 80
+        start = dict(port="fake", robot_id="arm", mode="handguide", confirm="ENABLE MOTION")
+        with self.assertRaisesRegex(RequestError, "Choose calibration for arm"):
+            self.lab.control_start(start)
+        options = self.lab.calibration_library("arm", "follower", "fake")
+        self.assertEqual(options["conflict"]["joints"], ["gripper"])
+        self.assertEqual(options["conflict"]["recommended"], "motors")
+        self.assertTrue(options["needs_review"])
+        self.lab.calibration_reuse({**self.payload("motors"), "remember": True})
+        self.assertFalse(self.lab.calibration_library("arm", "follower", "fake")["needs_review"])
+        self.lab.close()
+        self.lab = RobotLab(
+            self.root / "data",
+            bus_factory=self.open_bus,
+            camera=FakeCamera(),
+            port_provider=lambda: [{"device": "fake", "serial_number": "arm-1"}],
+            start_threads=False,
+        )
+        self.lab.calibration_root = self.root / "calibrations"
+        self.bus.calibration["gripper"]["homing_offset"] = 95
+        probe = self.lab.probe({"robot_id": "arm", "role": "follower", "port": "fake"})
+        self.assertEqual(probe["profile"]["state"], "remembered")
+        self.assertFalse(self.lab.calibration_library("arm", "follower", "fake")["needs_review"])
+        result = self.lab.control_start(start)
+        self.assertEqual(result["session"]["mode"], "handguide")
+        self.assertEqual(self.lab.calibration["gripper"]["homing_offset"], 95)
+        self.lab.stop()
+        self.lab.port_provider = lambda: [{"device": "fake", "serial_number": "other-arm"}]
+        self.bus.calibration["gripper"]["homing_offset"] = 113
+        with self.assertRaisesRegex(RequestError, "Choose calibration for arm"):
+            self.lab.control_start(start)
+
+    def test_machine_choice_restores_a_profile_and_preserves_the_arm_copy(self):
+        self.bus.calibration["gripper"]["homing_offset"] = 80
+        before = copy.deepcopy(self.bus.calibration)
+        self.lab.calibration_reuse({**self.payload(), "apply_to_arm": True, "remember": True})
+        self.assertEqual(self.bus.calibration, CALIBRATION)
+        self.assertFalse(any(reg == "Torque_Enable" and v for reg, _, v in self.bus.writes))
+        entries = self.lab.calibration_profiles.entries(self.lab.calibration_root, "follower")
+        self.assertIn(before, [entry["calibration"] for entry in entries])
+
+    def test_factory_arm_recommends_machine_and_unchecked_choice_is_not_replayed(self):
+        start = dict(port="fake", robot_id="arm", mode="handguide", confirm="ENABLE MOTION")
+        self.lab.calibration_revisions.acknowledge("fake", "arm", "follower", self.path)
+        for entry in self.bus.calibration.values():
+            entry.update(range_min=0, range_max=4095, homing_offset=0)
+        with self.assertRaisesRegex(RequestError, "Choose calibration"):
+            self.lab.control_start(start)
+        conflict = self.lab.calibration_library("arm", "follower", "fake")["conflict"]
+        self.assertFalse(conflict["motors_available"])
+        self.assertEqual(conflict["recommended"], "saved")
+        self.lab.calibration_reuse({**self.payload(), "apply_to_arm": True, "remember": False})
+        self.bus.calibration["gripper"]["range_min"] = 11
+        with self.assertRaisesRegex(RequestError, "Choose calibration"):
+            self.lab.control_start(start)
+
+    def test_partially_written_machine_choice_restores_previous_arm_and_file(self):
+        self.bus.calibration["gripper"]["homing_offset"] = 80
+        before = copy.deepcopy(self.bus.calibration)
+        old_file = self.path.read_bytes()
+        original_write = self.bus.write_calibration
+
+        def interrupted(calibration):
+            original_write(calibration)
+            if calibration != before:
+                raise OSError("disconnected")
+
+        with patch.object(self.bus, "write_calibration", side_effect=interrupted):
+            with self.assertRaisesRegex(OSError, "disconnected"):
+                self.lab.calibration_reuse(
+                    {**self.payload(), "apply_to_arm": True, "remember": True}
+                )
+        self.assertEqual(self.bus.calibration, before)
+        self.assertEqual(self.path.read_bytes(), old_file)
+        self.assertIsNone(
+            self.lab.calibration_library("arm", "follower", "fake")["remembered_source"]
+        )
 
     def test_status_and_catalog_use_current_port_and_keep_arms_independent(self):
         leader_path = self.lab.calibration_path("leader", "leader")

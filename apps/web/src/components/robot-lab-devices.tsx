@@ -63,9 +63,11 @@ export function RobotLabDevices({ lab }: { lab: RobotLabState }) {
                 Calibration ·{' '}
                 {device.calibration === 'saved'
                   ? 'Saved'
-                  : device.calibration === 'needs_attention'
-                    ? 'Needs attention'
-                    : 'Not saved'}
+                  : device.calibration === 'choice_required'
+                    ? 'Choose a profile'
+                    : device.calibration === 'needs_attention'
+                      ? 'Needs attention'
+                      : 'Not saved'}
               </span>
             </div>
             <span className="robot-lab-device-open">
@@ -278,9 +280,11 @@ export function RobotLabControlDevices({
       ? 'Unplugged'
       : !device.role
         ? 'Set it up under Devices first'
-        : device.calibration === 'saved'
-          ? 'Connected · calibrated'
-          : 'Connected · needs calibration',
+        : device.calibration === 'choice_required'
+          ? 'Connected · choose calibration'
+          : device.calibration === 'saved'
+            ? 'Connected · calibrated'
+            : 'Connected · needs calibration',
     disabled: !device.connected || !device.role,
   });
   const follower = lab.catalog.find((d) => d.port === lab.port && d.robot_id === lab.robotId)?.id ?? null;

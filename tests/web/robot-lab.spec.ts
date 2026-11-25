@@ -88,6 +88,8 @@ function initialStatus(calibrated = false): any {
 }
 async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin', enterDevice = true) {
   const state = {
+    mismatchAtStart: false,
+    calibrationConflict: false,
     status: initialStatus(calibrated),
     catalog: [
       {
@@ -355,7 +357,12 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin', 
         );
         return route.fulfill({
           json: {
-            needs_review: !profile || profile.setup_fresh === false || profile.valid === false,
+            conflict:
+              state.calibrationConflict && query.get('role') === 'follower'
+                ? { joints: ['gripper'], recommended: 'motors', motors_available: true }
+                : null,
+            needs_review:
+              state.calibrationConflict || !profile || profile.setup_fresh === false || profile.valid === false,
             profiles: [
               {
                 key: 'a'.repeat(64),
@@ -378,6 +385,7 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin', 
         });
       }
       if (action === '/calibration/reuse') {
+        state.calibrationConflict = false;
         if (state.calibrationImportError)
           return route.fulfill({ status: 422, json: { detail: state.calibrationImportError } });
         state.status.session.error = null;
@@ -584,6 +592,14 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin', 
         state.status.session.torque_enabled = false;
         state.status.recording.episode_active = false;
       } else if (action === '/control/start') {
+        if (state.mismatchAtStart) {
+          state.mismatchAtStart = false;
+          state.calibrationConflict = true;
+          return route.fulfill({
+            status: 422,
+            json: { detail: 'Choose calibration for my-so101 (follower) in Robot Lab' },
+          });
+        }
         state.status.session = {
           ...state.status.session,
           mode: body.mode,
@@ -3914,4 +3930,31 @@ test('camera preview refreshes promptly in both layouts without overlapping slow
   await expect.poll(() => requests.length).toBeGreaterThanOrEqual(start + 8);
   expect(requests[start + 7] - requests[start]).toBeLessThan(1200);
   expect(maximumOutstanding).toBe(1);
+});
+
+test('a connection mismatch offers recommended arm and machine profiles inline', async ({ page }) => {
+  const state = await fixture(page, true);
+  Object.assign(state.status.capabilities, { calibration_choice: true });
+  state.mismatchAtStart = true;
+  await openTab(page, 'Teleoperate');
+  await page.getByRole('checkbox', { name: /Arm secured; workspace clear/ }).check();
+  await page.getByRole('button', { name: 'Enable & move to recorded middle', exact: true }).click();
+  const picker = page.getByRole('group', { name: 'Choose calibration for my-so101' });
+  await expect(picker.getByRole('radio', { name: /On the arm · Recommended/ })).toBeChecked();
+  await expect(picker.getByRole('checkbox', { name: 'Remember this choice for this arm' })).toBeChecked();
+  await expect(page.getByRole('alert').filter({ hasText: 'Choose calibration' })).toHaveCount(0);
+  await picker.getByRole('radio', { name: /On this machine/ }).check();
+  await picker.getByRole('combobox', { name: 'Machine profile' }).selectOption('b'.repeat(64));
+  await picker.getByRole('button', { name: 'Apply machine profile to arm' }).click();
+  await expect(picker).toHaveCount(0);
+  expect(writes(state, '/calibration/reuse')[0].body).toMatchObject({
+    robot_id: 'my-so101',
+    role: 'follower',
+    port,
+    source: 'saved',
+    profile_key: 'b'.repeat(64),
+    apply_to_arm: true,
+    remember: true,
+  });
+  expect(writes(state, '/control/start')).toHaveLength(1);
 });
